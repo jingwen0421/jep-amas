@@ -1,0 +1,377 @@
+{
+  "project": "JEP Image Makeup Academy Management System",
+  "exportDate": "2026-06-02",
+  "version": "1.0.0",
+  "totalPages": 39,
+  "totalComponents": 14,
+  "modules": [
+    {
+      "name": "Dashboard & Core",
+      "pageCount": 6,
+      "pages": [
+        {
+          "name": "Dashboard",
+          "file": "Dashboard.tsx",
+          "path": "/src/app/pages/Dashboard.tsx",
+          "route": "/app",
+          "description": "Main dashboard with role-based views (Admin/Owner)"
+        },
+        {
+          "name": "LoginPage",
+          "file": "LoginPage.tsx",
+          "path": "/src/app/pages/LoginPage.tsx",
+          "route": "/login",
+          "description": "User authentication and login"
+        },
+        {
+          "name": "Settings",
+          "file": "Settings.tsx",
+          "path": "/src/app/pages/Settings.tsx",
+          "route": "/app/settings",
+          "description": "System configuration and settings"
+        },
+        {
+          "name": "Reports",
+          "file": "Reports.tsx",
+          "path": "/src/app/pages/Reports.tsx",
+          "route": "/app/reports",
+          "description": "System reports and analytics"
+        },
+        {
+          "name": "UserManagement",
+          "file": "UserManagement.tsx",
+          "path": "/src/app/pages/UserManagement.tsx",
+          "route": "/app/user-management",
+          "description": "Manage users and roles"
+        },
+        {
+          "name": "AuditLogs",
+          "file": "AuditLogs.tsx",
+          "path": "/src/app/pages/AuditLogs.tsx",
+          "route": "/app/audit-logs",
+          "description": "System activity audit trail"
+        }
+      ]
+    },
+    {
+      "name": "Students",
+      "pageCount": 5,
+      "pages": [
+        {
+          "name": "StudentList",
+          "file": "StudentList.tsx",
+          "path": "/src/app/pages/students/StudentList.tsx",
+          "route": "/app/students/list",
+          "description": "List all students with search and filter"
+        },
+        {
+          "name": "StudentProfile",
+          "file": "StudentProfile.tsx",
+          "path": "/src/app/pages/students/StudentProfile.tsx",
+          "route": "/app/students/profile/:id",
+          "description": "Individual student profile page"
+        },
+        {
+          "name": "StudentRegistration",
+          "file": "StudentRegistration.tsx",
+          "path": "/src/app/pages/students/StudentRegistration.tsx",
+          "route": "/app/students/registration",
+          "description": "New student enrollment form"
+        },
+        {
+          "name": "RegistrationApproval",
+          "file": "RegistrationApproval.tsx",
+          "path": "/src/app/pages/students/RegistrationApproval.tsx",
+          "route": "/app/students/approval",
+          "description": "Review and approve student registrations"
+        },
+        {
+          "name": "StudentProgress",
+          "file": "StudentProgress.tsx",
+          "path": "/src/app/pages/students/StudentProgress.tsx",
+          "route": "/app/students/progress/:id",
+          "description": "Track student course progress"
+        }
+      ]
+    },
+    {
+      "name": "Courses",
+      "pageCount": 4,
+      "pages": [
+        {
+          "name": "Courses",
+          "file": "Courses.tsx",
+          "path": "/src/app/pages/courses/Courses.tsx",
+          "route": "/app/courses/list",
+          "description": "Course catalog and management"
+        },
+        {
+          "name": "CourseCategories",
+          "file": "CourseCategories.tsx",
+          "path": "/src/app/pages/courses/CourseCategories.tsx",
+          "route": "/app/courses/categories",
+          "description": "Course category organization"
+        },
+        {
+          "name": "ClassBatches",
+          "file": "ClassBatches.tsx",
+          "path": "/src/app/pages/courses/ClassBatches.tsx",
+          "route": "/app/courses/batches",
+          "description": "Manage class batches per course"
+        },
+        {
+          "name": "Lessons",
+          "file": "Lessons.tsx",
+          "path": "/src/app/pages/courses/Lessons.tsx",
+          "route": "/app/courses/lessons",
+          "description": "Lesson content and curriculum"
+        }
+      ]
+    },
+    {
+      "name": "Classes",
+      "pageCount": 3,
+      "pages": [
+        {
+          "name": "ClassCalendar",
+          "file": "ClassCalendar.tsx",
+          "path": "/src/app/pages/classes/ClassCalendar.tsx",
+          "route": "/app/classes/calendar",
+          "description": "Monthly/weekly class calendar view"
+        },
+        {
+          "name": "ClassScheduling",
+          "file": "ClassScheduling.tsx",
+          "path": "/src/app/pages/classes/ClassScheduling.tsx",
+          "route": "/app/classes/scheduling",
+          "description": "Schedule classes with conflict detection"
+        },
+        {
+          "name": "ClassroomAllocation",
+          "file": "ClassroomAllocation.tsx",
+          "path": "/src/app/pages/classes/ClassroomAllocation.tsx",
+          "route": "/app/classes/allocation",
+          "description": "Room booking and equipment allocation"
+        }
+      ]
+    },
+    {
+      "name": "Attendance",
+      "pageCount": 3,
+      "pages": [
+        {
+          "name": "DailyAttendance",
+          "file": "DailyAttendance.tsx",
+          "path": "/src/app/pages/attendance/DailyAttendance.tsx",
+          "route": "/app/attendance/daily",
+          "description": "Mark daily student attendance"
+        },
+        {
+          "name": "MakeupClasses",
+          "file": "MakeupClasses.tsx",
+          "path": "/src/app/pages/attendance/MakeupClasses.tsx",
+          "route": "/app/attendance/makeup",
+          "description": "Schedule makeup classes for absent students"
+        },
+        {
+          "name": "AttendanceReports",
+          "file": "AttendanceReports.tsx",
+          "path": "/src/app/pages/attendance/AttendanceReports.tsx",
+          "route": "/app/attendance/reports",
+          "description": "Attendance analytics and reports"
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "pageCount": 4,
+      "pages": [
+        {
+          "name": "PaymentPlans",
+          "file": "PaymentPlans.tsx",
+          "path": "/src/app/pages/payments/PaymentPlans.tsx",
+          "route": "/app/payments/plans",
+          "description": "Payment plan templates"
+        },
+        {
+          "name": "Installments",
+          "file": "Installments.tsx",
+          "path": "/src/app/pages/payments/Installments.tsx",
+          "route": "/app/payments/installments",
+          "description": "Installment payment schedules"
+        },
+        {
+          "name": "Receipts",
+          "file": "Receipts.tsx",
+          "path": "/src/app/pages/payments/Receipts.tsx",
+          "route": "/app/payments/receipts",
+          "description": "Payment receipts and invoices"
+        },
+        {
+          "name": "OutstandingBalances",
+          "file": "OutstandingBalances.tsx",
+          "path": "/src/app/pages/payments/OutstandingBalances.tsx",
+          "route": "/app/payments/outstanding",
+          "description": "Track unpaid student balances"
+        }
+      ]
+    },
+    {
+      "name": "Portfolio",
+      "pageCount": 3,
+      "pages": [
+        {
+          "name": "AssignmentSubmission",
+          "file": "AssignmentSubmission.tsx",
+          "path": "/src/app/pages/portfolio/AssignmentSubmission.tsx",
+          "route": "/app/portfolio/submission",
+          "description": "Student assignment upload portal"
+        },
+        {
+          "name": "TeacherFeedback",
+          "file": "TeacherFeedback.tsx",
+          "path": "/src/app/pages/portfolio/TeacherFeedback.tsx",
+          "route": "/app/portfolio/feedback",
+          "description": "Teacher grading and feedback system"
+        },
+        {
+          "name": "StudentGallery",
+          "file": "StudentGallery.tsx",
+          "path": "/src/app/pages/portfolio/StudentGallery.tsx",
+          "route": "/app/portfolio/gallery",
+          "description": "Student portfolio showcase gallery"
+        }
+      ]
+    },
+    {
+      "name": "Appointments",
+      "pageCount": 3,
+      "pages": [
+        {
+          "name": "TeacherBooking",
+          "file": "TeacherBooking.tsx",
+          "path": "/src/app/pages/appointments/TeacherBooking.tsx",
+          "route": "/app/appointments/booking",
+          "description": "Book teacher consultation appointments"
+        },
+        {
+          "name": "TeacherAvailability",
+          "file": "TeacherAvailability.tsx",
+          "path": "/src/app/pages/appointments/TeacherAvailability.tsx",
+          "route": "/app/appointments/availability",
+          "description": "View teacher consultation schedules"
+        },
+        {
+          "name": "AppointmentCalendar",
+          "file": "AppointmentCalendar.tsx",
+          "path": "/src/app/pages/appointments/AppointmentCalendar.tsx",
+          "route": "/app/appointments/calendar",
+          "description": "Appointment calendar overview"
+        }
+      ]
+    },
+    {
+      "name": "Communications",
+      "pageCount": 4,
+      "pages": [
+        {
+          "name": "WhatsAppComms",
+          "file": "WhatsAppComms.tsx",
+          "path": "/src/app/pages/communications/WhatsAppComms.tsx",
+          "route": "/app/communications/whatsapp",
+          "description": "WhatsApp messaging system"
+        },
+        {
+          "name": "EmailComms",
+          "file": "EmailComms.tsx",
+          "path": "/src/app/pages/communications/EmailComms.tsx",
+          "route": "/app/communications/email",
+          "description": "Email campaign management"
+        },
+        {
+          "name": "MessageTemplates",
+          "file": "MessageTemplates.tsx",
+          "path": "/src/app/pages/communications/MessageTemplates.tsx",
+          "route": "/app/communications/templates",
+          "description": "Reusable message templates"
+        },
+        {
+          "name": "BroadcastMessages",
+          "file": "BroadcastMessages.tsx",
+          "path": "/src/app/pages/communications/BroadcastMessages.tsx",
+          "route": "/app/communications/broadcast",
+          "description": "Mass messaging and broadcasts"
+        }
+      ]
+    },
+    {
+      "name": "Certificates",
+      "pageCount": 2,
+      "pages": [
+        {
+          "name": "CompletionCertificates",
+          "file": "CompletionCertificates.tsx",
+          "path": "/src/app/pages/certificates/CompletionCertificates.tsx",
+          "route": "/app/certificates/course",
+          "description": "Course completion certificates"
+        },
+        {
+          "name": "AttendanceCertificates",
+          "file": "AttendanceCertificates.tsx",
+          "path": "/src/app/pages/certificates/AttendanceCertificates.tsx",
+          "route": "/app/certificates/attendance",
+          "description": "Perfect attendance certificates"
+        }
+      ]
+    },
+    {
+      "name": "Other",
+      "pageCount": 2,
+      "pages": [
+        {
+          "name": "SurveyFeedback",
+          "file": "SurveyFeedback.tsx",
+          "path": "/src/app/pages/SurveyFeedback.tsx",
+          "route": "/app/survey-feedback",
+          "description": "Student surveys and feedback collection"
+        },
+        {
+          "name": "DocumentCenter",
+          "file": "DocumentCenter.tsx",
+          "path": "/src/app/pages/DocumentCenter.tsx",
+          "route": "/app/document-center",
+          "description": "Centralized document management"
+        }
+      ]
+    }
+  ],
+  "teachers": [
+    "Juju Lim",
+    "Esther",
+    "Wong Yi Feng",
+    "Pauline Tang"
+  ],
+  "userRoles": [
+    "Super Admin",
+    "Admin",
+    "Teacher",
+    "Finance",
+    "Student",
+    "Owner"
+  ],
+  "technology": {
+    "framework": "React 18",
+    "language": "TypeScript",
+    "routing": "React Router v7",
+    "styling": "Tailwind CSS v4",
+    "icons": "Lucide React",
+    "buildTool": "Vite"
+  },
+  "colorScheme": {
+    "primary": "#284342",
+    "accent": "#e9da95",
+    "background": "#f8f8f6",
+    "textPrimary": "#284342",
+    "textSecondary": "#6b6b6b"
+  }
+}

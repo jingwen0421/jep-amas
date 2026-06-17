@@ -1,0 +1,297 @@
+================================================================================
+                   JEP IMAGE MAKEUP ACADEMY MANAGEMENT SYSTEM
+                            COMPLETE PAGES EXPORT
+================================================================================
+
+Export Date: June 2, 2026
+System Version: 1.0.0
+
+================================================================================
+                               EXPORT CONTENTS
+================================================================================
+
+✓ PAGES_EXPORT.md
+  - Comprehensive documentation of all 39 pages
+  - Detailed tables organized by module
+  - File paths, routes, and descriptions
+  - Component listing
+
+✓ SITEMAP.md
+  - Visual navigation tree structure
+  - Complete URL routing table
+  - User role access matrix
+  - Feature descriptions by module
+  - Teacher and tech stack information
+
+✓ pages-manifest.json
+  - Machine-readable JSON format
+  - Complete page metadata
+  - Route mappings
+  - Module organization
+  - Technology stack details
+
+✓ src/app/pages/index.ts
+  - Centralized page export file
+  - Easy import statements
+  - Organized by module
+
+✓ src/app/components/index.ts
+  - Centralized component export file
+  - Reusable UI components
+
+================================================================================
+                              QUICK STATISTICS
+================================================================================
+
+Total Files:              53
+  - Page Files:           39
+  - Component Files:      14
+
+Modules:                  12
+  - Dashboard & Core:      6 pages
+  - Students:              5 pages
+  - Courses:               4 pages
+  - Classes:               3 pages
+  - Attendance:            3 pages
+  - Payments:              4 pages
+  - Portfolio:             3 pages
+  - Appointments:          3 pages
+  - Communications:        4 pages
+  - Certificates:          2 pages
+  - Other Modules:         2 pages
+
+Teachers:                  4
+  1. Juju Lim
+  2. Esther
+  3. Wong Yi Feng
+  4. Pauline Tang
+
+User Roles:                6
+  - Super Admin
+  - Admin
+  - Teacher
+  - Finance
+  - Student
+  - Owner
+
+================================================================================
+                           TECHNOLOGY STACK
+================================================================================
+
+Frontend Framework:       React 18
+Programming Language:     TypeScript
+Routing:                  React Router v7
+Styling:                  Tailwind CSS v4
+Icons:                    Lucide React
+Build Tool:               Vite
+
+================================================================================
+                            COLOR SCHEME
+================================================================================
+
+Primary Color:            #284342 (Deep Green)
+Accent Color:             #e9da95 (Gold)
+Background:               #f8f8f6 (Off-white)
+Text Primary:             #284342
+Text Secondary:           #6b6b6b
+
+================================================================================
+                         MODULE BREAKDOWN
+================================================================================
+
+1. DASHBOARD & CORE (6 pages)
+   - Dashboard.tsx
+   - LoginPage.tsx
+   - Settings.tsx
+   - Reports.tsx
+   - UserManagement.tsx
+   - AuditLogs.tsx
+
+2. STUDENTS (5 pages)
+   - StudentList.tsx
+   - StudentProfile.tsx
+   - StudentRegistration.tsx
+   - RegistrationApproval.tsx
+   - StudentProgress.tsx
+
+3. COURSES (4 pages)
+   - Courses.tsx
+   - CourseCategories.tsx
+   - ClassBatches.tsx
+   - Lessons.tsx
+
+4. CLASSES (3 pages)
+   - ClassCalendar.tsx
+   - ClassScheduling.tsx
+   - ClassroomAllocation.tsx
+
+5. ATTENDANCE (3 pages)
+   - DailyAttendance.tsx
+   - MakeupClasses.tsx
+   - AttendanceReports.tsx
+
+6. PAYMENTS (4 pages)
+   - PaymentPlans.tsx
+   - Installments.tsx
+   - Receipts.tsx
+   - OutstandingBalances.tsx
+
+7. PORTFOLIO (3 pages)
+   - AssignmentSubmission.tsx
+   - TeacherFeedback.tsx
+   - StudentGallery.tsx
+
+8. APPOINTMENTS (3 pages)
+   - TeacherBooking.tsx
+   - TeacherAvailability.tsx
+   - AppointmentCalendar.tsx
+
+9. COMMUNICATIONS (4 pages)
+   - WhatsAppComms.tsx
+   - EmailComms.tsx
+   - MessageTemplates.tsx
+   - BroadcastMessages.tsx
+
+10. CERTIFICATES (2 pages)
+    - CompletionCertificates.tsx
+    - AttendanceCertificates.tsx
+
+11. OTHER MODULES (2 pages)
+    - SurveyFeedback.tsx
+    - DocumentCenter.tsx
+
+================================================================================
+                         KEY FEATURES
+================================================================================
+
+✓ Fully responsive design (mobile, tablet, desktop)
+✓ Malaysian localization (RM currency, Malaysian names, phone formats)
+✓ Consistent JEP Academy branding throughout
+✓ Role-based access control (6 user roles)
+✓ Search and filter functionality on all list pages
+✓ Real-time status tracking and updates
+✓ Export capabilities (PDF, Excel where applicable)
+✓ Complete dummy data for UI testing
+✓ Form validation and error handling
+✓ Modal dialogs for actions
+✓ Toast notifications
+✓ Loading states
+✓ Statistics and analytics cards
+✓ Data tables with sorting
+✓ Status badges with color coding
+✓ Calendar views (monthly, weekly, daily)
+✓ Conflict detection (scheduling, room booking)
+✓ File upload capabilities
+✓ Messaging and communication templates
+✓ Certificate generation
+✓ Audit trail logging
+
+================================================================================
+                         ROUTE STRUCTURE
+================================================================================
+
+Base Route Pattern: /app/{module}/{action}
+
+Examples:
+- /app                              → Dashboard
+- /app/students/list                → Student List
+- /app/students/registration        → New Student Registration
+- /app/students/approval            → Registration Approval
+- /app/courses/list                 → Course List
+- /app/courses/batches              → Class Batches
+- /app/classes/calendar             → Class Calendar
+- /app/classes/scheduling           → Class Scheduling
+- /app/classes/allocation           → Classroom Allocation
+- /app/attendance/daily             → Daily Attendance
+- /app/attendance/makeup            → Makeup Classes
+- /app/attendance/reports           → Attendance Reports
+- /app/payments/installments        → Installment Plans
+- /app/payments/receipts            → Payment Receipts
+- /app/payments/outstanding         → Outstanding Balances
+- /app/portfolio/submission         → Assignment Submission
+- /app/portfolio/feedback           → Teacher Feedback
+- /app/appointments/booking         → Teacher Booking
+- /app/appointments/availability    → Teacher Availability
+- /app/appointments/calendar        → Appointment Calendar
+- /app/communications/whatsapp      → WhatsApp Communications
+- /app/communications/email         → Email Communications
+- /app/communications/templates     → Message Templates
+- /app/certificates/course          → Course Certificates
+- /app/certificates/attendance      → Attendance Certificates
+- /app/reports                      → Reports
+- /app/survey-feedback              → Survey & Feedback
+- /app/document-center              → Document Center
+- /app/user-management              → User Management
+- /app/audit-logs                   → Audit Logs
+- /app/settings                     → Settings
+
+================================================================================
+                         USAGE INSTRUCTIONS
+================================================================================
+
+1. IMPORTING PAGES
+
+   // Import individual pages
+   import { StudentList, Dashboard } from './pages';
+
+   // Import components
+   import { Layout } from './components';
+
+2. VIEWING DOCUMENTATION
+
+   - Open PAGES_EXPORT.md for detailed page documentation
+   - Open SITEMAP.md for navigation structure
+   - Open pages-manifest.json for machine-readable data
+
+3. NAVIGATION
+
+   All routes follow the pattern: /app/{module}/{action}
+   See the Route Structure section above for complete list
+
+4. LOCALIZATION
+
+   - Currency: RM (Malaysian Ringgit)
+   - Phone Format: +60 12-345 6789
+   - Date Format: YYYY-MM-DD
+   - Names: Malaysian format (e.g., "Jessica Lim Mei Ling")
+
+================================================================================
+                         FILE LOCATIONS
+================================================================================
+
+Documentation Files:
+  /PAGES_EXPORT.md
+  /SITEMAP.md
+  /EXPORT_SUMMARY.txt
+  /pages-manifest.json
+
+Page Files:
+  /src/app/pages/**/*.tsx
+
+Component Files:
+  /src/app/components/*.tsx
+
+Export Index Files:
+  /src/app/pages/index.ts
+  /src/app/components/index.ts
+
+================================================================================
+                         NOTES
+================================================================================
+
+✓ All pages include dummy data for UI testing
+✓ All pages follow consistent design patterns
+✓ All pages are fully typed with TypeScript
+✓ All pages are responsive (mobile/tablet/desktop)
+✓ All pages use Tailwind CSS v4 for styling
+✓ All pages use Lucide React for icons
+✓ Calendar is fully functional with month/week navigation
+✓ All duplicate features have been removed
+✓ Teacher names updated to: Juju Lim, Esther, Wong Yi Feng, Pauline Tang
+
+================================================================================
+                         END OF EXPORT
+================================================================================
+
+For questions or support, refer to the detailed documentation files.
+Last Updated: June 2, 2026
