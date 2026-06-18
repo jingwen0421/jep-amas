@@ -23,27 +23,55 @@ export default function StudentRegistration() {
 
     const studentCode = `S${Date.now().toString().slice(-5)}`;
 
-    const { error } = await supabase.from('students').insert({
-      student_code: studentCode,
-      full_name: formData.fullName,
-      ic_passport: formData.icPassport,
-      phone: formData.phone,
-      email: formData.email,
-      emergency_contact_phone: formData.emergencyContact,
-      emergency_contact_name: formData.emergencyRelation,
-      makeup_experience: formData.makeupExperience,
-      health_condition: formData.healthConditions,
+    const { data: newStudent, error: studentError } = await supabase
+      .from('students')
+      .insert({
+        student_code: studentCode,
+        full_name: formData.fullName,
+        ic_passport: formData.icPassport,
+        phone: formData.phone,
+        email: formData.email,
+        emergency_contact_phone: formData.emergencyContact,
+        emergency_contact_name: formData.emergencyRelation,
+        makeup_experience: formData.makeupExperience,
+        health_condition: formData.healthConditions,
+        status: 'inactive',
+        progress: 0,
+        enroll_date: new Date().toISOString().slice(0, 10),
+      })
+      .select('id')
+      .single();
 
-      // important
-      status: 'inactive',
+    if (studentError) {
+      console.error(studentError.message);
+      alert(`Failed to submit student: ${studentError.message}`);
+      return;
+    }
 
-      progress: 0,
-      enroll_date: new Date().toISOString().slice(0, 10),
-    });
+    const { data: firstCourse, error: courseError } = await supabase
+      .from('courses')
+      .select('id')
+      .limit(1)
+      .single();
 
-    if (error) {
-      console.error(error.message);
-      alert(`Failed to submit application: ${error.message}`);
+    if (courseError) {
+      console.error(courseError.message);
+      alert(`Student created, but failed to find course: ${courseError.message}`);
+      return;
+    }
+
+    const { error: applicationError } = await supabase
+      .from('registration_applications')
+      .insert({
+        student_id: newStudent.id,
+        course_id: firstCourse.id,
+        application_status: 'pending',
+        submitted_at: new Date().toISOString(),
+      });
+
+    if (applicationError) {
+      console.error(applicationError.message);
+      alert(`Student created, but failed to send approval: ${applicationError.message}`);
       return;
     }
 
