@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
-import { Search, Filter, MoreVertical, Eye, Edit } from 'lucide-react';
+import {
+  Search,
+  Filter,
+  Eye,
+  Edit,
+  FileText,
+  CheckCircle2,
+  PauseCircle,
+  XCircle,
+} from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface Student {
@@ -11,7 +20,7 @@ interface Student {
   phone: string;
   course: string;
   batch: string;
-  status: 'Active' | 'Completed' | 'On Hold';
+  status: 'Active' | 'Completed' | 'On Hold' | 'Inactive';
   progress: number;
   joinDate: string;
 }
@@ -20,51 +29,73 @@ export default function StudentList() {
   const [students, setStudents] = useState<Student[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('All');
+  const [filterCourse, setFilterCourse] = useState('All');
   const [showFilters, setShowFilters] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    async function fetchStudents() {
-      setLoading(true);
-
-      const { data, error } = await supabase
-        .from('students')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (error) {
-        console.error('Error fetching students:', error.message);
-        setLoading(false);
-        return;
-      }
-
-      const mappedStudents: Student[] = (data || []).map((student) => ({
-        id: student.id,
-        studentCode: student.student_code || '-',
-        name: student.full_name || student.student_code || 'Unnamed Student',
-        email: student.email || '-',
-        phone: student.phone || '-',
-        course: student.course || '-',
-        batch: student.batch || '-',
-        status:
-          student.status === 'active'
-            ? 'Active'
-            : student.status === 'completed'
-            ? 'Completed'
-            : 'On Hold',
-        progress: student.progress || 0,
-        joinDate:
-          student.enroll_date ||
-          student.created_at?.slice(0, 10) ||
-          '-',
-      }));
-
-      setStudents(mappedStudents);
-      setLoading(false);
-    }
-
     fetchStudents();
   }, []);
+
+  async function fetchStudents() {
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from('students')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching students:', error.message);
+      setLoading(false);
+      return;
+    }
+
+    const mappedStudents: Student[] = (data || []).map((student: any) => ({
+      id: student.id,
+      studentCode: student.student_code || '-',
+      name: student.full_name || student.student_code || 'Unnamed Student',
+      email: student.email || '-',
+      phone: student.phone || '-',
+      course: student.course || '-',
+      batch: student.batch || '-',
+      status: mapStudentStatus(student.status),
+      progress: student.progress || 0,
+      joinDate: student.enroll_date || student.created_at?.slice(0, 10) || '-',
+    }));
+
+    setStudents(mappedStudents);
+    setLoading(false);
+  }
+
+  async function updateStudentStatus(student: Student, newStatus: string) {
+    const { error } = await supabase
+      .from('students')
+      .update({ status: newStatus })
+      .eq('id', student.id);
+
+    if (error) {
+      alert(`Failed to update student: ${error.message}`);
+      return;
+    }
+
+    await supabase.from('audit_logs').insert({
+      user_id: null,
+      action: 'Student Status Updated',
+      module: 'Student Management',
+      target_id: student.id,
+      old_data: { status: student.status },
+      new_data: { status: newStatus, student_name: student.name },
+      created_at: new Date().toISOString(),
+    });
+
+    fetchStudents();
+  }
+
+  const courses = [
+    'All',
+    ...Array.from(new Set(students.map((student) => student.course).filter(Boolean))),
+  ];
 
   const filteredStudents = students.filter((student) => {
     const matchesSearch =
@@ -75,8 +106,18 @@ export default function StudentList() {
     const matchesStatus =
       filterStatus === 'All' || student.status === filterStatus;
 
-    return matchesSearch && matchesStatus;
+    const matchesCourse =
+      filterCourse === 'All' || student.course === filterCourse;
+
+    return matchesSearch && matchesStatus && matchesCourse;
   });
+
+  const totalStudents = students.length;
+  const activeStudents = students.filter((s) => s.status === 'Active').length;
+  const completedStudents = students.filter((s) => s.status === 'Completed').length;
+  const onHoldStudents = students.filter(
+    (s) => s.status === 'On Hold' || s.status === 'Inactive'
+  ).length;
 
   return (
     <div className="space-y-6">
@@ -92,6 +133,13 @@ export default function StudentList() {
         >
           Add New Student
         </Link>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <SummaryCard label="Total Students" value={totalStudents} color="text-[#284342]" />
+        <SummaryCard label="Active" value={activeStudents} color="text-green-700" />
+        <SummaryCard label="Completed" value={completedStudents} color="text-blue-700" />
+        <SummaryCard label="On Hold / Inactive" value={onHoldStudents} color="text-yellow-700" />
       </div>
 
       <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
@@ -122,7 +170,7 @@ export default function StudentList() {
 
         {showFilters && (
           <div className="mt-4 pt-4 border-t border-[rgba(40,67,66,0.1)]">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
                   Status
@@ -137,6 +185,7 @@ export default function StudentList() {
                   <option value="Active">Active</option>
                   <option value="Completed">Completed</option>
                   <option value="On Hold">On Hold</option>
+                  <option value="Inactive">Inactive</option>
                 </select>
               </div>
 
@@ -145,25 +194,16 @@ export default function StudentList() {
                   Course
                 </label>
 
-                <select className="w-full px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]">
-                  <option>All Courses</option>
-                  <option>Professional Makeup Artist Course</option>
-                  <option>Bridal Makeup Specialist</option>
-                  <option>Advanced Airbrush Course</option>
-                  <option>Special Effects Makeup</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm text-[#284342] mb-2">
-                  Batch
-                </label>
-
-                <select className="w-full px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]">
-                  <option>All Batches</option>
-                  <option>2026 Batch A</option>
-                  <option>2026 Batch B</option>
-                  <option>2026 Batch C</option>
+                <select
+                  value={filterCourse}
+                  onChange={(e) => setFilterCourse(e.target.value)}
+                  className="w-full px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+                >
+                  {courses.map((course) => (
+                    <option key={course} value={course}>
+                      {course === '-' ? 'No Course' : course}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -253,23 +293,13 @@ export default function StudentList() {
                     </td>
 
                     <td className="px-6 py-4">
-                      <span
-                        className={`inline-block px-3 py-1 rounded-full text-xs ${
-                          student.status === 'Active'
-                            ? 'bg-green-100 text-green-700'
-                            : student.status === 'Completed'
-                            ? 'bg-blue-100 text-blue-700'
-                            : 'bg-yellow-100 text-yellow-700'
-                        }`}
-                      >
-                        {student.status}
-                      </span>
+                      <StatusBadge status={student.status} />
                     </td>
 
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 flex-wrap">
                         <Link
-                          to={`/app/students/profile/${student.studentCode}`}
+                          to={`/app/students/profile/${student.id}`}
                           className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
                           title="View Profile"
                         >
@@ -279,15 +309,55 @@ export default function StudentList() {
                         <button
                           className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
                           title="Edit"
+                          onClick={() => alert('Edit student will be added in Student Profile page.')}
                         >
                           <Edit size={16} className="text-[#284342]" />
                         </button>
 
-                        <button
+                        <Link
+                          to="/app/documents"
                           className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                          title="More"
+                          title="Documents"
                         >
-                          <MoreVertical size={16} className="text-[#284342]" />
+                          <FileText size={16} className="text-[#284342]" />
+                        </Link>
+
+                        {student.status !== 'Completed' && (
+                          <button
+                            onClick={() => updateStudentStatus(student, 'completed')}
+                            className="p-2 hover:bg-green-100 rounded-lg transition-colors"
+                            title="Mark Completed"
+                          >
+                            <CheckCircle2 size={16} className="text-green-700" />
+                          </button>
+                        )}
+
+                        {student.status !== 'On Hold' && student.status !== 'Inactive' && (
+                          <button
+                            onClick={() => updateStudentStatus(student, 'inactive')}
+                            className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
+                            title="Put On Hold"
+                          >
+                            <PauseCircle size={16} className="text-yellow-700" />
+                          </button>
+                        )}
+
+                        {student.status !== 'Active' && (
+                          <button
+                            onClick={() => updateStudentStatus(student, 'active')}
+                            className="p-2 hover:bg-green-100 rounded-lg transition-colors"
+                            title="Activate"
+                          >
+                            <CheckCircle2 size={16} className="text-green-700" />
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => updateStudentStatus(student, 'suspended')}
+                          className="p-2 hover:bg-red-100 rounded-lg transition-colors"
+                          title="Suspend"
+                        >
+                          <XCircle size={16} className="text-red-700" />
                         </button>
                       </div>
                     </td>
@@ -302,29 +372,52 @@ export default function StudentList() {
             Showing {filteredStudents.length} of {students.length} students
           </p>
 
-          <div className="flex items-center gap-2">
-            <button className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-sm text-[#284342] hover:bg-[#f8f8f6] transition-colors">
-              Previous
-            </button>
-
-            <button className="px-4 py-2 rounded-lg bg-[#284342] text-[#e9da95] text-sm">
-              1
-            </button>
-
-            <button className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-sm text-[#284342] hover:bg-[#f8f8f6] transition-colors">
-              2
-            </button>
-
-            <button className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-sm text-[#284342] hover:bg-[#f8f8f6] transition-colors">
-              3
-            </button>
-
-            <button className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-sm text-[#284342] hover:bg-[#f8f8f6] transition-colors">
-              Next
-            </button>
-          </div>
+          <p className="text-xs text-[#6b6b6b]">
+            Pagination can be added after final data volume is confirmed.
+          </p>
         </div>
       </div>
     </div>
   );
+}
+
+function SummaryCard({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: number;
+  color: string;
+}) {
+  return (
+    <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
+      <p className="text-sm text-[#6b6b6b] mb-2">{label}</p>
+      <p className={`text-3xl ${color}`}>{value}</p>
+    </div>
+  );
+}
+
+function StatusBadge({ status }: { status: Student['status'] }) {
+  const className =
+    status === 'Active'
+      ? 'bg-green-100 text-green-700'
+      : status === 'Completed'
+      ? 'bg-blue-100 text-blue-700'
+      : status === 'Inactive'
+      ? 'bg-gray-100 text-gray-700'
+      : 'bg-yellow-100 text-yellow-700';
+
+  return (
+    <span className={`inline-block px-3 py-1 rounded-full text-xs ${className}`}>
+      {status}
+    </span>
+  );
+}
+
+function mapStudentStatus(status: string): Student['status'] {
+  if (status === 'active') return 'Active';
+  if (status === 'completed') return 'Completed';
+  if (status === 'inactive') return 'Inactive';
+  return 'On Hold';
 }

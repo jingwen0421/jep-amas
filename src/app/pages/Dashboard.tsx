@@ -7,12 +7,18 @@ import {
   AlertCircle,
   CheckCircle2,
   Clock,
+  FileText,
+  History,
+  MessageSquare,
+  CreditCard,
+  UserPlus,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface DashboardCard {
   title: string;
   value: string | number;
+  subtitle: string;
   icon: React.ReactNode;
   color: string;
 }
@@ -26,19 +32,27 @@ interface TodayClass {
   students: number;
 }
 
-interface PaymentDue {
+interface ActionItem {
   id: string;
-  student: string;
-  amount: string;
-  course: string;
-  dueDate: string;
+  title: string;
+  description: string;
+  link: string;
+  icon: React.ReactNode;
+  color: string;
 }
 
-interface PendingApproval {
+interface RecentStudent {
   id: string;
   name: string;
   course: string;
   date: string;
+}
+
+interface Activity {
+  id: string;
+  message: string;
+  module: string;
+  time: string;
 }
 
 export default function Dashboard() {
@@ -47,8 +61,15 @@ export default function Dashboard() {
 
   const [cards, setCards] = useState<DashboardCard[]>([]);
   const [todaysClasses, setTodaysClasses] = useState<TodayClass[]>([]);
-  const [pendingApprovals, setPendingApprovals] = useState<PendingApproval[]>([]);
-  const [paymentsDueThisWeek, setPaymentsDueThisWeek] = useState<PaymentDue[]>([]);
+  const [pendingActions, setPendingActions] = useState<ActionItem[]>([]);
+  const [recentStudents, setRecentStudents] = useState<RecentStudent[]>([]);
+  const [activities, setActivities] = useState<Activity[]>([]);
+
+  const [revenueSnapshot, setRevenueSnapshot] = useState({
+    paid: 0,
+    outstanding: 0,
+    collectionRate: 0,
+  });
 
   useEffect(() => {
     const role = localStorage.getItem('userRole') || 'admin';
@@ -61,14 +82,25 @@ export default function Dashboard() {
 
     const [
       studentsRes,
+      recentStudentsRes,
       lessonsRes,
       attendanceRes,
       paymentPlansRes,
-      installmentsRes,
       applicationsRes,
-      
+      portfolioRes,
+      appointmentsRes,
+      auditRes,
     ] = await Promise.all([
-      supabase.from('students').select('id', { count: 'exact', head: true }).eq('status', 'active'),
+      supabase
+        .from('students')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'active'),
+
+      supabase
+        .from('students')
+        .select('id, full_name, course, created_at')
+        .order('created_at', { ascending: false })
+        .limit(5),
 
       supabase
         .from('lessons')
@@ -76,7 +108,6 @@ export default function Dashboard() {
           id,
           lesson_title,
           lesson_datetime,
-          duration_minutes,
           class_batches(
             batch_name,
             courses(course_name),
@@ -101,48 +132,47 @@ export default function Dashboard() {
         `),
 
       supabase
-        .from('installments')
+        .from('registration_applications')
         .select(`
           id,
-          amount,
-          due_date,
-          status,
-          payment_plans(
-            students(full_name),
-            enrollments(
-              class_batches(
-                courses(course_name)
-              )
-            )
-          )
+          submitted_at,
+          students(full_name, course),
+          courses(course_name)
         `)
-        .neq('status', 'paid')
-        .order('due_date', { ascending: true }),
+        .eq('application_status', 'pending')
+        .order('submitted_at', { ascending: false })
+        .limit(3),
 
-     supabase
-      .from('registration_applications')
-      .select(`
-        id,
-        application_status,
-        submitted_at,
-        students(full_name, course),
-        courses(course_name)
-      `)
-      .eq('application_status', 'pending')
-      .order('submitted_at', { ascending: false }),
+      supabase
+        .from('portfolio_items')
+        .select('id, title, portfolio_status, submitted_at, students(full_name)')
+        .eq('portfolio_status', 'submitted')
+        .order('submitted_at', { ascending: false })
+        .limit(3),
+
+      supabase
+        .from('appointments')
+        .select('id, appointment_datetime, appointment_status, students(full_name)')
+        .eq('appointment_status', 'pending')
+        .order('appointment_datetime', { ascending: true })
+        .limit(3),
+
+      supabase
+        .from('audit_logs')
+        .select('id, action, module, target_id, old_data, new_data, created_at')
+        .order('created_at', { ascending: false })
+        .limit(6),
     ]);
 
     const activeStudents = studentsRes.count || 0;
-
     const lessons = lessonsRes.data || [];
-    const today = new Date().toISOString().slice(0, 10);
+    const activeClasses = lessons.length;
 
+    const today = new Date().toISOString().slice(0, 10);
     const todayLessons = lessons.filter((lesson: any) => {
       if (!lesson.lesson_datetime) return false;
       return new Date(lesson.lesson_datetime).toISOString().slice(0, 10) === today;
     });
-
-    const activeClasses = lessons.length;
 
     const attendanceRecords = attendanceRes.data || [];
     const presentCount = attendanceRecords.filter(
@@ -164,40 +194,100 @@ export default function Dashboard() {
     const totalPaid = paymentPlans.reduce((sum: number, plan: any) => {
       const installments = plan.installments || [];
       const paidAmount = installments
-        .filter((item: any) => item.status === 'paid')
+        .filter((item: any) => String(item.status).toLowerCase() === 'paid')
         .reduce((acc: number, item: any) => acc + Number(item.amount || 0), 0);
 
       return sum + paidAmount;
     }, 0);
 
     const outstandingFees = Math.max(totalFinalAmount - totalPaid, 0);
+    const collectionRate =
+      totalFinalAmount > 0 ? Math.round((totalPaid / totalFinalAmount) * 100) : 0;
+
+    setRevenueSnapshot({
+      paid: totalPaid,
+      outstanding: outstandingFees,
+      collectionRate,
+    });
 
     setCards([
       {
         title: 'Active Students',
         value: activeStudents,
+        subtitle: 'Currently active learners',
         icon: <Users size={24} />,
         color: '#284342',
       },
       {
-        title: 'Active Classes',
-        value: activeClasses,
-        icon: <Calendar size={24} />,
-        color: '#6b8e8d',
-      },
-      {
-        title: 'Outstanding Fees',
-        value: `RM ${outstandingFees.toLocaleString()}`,
+        title: 'Revenue Collected',
+        value: `RM ${totalPaid.toLocaleString()}`,
+        subtitle: `${collectionRate}% collection rate`,
         icon: <DollarSign size={24} />,
-        color: '#d4183d',
+        color: '#2d8659',
       },
       {
         title: 'Attendance Rate',
         value: `${attendanceRate}%`,
+        subtitle: `${attendanceRecords.length} attendance records`,
         icon: <CheckCircle2 size={24} />,
-        color: '#2d8659',
+        color: '#6b8e8d',
+      },
+      {
+        title: 'Active Classes',
+        value: activeClasses,
+        subtitle: `${todayLessons.length} scheduled today`,
+        icon: <Calendar size={24} />,
+        color: '#d4183d',
       },
     ]);
+
+    const actions: ActionItem[] = [];
+
+    (applicationsRes.data || []).forEach((app: any) => {
+      actions.push({
+        id: `app-${app.id}`,
+        title: 'Registration Approval Needed',
+        description: `${getStudentName(app.students)} • ${getApplicationCourse(app)}`,
+        link: '/app/students/approval',
+        icon: <UserPlus size={18} />,
+        color: 'text-[#d4183d]',
+      });
+    });
+
+    (portfolioRes.data || []).forEach((item: any) => {
+      actions.push({
+        id: `portfolio-${item.id}`,
+        title: 'Portfolio Awaiting Review',
+        description: `${getStudentName(item.students)} • ${item.title || 'Portfolio Submission'}`,
+        link: '/app/portfolio/feedback',
+        icon: <MessageSquare size={18} />,
+        color: 'text-blue-700',
+      });
+    });
+
+    (appointmentsRes.data || []).forEach((appt: any) => {
+      actions.push({
+        id: `appt-${appt.id}`,
+        title: 'Appointment Pending',
+        description: `${getStudentName(appt.students)} • ${formatDateTime(appt.appointment_datetime)}`,
+        link: '/app/appointments/calendar',
+        icon: <Calendar size={18} />,
+        color: 'text-yellow-700',
+      });
+    });
+
+    if (outstandingFees > 0) {
+      actions.push({
+        id: 'outstanding-fees',
+        title: 'Outstanding Payments',
+        description: `RM ${outstandingFees.toLocaleString()} still unpaid`,
+        link: '/app/payments/outstanding',
+        icon: <CreditCard size={18} />,
+        color: 'text-[#d4183d]',
+      });
+    }
+
+    setPendingActions(actions.slice(0, 6));
 
     setTodaysClasses(
       todayLessons.map((lesson: any) => ({
@@ -213,53 +303,40 @@ export default function Dashboard() {
       }))
     );
 
-    const nextWeek = new Date();
-    nextWeek.setDate(nextWeek.getDate() + 7);
-    const nextWeekStr = nextWeek.toISOString().slice(0, 10);
-
-    const duePayments = (installmentsRes.data || []).filter((item: any) => {
-      return item.due_date && item.due_date <= nextWeekStr;
-    });
-
-    setPaymentsDueThisWeek(
-      duePayments.map((item: any) => {
-        const plan = Array.isArray(item.payment_plans)
-          ? item.payment_plans[0]
-          : item.payment_plans;
-
-        return {
-          id: item.id,
-          student: getStudentName(plan?.students),
-          amount: `RM ${Number(item.amount || 0).toLocaleString()}`,
-          course: getCourseNameFromEnrollment(plan?.enrollments),
-          dueDate: item.due_date,
-        };
-      })
-    );
-
-    setPendingApprovals(
-      (applicationsRes.data || []).map((app: any) => ({
-        id: app.id,
-        name: getStudentName(app.students),
-        course: getApplicationCourse(app),
-        date: app.submitted_at
-          ? new Date(app.submitted_at).toISOString().slice(0, 10)
+    setRecentStudents(
+      (recentStudentsRes.data || []).map((student: any) => ({
+        id: student.id,
+        name: student.full_name || 'Unnamed Student',
+        course: student.course || '-',
+        date: student.created_at
+          ? new Date(student.created_at).toISOString().slice(0, 10)
           : '-',
       }))
     );
-    console.log('USER ROLE:', userRole);
-    console.log('APPLICATIONS:', applicationsRes.data);
-    console.log('APPLICATION ERROR:', applicationsRes.error);
+
+    setActivities(
+      (auditRes.data || []).map((log: any) => ({
+        id: log.id,
+        message: getReadableActivity(log),
+        module: log.module || '-',
+        time: log.created_at ? new Date(log.created_at).toLocaleString() : '-',
+      }))
+    );
 
     setLoading(false);
   }
 
+  const roleTitle =
+    userRole === 'owner'
+      ? 'Owner Dashboard'
+      : userRole === 'super_admin'
+      ? 'Super Admin Dashboard'
+      : 'Admin Dashboard';
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl text-[#284342] mb-2">
-          {userRole === 'owner' ? 'Owner Dashboard' : 'Admin Dashboard'}
-        </h1>
+        <h1 className="text-3xl text-[#284342] mb-2">{roleTitle}</h1>
         <p className="text-[#6b6b6b]">
           Welcome back to JEP Image Makeup Academy
         </p>
@@ -275,37 +352,79 @@ export default function Dashboard() {
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
             {cards.map((card) => (
-              <div
-                key={card.title}
-                className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] hover:shadow-lg transition-shadow"
-              >
-                <div className="flex items-start justify-between mb-4">
-                  <div
-                    className="p-3 rounded-lg"
-                    style={{ backgroundColor: `${card.color}15` }}
-                  >
-                    <div style={{ color: card.color }}>{card.icon}</div>
-                  </div>
-                </div>
-
-                <h3 className="text-sm text-[#6b6b6b] mb-1">{card.title}</h3>
-                <p className="text-2xl text-[#284342]">{card.value}</p>
-              </div>
+              <DashboardStatCard key={card.title} card={card} />
             ))}
           </div>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl text-[#284342]">Today's Classes</h2>
-                <Link
-                  to="/app/classes/calendar"
-                  className="text-sm text-[#284342] hover:underline"
-                >
-                  View All
-                </Link>
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] lg:col-span-2">
+              <div className="flex items-center gap-2 mb-6">
+                <AlertCircle size={20} className="text-[#d4183d]" />
+                <h2 className="text-xl text-[#284342]">Pending Actions</h2>
               </div>
 
+              <div className="space-y-3">
+                {pendingActions.length === 0 && (
+                  <p className="text-sm text-[#6b6b6b]">
+                    No urgent actions right now.
+                  </p>
+                )}
+
+                {pendingActions.map((item) => (
+                  <Link
+                    key={item.id}
+                    to={item.link}
+                    className="flex items-start gap-3 p-4 rounded-lg bg-[#f8f8f6] hover:bg-[#e9da95]/20 transition-colors"
+                  >
+                    <div className={`${item.color} mt-0.5`}>{item.icon}</div>
+                    <div className="flex-1">
+                      <p className="text-sm text-[#284342]">{item.title}</p>
+                      <p className="text-xs text-[#6b6b6b] mt-1">
+                        {item.description}
+                      </p>
+                    </div>
+                    <span className="text-xs text-[#284342]">Open</span>
+                  </Link>
+                ))}
+              </div>
+            </div>
+
+            <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
+              <h2 className="text-xl text-[#284342] mb-6">Revenue Snapshot</h2>
+
+              <div className="space-y-4">
+                <RevenueLine
+                  label="Paid"
+                  value={`RM ${revenueSnapshot.paid.toLocaleString()}`}
+                  color="text-green-700"
+                />
+                <RevenueLine
+                  label="Outstanding"
+                  value={`RM ${revenueSnapshot.outstanding.toLocaleString()}`}
+                  color="text-[#d4183d]"
+                />
+                <RevenueLine
+                  label="Collection Rate"
+                  value={`${revenueSnapshot.collectionRate}%`}
+                  color="text-[#284342]"
+                />
+
+                <div className="w-full h-3 bg-[#f8f8f6] rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-[#284342]"
+                    style={{ width: `${revenueSnapshot.collectionRate}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <DashboardPanel
+              title="Today's Classes"
+              actionLabel="View Calendar"
+              actionLink="/app/classes/calendar"
+            >
               <div className="space-y-4">
                 {todaysClasses.length === 0 && (
                   <p className="text-sm text-[#6b6b6b]">No classes today.</p>
@@ -314,7 +433,7 @@ export default function Dashboard() {
                 {todaysClasses.map((cls) => (
                   <div
                     key={cls.id}
-                    className="flex items-start gap-4 p-4 rounded-lg bg-[#f8f8f6] hover:bg-[#e9da95]/20 transition-colors"
+                    className="flex items-start gap-4 p-4 rounded-lg bg-[#f8f8f6]"
                   >
                     <div className="flex flex-col items-center">
                       <Clock size={20} className="text-[#284342] mb-1" />
@@ -332,138 +451,141 @@ export default function Dashboard() {
                   </div>
                 ))}
               </div>
-            </div>
+            </DashboardPanel>
 
-            {(userRole === 'admin' || userRole === 'super_admin') && (
-              <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center gap-2">
-                    <h2 className="text-xl text-[#284342]">Pending Approvals</h2>
-                    <span className="bg-[#d4183d] text-white text-xs px-2 py-1 rounded-full">
-                      {pendingApprovals.length}
-                    </span>
+            <DashboardPanel
+              title="Recent Students"
+              actionLabel="View Students"
+              actionLink="/app/students/list"
+            >
+              <div className="space-y-3">
+                {recentStudents.length === 0 && (
+                  <p className="text-sm text-[#6b6b6b]">No recent students.</p>
+                )}
+
+                {recentStudents.map((student) => (
+                  <div
+                    key={student.id}
+                    className="p-4 rounded-lg bg-[#f8f8f6] flex items-center justify-between"
+                  >
+                    <div>
+                      <p className="text-sm text-[#284342]">{student.name}</p>
+                      <p className="text-xs text-[#6b6b6b] mt-1">
+                        {student.course}
+                      </p>
+                    </div>
+                    <span className="text-xs text-[#6b6b6b]">{student.date}</span>
                   </div>
-
-                  <Link
-                    to="/app/students/approval"
-                    className="text-sm text-[#284342] hover:underline"
-                  >
-                    Review All
-                  </Link>
-                </div>
-
-                <div className="space-y-3">
-                  {pendingApprovals.length === 0 && (
-                    <p className="text-sm text-[#6b6b6b]">
-                      No pending approvals.
-                    </p>
-                  )}
-
-                  {pendingApprovals.map((approval) => (
-                    <div
-                      key={approval.id}
-                      className="p-4 rounded-lg border border-[rgba(40,67,66,0.1)] hover:border-[#e9da95] transition-colors"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <h3 className="text-sm text-[#284342]">
-                          {approval.name}
-                        </h3>
-                        <AlertCircle size={16} className="text-[#d4183d]" />
-                      </div>
-                      <p className="text-xs text-[#6b6b6b] mb-2">
-                        {approval.course}
-                      </p>
-                      <p className="text-xs text-[#6b6b6b]">
-                        Applied: {approval.date}
-                      </p>
-                    </div>
-                  ))}
-                </div>
+                ))}
               </div>
-            )}
-
-            {(userRole === 'finance' ||
-              userRole === 'admin' ||
-              userRole === 'super_admin' ||
-              userRole === 'owner') && (
-              <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-xl text-[#284342]">
-                    Payments Due This Week
-                  </h2>
-
-                  <Link
-                    to="/app/payments/outstanding"
-                    className="text-sm text-[#284342] hover:underline"
-                  >
-                    View All
-                  </Link>
-                </div>
-
-                <div className="space-y-3">
-                  {paymentsDueThisWeek.length === 0 && (
-                    <p className="text-sm text-[#6b6b6b]">
-                      No payments due this week.
-                    </p>
-                  )}
-
-                  {paymentsDueThisWeek.map((payment) => (
-                    <div
-                      key={payment.id}
-                      className="p-4 rounded-lg border border-[rgba(40,67,66,0.1)] hover:border-[#e9da95] transition-colors"
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <h3 className="text-sm text-[#284342]">
-                            {payment.student}
-                          </h3>
-                          <p className="text-xs text-[#6b6b6b] mt-1">
-                            {payment.course}
-                          </p>
-                        </div>
-                        <p className="text-sm text-[#d4183d]">
-                          {payment.amount}
-                        </p>
-                      </div>
-
-                      <p className="text-xs text-[#6b6b6b]">
-                        Due: {payment.dueDate}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+            </DashboardPanel>
           </div>
 
-          <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-            <h2 className="text-xl text-[#284342] mb-4">Quick Actions</h2>
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <DashboardPanel
+              title="Recent Activities"
+              actionLabel="View Logs"
+              actionLink="/app/audit"
+            >
+              <div className="space-y-3">
+                {activities.length === 0 && (
+                  <p className="text-sm text-[#6b6b6b]">No recent activities.</p>
+                )}
 
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <QuickAction
-                to="/app/students/registration"
-                icon={<Users size={24} />}
-                label="New Student"
-              />
-              <QuickAction
-                to="/app/classes/scheduling"
-                icon={<Calendar size={24} />}
-                label="Schedule Class"
-              />
-              <QuickAction
-                to="/app/attendance/daily"
-                icon={<CheckCircle2 size={24} />}
-                label="Take Attendance"
-              />
-              <QuickAction
-                to="/app/payments/installments"
-                icon={<DollarSign size={24} />}
-                label="Record Payment"
-              />
+                {activities.map((activity) => (
+                  <div
+                    key={activity.id}
+                    className="p-4 rounded-lg border border-[rgba(40,67,66,0.1)]"
+                  >
+                    <div className="flex items-start justify-between mb-1">
+                      <p className="text-sm text-[#284342]">
+                        {activity.message}
+                      </p>
+                      <span className="text-xs text-[#6b6b6b]">
+                        {activity.module}
+                      </span>
+                    </div>
+                    <p className="text-xs text-[#6b6b6b] mt-2">
+                      {activity.time}
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </DashboardPanel>
+
+            <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
+              <h2 className="text-xl text-[#284342] mb-4">Quick Actions</h2>
+
+              <div className="grid grid-cols-2 gap-4">
+                <QuickAction to="/app/students/registration" icon={<Users size={24} />} label="New Student" />
+                <QuickAction to="/app/students/approval" icon={<AlertCircle size={24} />} label="Review Applications" />
+                <QuickAction to="/app/attendance/daily" icon={<CheckCircle2 size={24} />} label="Take Attendance" />
+                <QuickAction to="/app/payments/installments" icon={<DollarSign size={24} />} label="Record Payment" />
+                <QuickAction to="/app/portfolio/feedback" icon={<MessageSquare size={24} />} label="Review Portfolio" />
+                <QuickAction to="/app/reports" icon={<FileText size={24} />} label="Reports" />
+              </div>
             </div>
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+function DashboardStatCard({ card }: { card: DashboardCard }) {
+  return (
+    <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] hover:shadow-lg transition-shadow">
+      <div
+        className="p-3 rounded-lg inline-block mb-4"
+        style={{ backgroundColor: `${card.color}15` }}
+      >
+        <div style={{ color: card.color }}>{card.icon}</div>
+      </div>
+
+      <h3 className="text-sm text-[#6b6b6b] mb-1">{card.title}</h3>
+      <p className="text-2xl text-[#284342]">{card.value}</p>
+      <p className="text-xs text-[#6b6b6b] mt-2">{card.subtitle}</p>
+    </div>
+  );
+}
+
+function DashboardPanel({
+  title,
+  actionLabel,
+  actionLink,
+  children,
+}: {
+  title: string;
+  actionLabel: string;
+  actionLink: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
+      <div className="flex items-center justify-between mb-6">
+        <h2 className="text-xl text-[#284342]">{title}</h2>
+        <Link to={actionLink} className="text-sm text-[#284342] hover:underline">
+          {actionLabel}
+        </Link>
+      </div>
+      {children}
+    </div>
+  );
+}
+
+function RevenueLine({
+  label,
+  value,
+  color,
+}: {
+  label: string;
+  value: string;
+  color: string;
+}) {
+  return (
+    <div className="flex items-center justify-between">
+      <span className="text-sm text-[#6b6b6b]">{label}</span>
+      <span className={`text-lg ${color}`}>{value}</span>
     </div>
   );
 }
@@ -507,22 +629,33 @@ function getStudentName(student: any) {
   return student.full_name || 'Unnamed Student';
 }
 
-function getCourseNameFromEnrollment(enrollment: any) {
-  if (!enrollment) return '-';
-
-  const actualEnrollment = Array.isArray(enrollment) ? enrollment[0] : enrollment;
-  const batch = actualEnrollment?.class_batches;
-  const actualBatch = Array.isArray(batch) ? batch[0] : batch;
-  const course = actualBatch?.courses;
-  const actualCourse = Array.isArray(course) ? course[0] : course;
-
-  return actualCourse?.course_name || '-';
-}
-
 function getApplicationCourse(app: any) {
   const course = Array.isArray(app.courses) ? app.courses[0] : app.courses;
   if (course?.course_name) return course.course_name;
 
   const student = Array.isArray(app.students) ? app.students[0] : app.students;
   return student?.course || '-';
+}
+
+function formatDateTime(value: string) {
+  if (!value) return '-';
+  return new Date(value).toLocaleString();
+}
+
+function getReadableActivity(log: any) {
+  const action = log.action || 'System action';
+  const module = log.module || 'System';
+
+  if (action === 'Logged In') return 'User logged in';
+  if (action === 'Updated Settings') return 'Academy settings updated';
+  if (action === 'Viewed User Management') return 'User management viewed';
+  if (action === 'Demo Action') return 'Demo audit activity added';
+
+  if (module === 'Payments') return 'Payment record updated';
+  if (module === 'Attendance') return 'Attendance record updated';
+  if (module === 'Portfolio') return 'Portfolio activity recorded';
+  if (module === 'Certificates') return 'Certificate activity recorded';
+  if (module === 'Student Management') return 'Student record updated';
+
+  return action;
 }
