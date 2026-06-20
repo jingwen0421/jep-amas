@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react';
-import { Star, MessageSquare, CheckCircle, AlertCircle } from 'lucide-react';
+import {
+  Star,
+  MessageSquare,
+  CheckCircle,
+  AlertCircle,
+  Eye,
+  X,
+  Image as ImageIcon,
+  FileText,
+} from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface SubmissionReview {
@@ -17,6 +26,16 @@ interface SubmissionReview {
 export default function TeacherFeedback() {
   const [submissions, setSubmissions] = useState<SubmissionReview[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedSubmission, setSelectedSubmission] =
+    useState<SubmissionReview | null>(null);
+  const [reviewModal, setReviewModal] = useState<{
+    submission: SubmissionReview;
+    status: 'approved' | 'revision_required';
+  } | null>(null);
+
+  const [score, setScore] = useState('');
+  const [feedback, setFeedback] = useState('');
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     fetchSubmissions();
@@ -37,7 +56,17 @@ export default function TeacherFeedback() {
         portfolio_status,
         submitted_at,
         students(full_name),
-        portfolio_feedback(score, feedback)
+        lessons(
+          lesson_title,
+          class_batches(
+            courses(course_name)
+          )
+        ),
+        portfolio_feedback(
+          id,
+          score,
+          feedback
+        )
       `)
       .order('submitted_at', { ascending: false });
 
@@ -48,21 +77,19 @@ export default function TeacherFeedback() {
     }
 
     const mapped: SubmissionReview[] = (data || []).map((item: any) => {
-      const feedback = Array.isArray(item.portfolio_feedback)
-        ? item.portfolio_feedback[0]
-        : item.portfolio_feedback;
+      const feedbackRow = getSingle(item.portfolio_feedback);
 
       return {
         id: item.id,
         student: getStudentName(item.students),
         assignment: item.title || '-',
-        course: item.description || '-',
+        course: getCourseName(item.lessons, item.description),
         submittedDate: item.submitted_at
           ? new Date(item.submitted_at).toISOString().slice(0, 10)
           : '-',
         status: mapStatus(item.portfolio_status),
-        score: feedback?.score,
-        feedback: feedback?.feedback,
+        score: feedbackRow?.score,
+        feedback: feedbackRow?.feedback,
         fileUrl: item.file_url,
       };
     });
@@ -71,54 +98,131 @@ export default function TeacherFeedback() {
     setLoading(false);
   }
 
-  async function reviewSubmission(
-    id: string,
+  function openReviewModal(
+    submission: SubmissionReview,
     status: 'approved' | 'revision_required'
   ) {
-    const scoreInput = prompt('Enter score (0-100):', status === 'approved' ? '90' : '70');
-    if (scoreInput === null) return;
+    setReviewModal({ submission, status });
+    setScore(submission.score !== undefined ? String(submission.score) : status === 'approved' ? '90' : '70');
+    setFeedback(submission.feedback || '');
+  }
 
-    const score = Number(scoreInput);
+  async function saveReview() {
+    if (!reviewModal) return;
 
-    if (Number.isNaN(score) || score < 0 || score > 100) {
+    const numericScore = Number(score);
+
+    if (Number.isNaN(numericScore) || numericScore < 0 || numericScore > 100) {
       alert('Please enter a valid score between 0 and 100.');
       return;
     }
 
-    const feedback = prompt('Enter feedback:') || '';
+    setSaving(true);
 
-    const { data: teachers } = await supabase
-      .from('teachers')
-      .select('id')
-      .limit(1);
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-    const teacherId = teachers?.[0]?.id || null;
+    let teacherId: string | null = null;
+
+    if (user?.id) {
+      const { data: teacher } = await supabase
+        .from('teachers')
+        .select('id')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      teacherId = teacher?.id || null;
+    }
+
+    if (!teacherId) {
+      const { data: teacher } = await supabase
+        .from('teachers')
+        .select('id')
+        .limit(1)
+        .maybeSingle();
+
+      teacherId = teacher?.id || null;
+    }
 
     const { error: updateError } = await supabase
       .from('portfolio_items')
-      .update({ portfolio_status: status })
-      .eq('id', id);
+      .update({
+        portfolio_status: reviewModal.status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', reviewModal.submission.id);
 
     if (updateError) {
+      setSaving(false);
       alert(`Failed to update submission: ${updateError.message}`);
       return;
     }
 
-    const { error: feedbackError } = await supabase
+    const { data: existingFeedback } = await supabase
       .from('portfolio_feedback')
-      .insert({
-        portfolio_item_id: id,
-        teacher_id: teacherId,
-        score,
-        feedback,
-        reviewed_at: new Date().toISOString(),
-      });
+      .select('id')
+      .eq('portfolio_item_id', reviewModal.submission.id)
+      .maybeSingle();
 
-    if (feedbackError) {
-      alert(`Submission updated, but feedback failed: ${feedbackError.message}`);
-      return;
+    if (existingFeedback) {
+      const { error: feedbackError } = await supabase
+        .from('portfolio_feedback')
+        .update({
+          teacher_id: teacherId,
+          score: numericScore,
+          feedback,
+          reviewed_at: new Date().toISOString(),
+        })
+        .eq('id', existingFeedback.id);
+
+      if (feedbackError) {
+        setSaving(false);
+        alert(`Submission updated, but feedback update failed: ${feedbackError.message}`);
+        return;
+      }
+    } else {
+      const { error: feedbackError } = await supabase
+        .from('portfolio_feedback')
+        .insert({
+          portfolio_item_id: reviewModal.submission.id,
+          teacher_id: teacherId,
+          score: numericScore,
+          feedback,
+          reviewed_at: new Date().toISOString(),
+        });
+
+      if (feedbackError) {
+        setSaving(false);
+        alert(`Submission updated, but feedback failed: ${feedbackError.message}`);
+        return;
+      }
     }
 
+    await supabase.from('audit_logs').insert({
+      user_id: user?.id || null,
+      action:
+        reviewModal.status === 'approved'
+          ? 'Portfolio Approved'
+          : 'Portfolio Revision Requested',
+      module: 'Portfolio',
+      target_id: reviewModal.submission.id,
+      old_data: {
+        previous_status: reviewModal.submission.status,
+      },
+      new_data: {
+        student: reviewModal.submission.student,
+        assignment: reviewModal.submission.assignment,
+        score: numericScore,
+        feedback,
+      },
+      created_at: new Date().toISOString(),
+    });
+
+    setSaving(false);
+    setReviewModal(null);
+    setScore('');
+    setFeedback('');
     fetchSubmissions();
   }
 
@@ -139,7 +243,7 @@ export default function TeacherFeedback() {
       <div>
         <h1 className="text-3xl text-[#284342]">Teacher Feedback</h1>
         <p className="text-[#6b6b6b] mt-1">
-          Review student submissions and provide feedback
+          Review student portfolio submissions and provide feedback
         </p>
       </div>
 
@@ -173,9 +277,11 @@ export default function TeacherFeedback() {
                 key={submission.id}
                 className="p-6 hover:bg-[#f8f8f6] transition-colors"
               >
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex flex-col lg:flex-row gap-5">
+                  <SubmissionPreview fileUrl={submission.fileUrl} />
+
                   <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
+                    <div className="flex items-center gap-3 mb-2 flex-wrap">
                       <h3 className="text-lg text-[#284342]">
                         {submission.assignment}
                       </h3>
@@ -209,48 +315,247 @@ export default function TeacherFeedback() {
                         </p>
                       </div>
                     )}
+
+                    <div className="flex items-center gap-3 pt-4 mt-4 border-t border-[rgba(40,67,66,0.1)] flex-wrap">
+                      {submission.status === 'Pending Review' ? (
+                        <>
+                          <button
+                            onClick={() => openReviewModal(submission, 'approved')}
+                            className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors text-sm flex items-center gap-2"
+                          >
+                            <CheckCircle size={16} />
+                            Approve
+                          </button>
+
+                          <button
+                            onClick={() =>
+                              openReviewModal(submission, 'revision_required')
+                            }
+                            className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors text-sm flex items-center gap-2"
+                          >
+                            <AlertCircle size={16} />
+                            Request Revision
+                          </button>
+                        </>
+                      ) : (
+                        <button
+                          onClick={() => openReviewModal(submission, 'approved')}
+                          className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm"
+                        >
+                          Edit Feedback
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => setSelectedSubmission(submission)}
+                        className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm flex items-center gap-2"
+                      >
+                        <Eye size={16} />
+                        Preview Submission
+                      </button>
+
+                      {submission.fileUrl && (
+                        <button
+                          onClick={() => window.open(submission.fileUrl, '_blank')}
+                          className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm"
+                        >
+                          Open File
+                        </button>
+                      )}
+                    </div>
                   </div>
-                </div>
-
-                <div className="flex items-center gap-3 pt-4 border-t border-[rgba(40,67,66,0.1)]">
-                  {submission.status === 'Pending Review' ? (
-                    <>
-                      <button
-                        onClick={() => reviewSubmission(submission.id, 'approved')}
-                        className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors text-sm flex items-center gap-2"
-                      >
-                        <CheckCircle size={16} />
-                        Approve
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          reviewSubmission(submission.id, 'revision_required')
-                        }
-                        className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors text-sm flex items-center gap-2"
-                      >
-                        <AlertCircle size={16} />
-                        Request Revision
-                      </button>
-                    </>
-                  ) : (
-                    <button
-                      onClick={() => reviewSubmission(submission.id, 'approved')}
-                      className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm"
-                    >
-                      Edit Feedback
-                    </button>
-                  )}
-
-                  <button
-                    onClick={() => window.open(submission.fileUrl, '_blank')}
-                    className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm"
-                  >
-                    View Submission
-                  </button>
                 </div>
               </div>
             ))}
+        </div>
+      </div>
+
+      {selectedSubmission && (
+        <PreviewModal
+          submission={selectedSubmission}
+          onClose={() => setSelectedSubmission(null)}
+        />
+      )}
+
+      {reviewModal && (
+        <ReviewModal
+          submission={reviewModal.submission}
+          status={reviewModal.status}
+          score={score}
+          feedback={feedback}
+          saving={saving}
+          setScore={setScore}
+          setFeedback={setFeedback}
+          onClose={() => setReviewModal(null)}
+          onSave={saveReview}
+        />
+      )}
+    </div>
+  );
+}
+
+function SubmissionPreview({ fileUrl }: { fileUrl?: string }) {
+  if (!fileUrl) {
+    return (
+      <div className="w-full lg:w-44 h-44 rounded-lg bg-[#f8f8f6] border border-[rgba(40,67,66,0.1)] flex items-center justify-center">
+        <FileText size={40} className="text-[#6b6b6b]" />
+      </div>
+    );
+  }
+
+  if (isImage(fileUrl)) {
+    return (
+      <img
+        src={fileUrl}
+        alt="Submission"
+        className="w-full lg:w-44 h-44 object-cover rounded-lg border border-[rgba(40,67,66,0.1)]"
+      />
+    );
+  }
+
+  return (
+    <div className="w-full lg:w-44 h-44 rounded-lg bg-[#f8f8f6] border border-[rgba(40,67,66,0.1)] flex flex-col items-center justify-center">
+      <FileText size={40} className="text-[#284342] mb-2" />
+      <p className="text-xs text-[#6b6b6b]">Document</p>
+    </div>
+  );
+}
+
+function PreviewModal({
+  submission,
+  onClose,
+}: {
+  submission: SubmissionReview;
+  onClose: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-5xl w-full max-h-[90vh] overflow-auto">
+        <div className="p-6 border-b border-[rgba(40,67,66,0.1)] flex items-center justify-between">
+          <div>
+            <h2 className="text-xl text-[#284342]">{submission.assignment}</h2>
+            <p className="text-sm text-[#6b6b6b] mt-1">
+              {submission.student} • {submission.course}
+            </p>
+          </div>
+
+          <button onClick={onClose}>
+            <X size={20} className="text-[#284342]" />
+          </button>
+        </div>
+
+        <div className="p-6">
+          {!submission.fileUrl && (
+            <div className="h-96 rounded-lg bg-[#f8f8f6] flex items-center justify-center text-[#6b6b6b]">
+              No file uploaded.
+            </div>
+          )}
+
+          {submission.fileUrl && isImage(submission.fileUrl) && (
+            <img
+              src={submission.fileUrl}
+              alt="Submission preview"
+              className="w-full max-h-[70vh] object-contain rounded-lg bg-[#f8f8f6]"
+            />
+          )}
+
+          {submission.fileUrl && !isImage(submission.fileUrl) && (
+            <iframe
+              src={submission.fileUrl}
+              title="Submission preview"
+              className="w-full h-[70vh] rounded-lg border border-[rgba(40,67,66,0.1)]"
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ReviewModal({
+  submission,
+  status,
+  score,
+  feedback,
+  saving,
+  setScore,
+  setFeedback,
+  onClose,
+  onSave,
+}: {
+  submission: SubmissionReview;
+  status: 'approved' | 'revision_required';
+  score: string;
+  feedback: string;
+  saving: boolean;
+  setScore: (value: string) => void;
+  setFeedback: (value: string) => void;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-xl w-full p-6">
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="text-xl text-[#284342]">
+            {status === 'approved' ? 'Approve Submission' : 'Request Revision'}
+          </h2>
+          <button onClick={onClose}>
+            <X size={20} className="text-[#284342]" />
+          </button>
+        </div>
+
+        <div className="space-y-4">
+          <Info label="Student" value={submission.student} />
+          <Info label="Assignment" value={submission.assignment} />
+
+          <div>
+            <label className="block text-sm text-[#284342] mb-2">
+              Score (0-100)
+            </label>
+            <input
+              type="number"
+              min="0"
+              max="100"
+              value={score}
+              onChange={(e) => setScore(e.target.value)}
+              className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-[#284342] mb-2">
+              Feedback
+            </label>
+            <textarea
+              rows={5}
+              value={feedback}
+              onChange={(e) => setFeedback(e.target.value)}
+              placeholder="Write teacher feedback here..."
+              className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-center gap-3 mt-6">
+          <button
+            onClick={onClose}
+            className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
+          >
+            Cancel
+          </button>
+
+          <button
+            onClick={onSave}
+            disabled={saving}
+            className={`px-6 py-3 rounded-lg text-white transition-colors disabled:opacity-60 ${
+              status === 'approved'
+                ? 'bg-green-600 hover:bg-green-700'
+                : 'bg-blue-600 hover:bg-blue-700'
+            }`}
+          >
+            {saving ? 'Saving...' : 'Save Review'}
+          </button>
         </div>
       </div>
     </div>
@@ -263,10 +568,37 @@ function mapStatus(status: string): SubmissionReview['status'] {
   return 'Pending Review';
 }
 
+function getCourseName(lesson: any, fallback?: string) {
+  if (!lesson) return fallback || '-';
+
+  const actualLesson = getSingle(lesson);
+  const batch = getSingle(actualLesson?.class_batches);
+  const course = getSingle(batch?.courses);
+
+  return course?.course_name || actualLesson?.lesson_title || fallback || '-';
+}
+
 function getStudentName(student: any) {
   if (!student) return 'Unnamed Student';
-  if (Array.isArray(student)) return student[0]?.full_name || 'Unnamed Student';
-  return student.full_name || 'Unnamed Student';
+  const actualStudent = getSingle(student);
+  return actualStudent?.full_name || 'Unnamed Student';
+}
+
+function getSingle(value: any) {
+  if (!value) return null;
+  if (Array.isArray(value)) return value[0] || null;
+  return value;
+}
+
+function isImage(url: string) {
+  const cleanUrl = url.split('?')[0].toLowerCase();
+  return (
+    cleanUrl.endsWith('.jpg') ||
+    cleanUrl.endsWith('.jpeg') ||
+    cleanUrl.endsWith('.png') ||
+    cleanUrl.endsWith('.webp') ||
+    cleanUrl.endsWith('.gif')
+  );
 }
 
 function SummaryCard({
@@ -305,7 +637,7 @@ function Info({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="text-xs text-[#6b6b6b] mb-1">{label}</p>
-      <p className="text-[#284342]">{value}</p>
+      <p className="text-sm text-[#284342]">{value}</p>
     </div>
   );
 }
