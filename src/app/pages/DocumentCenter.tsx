@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Folder, FileText, Download, Upload, X } from 'lucide-react';
+import { Folder, FileText, Download, Upload, X, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 interface DocumentItem {
@@ -17,10 +17,12 @@ export default function DocumentCenter() {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [file, setFile] = useState<File | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState('All');
 
   const [formData, setFormData] = useState({
     documentType: 'Registration',
-    fileUrl: '',
   });
 
   const categories = ['Registration', 'Receipts', 'Certificates', 'Assignments', 'Contracts'];
@@ -35,13 +37,15 @@ export default function DocumentCenter() {
     const { data, error } = await supabase
       .from('documents')
       .select(`
-        id,
-        document_type,
-        file_url,
-        uploaded_at,
-        students(full_name),
-        users(full_name)
-      `)
+          id,
+          document_type,
+          file_url,
+          file_name,
+          file_size,
+          uploaded_at,
+          students(full_name),
+          users(full_name)
+        `)
       .order('uploaded_at', { ascending: false });
 
     if (error) {
@@ -56,14 +60,14 @@ export default function DocumentCenter() {
 
       return {
         id: doc.id,
-        name: fileName,
+        name: doc.file_name || getFileName(doc.file_url, category),
         type: getFileType(doc.file_url),
         category,
         uploadedBy: getUploaderName(doc.users) || getStudentName(doc.students) || 'System',
         uploadedDate: doc.uploaded_at
           ? new Date(doc.uploaded_at).toISOString().slice(0, 10)
           : '-',
-        size: '-',
+        size: formatFileSize(doc.file_size),
         fileUrl: doc.file_url,
       };
     });
@@ -73,27 +77,64 @@ export default function DocumentCenter() {
   }
 
   async function uploadDocument() {
-    if (!formData.fileUrl.trim()) {
-      alert('Please enter a file URL.');
+    if (!file) {
+      alert('Please select a file.');
       return;
     }
 
-    const { error } = await supabase.from('documents').insert({
+    setUploading(true);
+
+    const safeName = file.name.replace(/\s+/g, '_');
+    const filePath = `${formData.documentType}/${Date.now()}-${safeName}`;
+
+    const { error: uploadError } = await supabase.storage
+      .from('academy-documents')
+      .upload(filePath, file, {
+        cacheControl: '3600',
+        upsert: true,
+      });
+
+    if (uploadError) {
+      setUploading(false);
+      alert(`Failed to upload file: ${uploadError.message}`);
+      return;
+    }
+
+    const { data: publicUrlData } = supabase.storage
+      .from('academy-documents')
+      .getPublicUrl(filePath);
+
+    const { error: insertError } = await supabase.from('documents').insert({
       document_type: formData.documentType,
-      file_url: formData.fileUrl,
+      file_url: publicUrlData.publicUrl,
+      file_name: file.name,
+      file_size: file.size,
       uploaded_at: new Date().toISOString(),
     });
 
-    if (error) {
-      alert(`Failed to upload document: ${error.message}`);
+    if (insertError) {
+      setUploading(false);
+      alert(`File uploaded, but failed to save document record: ${insertError.message}`);
       return;
     }
 
-    setFormData({
-      documentType: 'Registration',
-      fileUrl: '',
+    await supabase.from('audit_logs').insert({
+      user_id: null,
+      action: 'Document Uploaded',
+      module: 'Document Center',
+      target_id: filePath,
+      old_data: null,
+      new_data: {
+        document_type: formData.documentType,
+        file_name: file.name,
+        file_url: publicUrlData.publicUrl,
+      },
+      created_at: new Date().toISOString(),
     });
 
+    setUploading(false);
+    setFile(null);
+    setFormData({ documentType: 'Registration' });
     setShowModal(false);
     fetchDocuments();
   }
@@ -103,6 +144,13 @@ export default function DocumentCenter() {
   const thisMonthCount = documents.filter((doc) =>
     doc.uploadedDate.startsWith(thisMonth)
   ).length;
+
+  const filteredDocuments =
+    selectedCategory === 'All'
+      ? documents
+      : documents.filter((doc) => doc.category === selectedCategory);
+
+  const totalSizeLabel = '-';
 
   return (
     <div className="space-y-6">
@@ -131,15 +179,22 @@ export default function DocumentCenter() {
         />
         <SummaryCard label="Categories" value={categories.length.toString()} />
         <SummaryCard label="This Month" value={thisMonthCount.toString()} color="text-blue-700" />
-        <SummaryCard label="Total Size" value="-" />
+        <SummaryCard label="Total Size" value={totalSizeLabel} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         {categories.map((category) => (
           <div
-            key={category}
-            className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] hover:shadow-lg transition-shadow cursor-pointer"
-          >
+              key={category}
+              onClick={() =>
+                setSelectedCategory(selectedCategory === category ? 'All' : category)
+              }
+              className={`bg-white rounded-xl p-6 border transition-shadow cursor-pointer ${
+                selectedCategory === category
+                  ? 'border-[#284342] shadow-lg'
+                  : 'border-[rgba(40,67,66,0.1)] hover:shadow-lg'
+              }`}
+            >
             <Folder size={48} className="text-[#e9da95] mb-3" />
             <h3 className="text-sm text-[#284342] mb-1">{category}</h3>
             <p className="text-xs text-[#6b6b6b]">
@@ -151,7 +206,11 @@ export default function DocumentCenter() {
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-lg text-[#284342]">Recent Documents</h2>
+          <h2 className="text-lg text-[#284342]">
+            {selectedCategory === 'All'
+              ? 'Recent Documents'
+              : `${selectedCategory} Documents`}
+          </h2>
         </div>
 
         <div className="overflow-x-auto">
@@ -177,7 +236,7 @@ export default function DocumentCenter() {
                 </tr>
               )}
 
-              {!loading && documents.length === 0 && (
+              {!loading && filteredDocuments.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-[#6b6b6b]">
                     No documents found.
@@ -186,7 +245,7 @@ export default function DocumentCenter() {
               )}
 
               {!loading &&
-                documents.map((doc) => (
+                filteredDocuments.map((doc) => (
                   <tr key={doc.id} className="hover:bg-[#f8f8f6] transition-colors">
                     <td className="px-6 py-4 text-sm text-[#284342]">
                       <div className="flex items-center gap-2">
@@ -214,12 +273,23 @@ export default function DocumentCenter() {
                     <td className="px-6 py-4 text-sm text-[#6b6b6b]">{doc.size}</td>
 
                     <td className="px-6 py-4">
-                      <button
-                        onClick={() => window.open(doc.fileUrl, '_blank')}
-                        className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                      >
-                        <Download size={16} className="text-[#284342]" />
-                      </button>
+                      <div className="flex items-center gap-2">
+                        <button
+                          onClick={() => window.open(doc.fileUrl, '_blank')}
+                          className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
+                          title="View"
+                        >
+                          <Eye size={16} className="text-[#284342]" />
+                        </button>
+
+                        <button
+                          onClick={() => window.open(doc.fileUrl, '_blank')}
+                          className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
+                          title="Download"
+                        >
+                          <Download size={16} className="text-[#284342]" />
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -244,7 +314,7 @@ export default function DocumentCenter() {
                   Category
                 </label>
                 <select
-                  value={formData.documentType}
+                  value={filteredDocuments.length.toString()}
                   onChange={(e) =>
                     setFormData((prev) => ({
                       ...prev,
@@ -261,20 +331,19 @@ export default function DocumentCenter() {
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  File URL
+                  Select File
                 </label>
                 <input
-                  type="text"
-                  value={formData.fileUrl}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      fileUrl: e.target.value,
-                    }))
-                  }
-                  placeholder="https://example.com/document.pdf"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png,.doc,.docx,.xls,.xlsx"
+                  onChange={(e) => setFile(e.target.files?.[0] || null)}
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                 />
+                {file && (
+                  <p className="text-xs text-[#6b6b6b] mt-2">
+                    Selected: {file.name}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -288,9 +357,10 @@ export default function DocumentCenter() {
 
               <button
                 onClick={uploadDocument}
-                className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors"
+                disabled={uploading}
+                className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors disabled:opacity-60"
               >
-                Upload
+                {uploading ? 'Uploading...' : 'Upload'}
               </button>
             </div>
           </div>
@@ -327,12 +397,17 @@ function SummaryCard({
 function getFileName(url: string, category: string) {
   if (!url) return `${category} Document`;
 
-  const parts = url.split('/');
-  return parts[parts.length - 1] || `${category} Document`;
+  try {
+    const cleanUrl = decodeURIComponent(url.split('?')[0]);
+    const parts = cleanUrl.split('/');
+    return parts[parts.length - 1] || `${category} Document`;
+  } catch {
+    return `${category} Document`;
+  }
 }
 
 function getFileType(url: string) {
-  const lower = (url || '').toLowerCase();
+  const lower = (url || '').toLowerCase().split('?')[0];
 
   if (lower.endsWith('.pdf')) return 'PDF';
   if (lower.endsWith('.jpg') || lower.endsWith('.jpeg') || lower.endsWith('.png')) return 'Image';
@@ -354,3 +429,10 @@ function getUploaderName(user: any) {
   return user.full_name || '';
 }
 
+function formatFileSize(size?: number) {
+  if (!size) return '-';
+
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${(size / 1024).toFixed(1)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
