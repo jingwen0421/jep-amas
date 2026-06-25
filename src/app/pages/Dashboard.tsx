@@ -8,7 +8,6 @@ import {
   CheckCircle2,
   Clock,
   FileText,
-  History,
   MessageSquare,
   CreditCard,
   UserPlus,
@@ -66,6 +65,7 @@ export default function Dashboard() {
   const [activities, setActivities] = useState<Activity[]>([]);
 
   const [revenueSnapshot, setRevenueSnapshot] = useState({
+    expected: 0,
     paid: 0,
     outstanding: 0,
     collectionRate: 0,
@@ -79,6 +79,9 @@ export default function Dashboard() {
 
   async function fetchDashboardData() {
     setLoading(true);
+
+    const currentMonth = new Date().toISOString().slice(0, 7);
+    const today = new Date().toISOString().slice(0, 10);
 
     const [
       studentsRes,
@@ -97,8 +100,16 @@ export default function Dashboard() {
         .eq('status', 'active'),
 
       supabase
-        .from('students')
-        .select('id, full_name, course, created_at')
+        .from('enrollments')
+        .select(`
+          id,
+          created_at,
+          enrollment_status,
+          students(id, full_name),
+          class_batches(
+            courses(course_name)
+          )
+        `)
         .order('created_at', { ascending: false })
         .limit(5),
 
@@ -111,7 +122,7 @@ export default function Dashboard() {
           class_batches(
             batch_name,
             courses(course_name),
-            enrollments(id)
+            enrollments(id, enrollment_status)
           ),
           teachers(
             specialization,
@@ -121,7 +132,9 @@ export default function Dashboard() {
         `)
         .order('lesson_datetime', { ascending: true }),
 
-      supabase.from('attendance').select('attendance_status'),
+      supabase
+        .from('attendance')
+        .select('attendance_status, marked_at'),
 
       supabase
         .from('payment_plans')
@@ -166,45 +179,47 @@ export default function Dashboard() {
 
     const activeStudents = studentsRes.count || 0;
     const lessons = lessonsRes.data || [];
-    const activeClasses = lessons.length;
 
-    const today = new Date().toISOString().slice(0, 10);
     const todayLessons = lessons.filter((lesson: any) => {
       if (!lesson.lesson_datetime) return false;
       return new Date(lesson.lesson_datetime).toISOString().slice(0, 10) === today;
     });
 
-    const attendanceRecords = attendanceRes.data || [];
-    const presentCount = attendanceRecords.filter(
-      (a: any) => a.attendance_status === 'present' || a.attendance_status === 'late'
+    const monthAttendance = (attendanceRes.data || []).filter((record: any) => {
+      if (!record.marked_at) return false;
+      return String(record.marked_at).slice(0, 7) === currentMonth;
+    });
+
+    const presentCount = monthAttendance.filter((a: any) =>
+      ['present', 'late'].includes(String(a.attendance_status).toLowerCase())
     ).length;
 
     const attendanceRate =
-      attendanceRecords.length > 0
-        ? Math.round((presentCount / attendanceRecords.length) * 100)
+      monthAttendance.length > 0
+        ? Math.round((presentCount / monthAttendance.length) * 100)
         : 0;
 
     const paymentPlans = paymentPlansRes.data || [];
 
-    const totalFinalAmount = paymentPlans.reduce(
+    const totalExpected = paymentPlans.reduce(
       (sum: number, plan: any) => sum + Number(plan.final_amount || 0),
       0
     );
 
     const totalPaid = paymentPlans.reduce((sum: number, plan: any) => {
-      const installments = plan.installments || [];
-      const paidAmount = installments
+      const paidAmount = (plan.installments || [])
         .filter((item: any) => String(item.status).toLowerCase() === 'paid')
         .reduce((acc: number, item: any) => acc + Number(item.amount || 0), 0);
 
       return sum + paidAmount;
     }, 0);
 
-    const outstandingFees = Math.max(totalFinalAmount - totalPaid, 0);
+    const outstandingFees = Math.max(totalExpected - totalPaid, 0);
     const collectionRate =
-      totalFinalAmount > 0 ? Math.round((totalPaid / totalFinalAmount) * 100) : 0;
+      totalExpected > 0 ? Math.round((totalPaid / totalExpected) * 100) : 0;
 
     setRevenueSnapshot({
+      expected: totalExpected,
       paid: totalPaid,
       outstanding: outstandingFees,
       collectionRate,
@@ -226,18 +241,18 @@ export default function Dashboard() {
         color: '#2d8659',
       },
       {
-        title: 'Attendance Rate',
-        value: `${attendanceRate}%`,
-        subtitle: `${attendanceRecords.length} attendance records`,
-        icon: <CheckCircle2 size={24} />,
-        color: '#6b8e8d',
+        title: 'Outstanding Fees',
+        value: `RM ${outstandingFees.toLocaleString()}`,
+        subtitle: 'Remaining unpaid balance',
+        icon: <CreditCard size={24} />,
+        color: '#d4183d',
       },
       {
-        title: 'Active Classes',
-        value: activeClasses,
-        subtitle: `${todayLessons.length} scheduled today`,
+        title: "Today's Classes",
+        value: todayLessons.length,
+        subtitle: `${lessons.length} total scheduled lessons`,
         icon: <Calendar size={24} />,
-        color: '#d4183d',
+        color: '#6b8e8d',
       },
     ]);
 
@@ -290,28 +305,41 @@ export default function Dashboard() {
     setPendingActions(actions.slice(0, 6));
 
     setTodaysClasses(
-      todayLessons.map((lesson: any) => ({
-        id: lesson.id,
-        time: new Date(lesson.lesson_datetime).toTimeString().slice(0, 5),
-        course:
-          lesson.class_batches?.courses?.course_name ||
-          lesson.lesson_title ||
-          'Class',
-        teacher: getTeacherName(lesson.teachers),
-        room: lesson.classrooms?.room_name || '-',
-        students: lesson.class_batches?.enrollments?.length || 0,
-      }))
+      todayLessons.map((lesson: any) => {
+        const enrollments = lesson.class_batches?.enrollments || [];
+        const activeEnrollments = enrollments.filter(
+          (e: any) => String(e.enrollment_status).toLowerCase() === 'active'
+        );
+
+        return {
+          id: lesson.id,
+          time: new Date(lesson.lesson_datetime).toTimeString().slice(0, 5),
+          course:
+            lesson.class_batches?.courses?.course_name ||
+            lesson.lesson_title ||
+            'Class',
+          teacher: getTeacherName(lesson.teachers),
+          room: lesson.classrooms?.room_name || '-',
+          students: activeEnrollments.length,
+        };
+      })
     );
 
     setRecentStudents(
-      (recentStudentsRes.data || []).map((student: any) => ({
-        id: student.id,
-        name: student.full_name || 'Unnamed Student',
-        course: student.course || '-',
-        date: student.created_at
-          ? new Date(student.created_at).toISOString().slice(0, 10)
-          : '-',
-      }))
+      (recentStudentsRes.data || []).map((enrollment: any) => {
+        const student = getSingle(enrollment.students);
+        const batch = getSingle(enrollment.class_batches);
+        const course = getSingle(batch?.courses);
+
+        return {
+          id: student?.id || enrollment.id,
+          name: student?.full_name || 'Unnamed Student',
+          course: course?.course_name || '-',
+          date: enrollment.created_at
+            ? new Date(enrollment.created_at).toISOString().slice(0, 10)
+            : '-',
+        };
+      })
     );
 
     setActivities(
@@ -394,6 +422,11 @@ export default function Dashboard() {
 
               <div className="space-y-4">
                 <RevenueLine
+                  label="Total Expected"
+                  value={`RM ${revenueSnapshot.expected.toLocaleString()}`}
+                  color="text-[#284342]"
+                />
+                <RevenueLine
                   label="Paid"
                   value={`RM ${revenueSnapshot.paid.toLocaleString()}`}
                   color="text-green-700"
@@ -445,7 +478,7 @@ export default function Dashboard() {
                         {cls.course}
                       </h3>
                       <p className="text-xs text-[#6b6b6b]">
-                        {cls.teacher} • {cls.room} • {cls.students} students
+                        {cls.teacher} • {cls.room} • {cls.students} active students
                       </p>
                     </div>
                   </div>
@@ -519,8 +552,8 @@ export default function Dashboard() {
               <div className="grid grid-cols-2 gap-4">
                 <QuickAction to="/app/students/registration" icon={<Users size={24} />} label="New Student" />
                 <QuickAction to="/app/students/approval" icon={<AlertCircle size={24} />} label="Review Applications" />
-                <QuickAction to="/app/attendance/daily" icon={<CheckCircle2 size={24} />} label="Take Attendance" />
                 <QuickAction to="/app/payments/installments" icon={<DollarSign size={24} />} label="Record Payment" />
+                <QuickAction to="/app/attendance/daily" icon={<CheckCircle2 size={24} />} label="Take Attendance" />
                 <QuickAction to="/app/portfolio/feedback" icon={<MessageSquare size={24} />} label="Review Portfolio" />
                 <QuickAction to="/app/reports" icon={<FileText size={24} />} label="Reports" />
               </div>
@@ -612,28 +645,32 @@ function QuickAction({
   );
 }
 
+function getSingle(value: any) {
+  if (!value) return null;
+  if (Array.isArray(value)) return value[0] || null;
+  return value;
+}
+
 function getTeacherName(teacher: any) {
   if (!teacher) return '-';
 
-  const actualTeacher = Array.isArray(teacher) ? teacher[0] : teacher;
-  const user = Array.isArray(actualTeacher?.users)
-    ? actualTeacher.users[0]
-    : actualTeacher?.users;
+  const actualTeacher = getSingle(teacher);
+  const user = getSingle(actualTeacher?.users);
 
   return user?.full_name || actualTeacher?.specialization || '-';
 }
 
 function getStudentName(student: any) {
   if (!student) return 'Unnamed Student';
-  if (Array.isArray(student)) return student[0]?.full_name || 'Unnamed Student';
-  return student.full_name || 'Unnamed Student';
+  const actualStudent = getSingle(student);
+  return actualStudent?.full_name || 'Unnamed Student';
 }
 
 function getApplicationCourse(app: any) {
-  const course = Array.isArray(app.courses) ? app.courses[0] : app.courses;
+  const course = getSingle(app.courses);
   if (course?.course_name) return course.course_name;
 
-  const student = Array.isArray(app.students) ? app.students[0] : app.students;
+  const student = getSingle(app.students);
   return student?.course || '-';
 }
 
@@ -645,11 +682,35 @@ function formatDateTime(value: string) {
 function getReadableActivity(log: any) {
   const action = log.action || 'System action';
   const module = log.module || 'System';
+  const newData = log.new_data || {};
+
+  if (action === 'Portfolio Submitted') {
+    return `${newData.title || 'Portfolio'} was submitted`;
+  }
+
+  if (action === 'Portfolio Approved') {
+    return `${newData.assignment || 'Portfolio'} approved for ${newData.student || 'student'}`;
+  }
+
+  if (action === 'Portfolio Revision Requested') {
+    return `Revision requested for ${newData.assignment || 'portfolio submission'}`;
+  }
+
+  if (action === 'Document Uploaded') {
+    return `${newData.file_name || 'Document'} uploaded`;
+  }
+
+  if (action === 'Completion Certificate Issued') {
+    return `Completion certificate issued to ${newData.student || 'student'}`;
+  }
+
+  if (action === 'Full Attendance Certificate Issued') {
+    return `Full attendance certificate issued to ${newData.student || 'student'}`;
+  }
 
   if (action === 'Logged In') return 'User logged in';
   if (action === 'Updated Settings') return 'Academy settings updated';
   if (action === 'Viewed User Management') return 'User management viewed';
-  if (action === 'Demo Action') return 'Demo audit activity added';
 
   if (module === 'Payments') return 'Payment record updated';
   if (module === 'Attendance') return 'Attendance record updated';
