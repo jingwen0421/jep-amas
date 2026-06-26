@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import WhatsAppQueue from './WhatsAppQueue';
 import {
   Bell,
   CheckCircle2,
@@ -27,6 +28,9 @@ interface NotificationItem {
 export default function NotificationCenter() {
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [searchTerm, setSearchTerm] = useState('');
+const [channelFilter, setChannelFilter] = useState('all');
+const [statusFilter, setStatusFilter] = useState('all');
 
   useEffect(() => {
     fetchNotifications();
@@ -117,6 +121,22 @@ export default function NotificationCenter() {
     (n) => n.priority === 'high'
   ).length;
 
+  const filteredNotifications = notifications.filter((item) => {
+  const search = searchTerm.toLowerCase();
+
+  const matchesSearch =
+    item.title.toLowerCase().includes(search) ||
+    item.message.toLowerCase().includes(search);
+
+  const matchesChannel =
+    channelFilter === 'all' || item.channel === channelFilter;
+
+  const matchesStatus =
+    statusFilter === 'all' || item.delivery_status === statusFilter;
+
+  return matchesSearch && matchesChannel && matchesStatus;
+});
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
@@ -143,6 +163,39 @@ export default function NotificationCenter() {
         <SummaryCard icon={<MessageCircle size={24} />} label="WhatsApp" value={whatsappCount} color="text-green-700" />
       </div>
 
+      <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+    <input
+      value={searchTerm}
+      onChange={(e) => setSearchTerm(e.target.value)}
+      placeholder="Search notifications..."
+      className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
+    />
+
+    <select
+      value={channelFilter}
+      onChange={(e) => setChannelFilter(e.target.value)}
+      className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
+    >
+      <option value="all">All Channels</option>
+      <option value="in_app">In App</option>
+      <option value="whatsapp">WhatsApp</option>
+      <option value="email">Email</option>
+    </select>
+
+    <select
+      value={statusFilter}
+      onChange={(e) => setStatusFilter(e.target.value)}
+      className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
+    >
+      <option value="all">All Status</option>
+      <option value="pending">Pending</option>
+      <option value="sent">Sent</option>
+      <option value="failed">Failed</option>
+    </select>
+  </div>
+</div>
+
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)] flex items-center justify-between">
           <h2 className="text-lg text-[#284342]">Recent Notifications</h2>
@@ -151,6 +204,11 @@ export default function NotificationCenter() {
           </p>
         </div>
 
+        <WhatsAppQueue
+        notifications={notifications}
+        onMarkSent={markAsSent}
+        />
+
         <div className="divide-y divide-[rgba(40,67,66,0.1)]">
           {loading && (
             <div className="p-6 text-center text-[#6b6b6b]">
@@ -158,14 +216,14 @@ export default function NotificationCenter() {
             </div>
           )}
 
-          {!loading && notifications.length === 0 && (
+          {!loading && filteredNotifications.length === 0 && (
             <div className="p-6 text-center text-[#6b6b6b]">
               No notifications found.
             </div>
           )}
 
           {!loading &&
-            notifications.map((item) => (
+            filteredNotifications.map((item) => (
               <div
                 key={item.id}
                 className={`p-6 hover:bg-[#f8f8f6] transition-colors ${
