@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
+
 import {
+  Bell,
   LayoutDashboard,
   Users,
   BookOpen,
@@ -150,6 +152,11 @@ const navigationItems: NavItem[] = [
     path: '/app/audit',
     icon: <History size={20} />,
     roles: ['admin', 'super-admin'],
+  },
+    {
+    label: 'Notifications',
+    path: '/app/notifications',
+    icon: <Bell size = {20} />,
   },
   {
     label: 'Settings',

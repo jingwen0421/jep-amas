@@ -8,6 +8,7 @@ import {
   CreditCard,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { notifyPaymentOverdue } from '../../services/systemNotificationService';
 
 interface OutstandingBalance {
   id: string;
@@ -127,6 +128,14 @@ export default function OutstandingBalances() {
   }
 
   async function sendReminder(balance: OutstandingBalance) {
+    // 1. Create notification
+    await notifyPaymentOverdue(
+      balance.student,
+      balance.outstandingAmount,
+      balance.nextDueDate
+    );
+
+    // 2. Record audit log
     await supabase.from('audit_logs').insert({
       user_id: null,
       action: 'Payment Reminder Sent',
@@ -143,8 +152,31 @@ export default function OutstandingBalances() {
       created_at: new Date().toISOString(),
     });
 
+    // 3. Open WhatsApp
+    const phone = balance.phone
+      ?.replace(/\D/g, '')
+      .replace(/^0/, '60');
+
+    const message = encodeURIComponent(
+  `Hi ${balance.student},
+
+  This is a friendly reminder from JEP Image Makeup Academy.
+
+  Our records show an outstanding balance of RM ${balance.outstandingAmount.toLocaleString()}.
+
+  Due Date: ${balance.nextDueDate}
+
+  If you have already made the payment, please ignore this message.
+
+  Thank you.`
+    );
+
+    if (phone) {
+      window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+    }
+
     alert(
-      `Reminder recorded for ${balance.student}.\nOutstanding: RM ${balance.outstandingAmount.toLocaleString()}`
+      `Notification created.\nWhatsApp reminder opened for ${balance.student}.`
     );
   }
 
@@ -427,3 +459,4 @@ function StatusBadge({ status }: { status: OutstandingBalance['status'] }) {
     </span>
   );
 }
+

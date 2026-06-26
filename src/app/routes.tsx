@@ -39,6 +39,7 @@ import DocumentCenter from './pages/DocumentCenter';
 import UserManagement from './pages/UserManagement';
 import AuditLogs from './pages/AuditLogs';
 import Settings from './pages/Settings';
+import NotificationCenter from './pages/NotificationCenter';
 
 export const router = createBrowserRouter([
   {
@@ -107,6 +108,7 @@ export const router = createBrowserRouter([
       { path: 'users', Component: UserManagement },
       { path: 'audit', Component: AuditLogs },
       { path: 'settings', Component: Settings },
+      { path: 'notifications', Component: NotificationCenter },
 
       // Default redirect
       { index: true, path: '*', element: <Dashboard /> },
