@@ -1,6 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Eye, CheckCircle, XCircle, AlertCircle, FileText } from 'lucide-react';
+import {
+  Eye,
+  CheckCircle,
+  XCircle,
+  AlertCircle,
+  FileText,
+} from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import {
+  notifyStudentRegistrationApproved,
+  notifyStudentRegistrationRejected,
+} from '../../services/systemNotificationService';
 
 interface PendingRegistration {
   id: string;
@@ -91,6 +101,11 @@ export default function RegistrationApproval() {
   }
 
   async function approveApplication(application: PendingRegistration) {
+    const confirmed = confirm(`Approve registration for ${application.name}?`);
+    if (!confirmed) return;
+
+    const userId = await getUserIdByEmail(application.email);
+
     const { error: appError } = await supabase
       .from('registration_applications')
       .update({
@@ -106,15 +121,46 @@ export default function RegistrationApproval() {
 
     const { error: studentError } = await supabase
       .from('students')
-      .update({ status: 'active' })
+      .update({
+        status: 'active',
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', application.studentDbId);
 
     if (studentError) {
-      alert(`Application approved, but failed to activate student: ${studentError.message}`);
+      alert(
+        `Application approved, but failed to activate student: ${studentError.message}`
+      );
       return;
     }
 
-    await createEnrollmentIfPossible(application);
+    if (userId) {
+      const { error: userError } = await supabase
+        .from('users')
+        .update({
+          status: 'active',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
+
+      if (userError) {
+        alert(
+          `Student approved, but failed to activate login account: ${userError.message}`
+        );
+        return;
+      }
+    }
+
+    const enrollmentId = await createEnrollmentIfPossible(application);
+
+    if (enrollmentId) {
+      await createPaymentPlanIfPossible(application, enrollmentId);
+    }
+
+    await notifyStudentRegistrationApproved(application.name, {
+      userId,
+    });
+
     await createAuditLog(
       'Approved Registration',
       'Student Management',
@@ -122,6 +168,8 @@ export default function RegistrationApproval() {
       {
         student_name: application.name,
         course: application.course,
+        user_id: userId || null,
+        user_status: userId ? 'active' : 'not_found',
       }
     );
 
@@ -130,6 +178,11 @@ export default function RegistrationApproval() {
   }
 
   async function rejectApplication(application: PendingRegistration) {
+    const confirmed = confirm(`Reject registration for ${application.name}?`);
+    if (!confirmed) return;
+
+    const userId = await getUserIdByEmail(application.email);
+
     const { error: appError } = await supabase
       .from('registration_applications')
       .update({
@@ -145,13 +198,39 @@ export default function RegistrationApproval() {
 
     const { error: studentError } = await supabase
       .from('students')
-      .update({ status: 'suspended' })
+      .update({
+        status: 'suspended',
+        updated_at: new Date().toISOString(),
+      })
       .eq('id', application.studentDbId);
 
     if (studentError) {
-      alert(`Application rejected, but failed to update student: ${studentError.message}`);
+      alert(
+        `Application rejected, but failed to update student: ${studentError.message}`
+      );
       return;
     }
+
+    if (userId) {
+      const { error: userError } = await supabase
+        .from('users')
+        .update({
+          status: 'rejected',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
+
+      if (userError) {
+        alert(
+          `Application rejected, but failed to reject login account: ${userError.message}`
+        );
+        return;
+      }
+    }
+
+    await notifyStudentRegistrationRejected(application.name, {
+      userId,
+    });
 
     await createAuditLog(
       'Rejected Registration',
@@ -160,6 +239,8 @@ export default function RegistrationApproval() {
       {
         student_name: application.name,
         course: application.course,
+        user_id: userId || null,
+        user_status: userId ? 'rejected' : 'not_found',
       }
     );
 
@@ -168,6 +249,11 @@ export default function RegistrationApproval() {
   }
 
   async function requestMoreInfo(application: PendingRegistration) {
+    const confirmed = confirm(`Request more information from ${application.name}?`);
+    if (!confirmed) return;
+
+    const userId = await getUserIdByEmail(application.email);
+
     const { error } = await supabase
       .from('registration_applications')
       .update({
@@ -181,6 +267,16 @@ export default function RegistrationApproval() {
       return;
     }
 
+    if (userId) {
+      await supabase
+        .from('users')
+        .update({
+          status: 'pending',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
+    }
+
     await createAuditLog(
       'Requested More Info',
       'Student Management',
@@ -188,6 +284,7 @@ export default function RegistrationApproval() {
       {
         student_name: application.name,
         course: application.course,
+        user_id: userId || null,
       }
     );
 
@@ -200,25 +297,151 @@ export default function RegistrationApproval() {
       .from('enrollments')
       .select('id')
       .eq('student_id', application.studentDbId)
+      .eq('enrollment_status', 'active')
       .maybeSingle();
 
-    if (existingEnrollment) return;
+    if (existingEnrollment) {
+      return existingEnrollment.id;
+    }
 
-    const { data: batch } = await supabase
+    const { data: batch, error: batchError } = await supabase
       .from('class_batches')
       .select('id')
       .eq('course_id', application.courseId)
       .limit(1)
       .maybeSingle();
 
-    if (!batch) return;
+    if (batchError) {
+      console.error('Failed to fetch class batch:', batchError.message);
+      return '';
+    }
 
-    await supabase.from('enrollments').insert({
-      student_id: application.studentDbId,
-      batch_id: batch.id,
-      enrollment_status: 'active',
-      enrolled_at: new Date().toISOString(),
-    });
+    if (!batch) {
+      alert(
+        'Application approved, but no class batch was found for this course. Please create a class batch before generating payment plan.'
+      );
+      return '';
+    }
+
+    const { data: createdEnrollment, error: enrollmentError } = await supabase
+      .from('enrollments')
+      .insert({
+        student_id: application.studentDbId,
+        batch_id: batch.id,
+        enrollment_status: 'active',
+        enrolled_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+
+    if (enrollmentError) {
+      alert(`Failed to create enrollment: ${enrollmentError.message}`);
+      return '';
+    }
+
+    return createdEnrollment.id;
+  }
+
+  async function createPaymentPlanIfPossible(
+    application: PendingRegistration,
+    enrollmentId: string
+  ) {
+    const { data: existingPlan } = await supabase
+      .from('payment_plans')
+      .select('id')
+      .eq('student_id', application.studentDbId)
+      .eq('enrollment_id', enrollmentId)
+      .maybeSingle();
+
+    if (existingPlan) return;
+
+    const { data: course, error: courseError } = await supabase
+      .from('courses')
+      .select('course_fee')
+      .eq('id', application.courseId)
+      .maybeSingle();
+
+    if (courseError) {
+      console.error('Failed to fetch course fee:', courseError.message);
+      return;
+    }
+
+    const totalFee = Number(course?.course_fee || 0);
+
+    if (!totalFee || totalFee <= 0) {
+      alert(
+        'Application approved and enrollment created, but course fee is missing. Please create the payment plan manually.'
+      );
+      return;
+    }
+
+    const { data: createdPlan, error: planError } = await supabase
+      .from('payment_plans')
+      .insert({
+        student_id: application.studentDbId,
+        enrollment_id: enrollmentId,
+        original_fee: totalFee,
+        discount_amount: 0,
+        final_amount: totalFee,
+        plan_type: 'full_payment',
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
+
+    if (planError) {
+      alert(
+        `Enrollment created, but failed to create payment plan: ${planError.message}`
+      );
+      return;
+    }
+
+    const { error: installmentError } = await supabase
+      .from('installments')
+      .insert({
+        payment_plan_id: createdPlan.id,
+        amount: totalFee,
+        due_date: new Date().toISOString().slice(0, 10),
+        status: 'pending',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+
+    if (installmentError) {
+      alert(
+        `Payment plan created, but failed to create installment: ${installmentError.message}`
+      );
+      return;
+    }
+
+    await createAuditLog(
+      'Payment Plan Auto Created',
+      'Payments',
+      createdPlan.id,
+      {
+        student_name: application.name,
+        course: application.course,
+        total_fee: totalFee,
+        plan_type: 'full_payment',
+        installment_count: 1,
+      }
+    );
+  }
+
+  async function getUserIdByEmail(email: string) {
+    if (!email || email === '-') return '';
+
+    const { data, error } = await supabase
+      .from('users')
+      .select('id')
+      .eq('email', email)
+      .maybeSingle();
+
+    if (error || !data) return '';
+
+    return data.id;
   }
 
   async function createAuditLog(
@@ -270,9 +493,24 @@ export default function RegistrationApproval() {
           color="text-yellow-700"
           icon={<AlertCircle size={24} className="text-yellow-700" />}
         />
-        <SummaryCard label="Approved" value={approvedCount} color="text-green-700" />
-        <SummaryCard label="Rejected" value={rejectedCount} color="text-red-700" />
-        <SummaryCard label="More Info" value={moreInfoCount} color="text-blue-700" />
+
+        <SummaryCard
+          label="Approved"
+          value={approvedCount}
+          color="text-green-700"
+        />
+
+        <SummaryCard
+          label="Rejected"
+          value={rejectedCount}
+          color="text-red-700"
+        />
+
+        <SummaryCard
+          label="More Info"
+          value={moreInfoCount}
+          color="text-blue-700"
+        />
       </div>
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
@@ -354,10 +592,32 @@ function ApplicationCard({
       </div>
 
       <div className="flex items-center gap-3 pt-4 border-t border-[rgba(40,67,66,0.1)] flex-wrap">
-        <ActionButton onClick={onView} icon={<Eye size={16} />} label="View Details" variant="outline" />
-        <ActionButton onClick={onApprove} icon={<CheckCircle size={16} />} label="Approve" variant="green" />
-        <ActionButton onClick={onReject} icon={<XCircle size={16} />} label="Reject" variant="red" />
-        <ActionButton onClick={onMoreInfo} label="Request More Info" variant="blue" />
+        <ActionButton
+          onClick={onView}
+          icon={<Eye size={16} />}
+          label="View Details"
+          variant="outline"
+        />
+
+        <ActionButton
+          onClick={onApprove}
+          icon={<CheckCircle size={16} />}
+          label="Approve"
+          variant="green"
+        />
+
+        <ActionButton
+          onClick={onReject}
+          icon={<XCircle size={16} />}
+          label="Reject"
+          variant="red"
+        />
+
+        <ActionButton
+          onClick={onMoreInfo}
+          label="Request More Info"
+          variant="blue"
+        />
       </div>
     </div>
   );
@@ -389,7 +649,10 @@ function ApplicationModal({
             <Info label="IC/Passport" value={application.icPassport} />
             <Info label="Email" value={application.email} />
             <Info label="Phone" value={application.phone} />
-            <Info label="Emergency Contact" value={application.emergencyContact} />
+            <Info
+              label="Emergency Contact"
+              value={application.emergencyContact}
+            />
             <Info label="Applied Date" value={application.appliedDate} />
           </div>
 
@@ -403,6 +666,7 @@ function ApplicationModal({
               title="IC / Passport Document"
               url={application.icDocumentUrl}
             />
+
             <DocumentBox
               title="Digital Signature"
               url={application.signatureUrl}

@@ -3,6 +3,8 @@ import { Download, Eye, Award, CheckCircle, Plus, X, Printer } from 'lucide-reac
 import { supabase } from '../../lib/supabase';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { getCurrentUser } from '../../utils/session';
+import { getCurrentStudentId } from '../../utils/studentAccess';
 
 interface Certificate {
   id: string;
@@ -13,7 +15,7 @@ interface Certificate {
   completionDate: string;
   certificateNumber: string;
   status: 'Issued' | 'Ready' | 'Pending';
-  grade?: string;
+  grade: string;
   url?: string;
 }
 
@@ -40,50 +42,63 @@ export default function CompletionCertificates() {
     fetchEligibleStudents();
   }, []);
 
-  async function fetchCertificates() {
-    setLoading(true);
+ async function fetchCertificates() {
+  setLoading(true);
 
-    const { data, error } = await supabase
-      .from('certificates')
-      .select(`
-        id,
-        student_id,
-        course_id,
-        certificate_number,
-        certificate_url,
-        issued_date,
-        certificate_type,
-        students(full_name),
-        courses(course_name)
-      `)
-      .eq('certificate_type', 'completion')
-      .order('issued_date', { ascending: false });
+  const currentUser = getCurrentUser();
 
-    if (error) {
-      console.error('Error fetching certificates:', error.message);
+  let query = supabase
+    .from('certificates')
+    .select(`
+      id,
+      student_id,
+      course_id,
+      certificate_number,
+      certificate_url,
+      issued_date,
+      certificate_type,
+      students(full_name, email),
+      courses(course_name)
+    `)
+    .eq('certificate_type', 'completion')
+    .order('issued_date', { ascending: false });
+
+  if (currentUser.role === 'student') {
+    const studentId = await getCurrentStudentId();
+
+    if (!studentId) {
+      setCertificates([]);
       setLoading(false);
       return;
     }
 
-    const mapped: Certificate[] = (data || []).map((cert: any) => ({
-      id: cert.id,
-      studentId: cert.student_id,
-      courseId: cert.course_id,
-      student: getStudentName(cert.students),
-      course: getCourseName(cert.courses),
-      completionDate: cert.issued_date
-        ? new Date(cert.issued_date).toISOString().slice(0, 10)
-        : '-',
-      certificateNumber: cert.certificate_number || '-',
-      status: 'Issued',
-      grade: 'Merit',
-      url: cert.certificate_url,
-    }));
-
-    setCertificates(mapped);
-    setLoading(false);
+    query = query.eq('student_id', studentId);
   }
 
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('Error fetching certificates:', error.message);
+    setLoading(false);
+    return;
+  }
+
+  const mapped: Certificate[] = (data || []).map((cert: any) => ({
+    id: cert.id,
+    studentId: cert.student_id || '',
+    courseId: cert.course_id || '',
+    student: getStudentName(cert.students),
+    course: getCourseName(cert.courses),
+    completionDate: cert.issued_date || '-',
+    certificateNumber: cert.certificate_number || '-',
+    status: cert.certificate_url ? 'Issued' : 'Ready',
+    grade: 'Merit',
+    url: cert.certificate_url,
+  }));
+
+  setCertificates(mapped);
+  setLoading(false);
+}
   async function fetchEligibleStudents() {
     const { data, error } = await supabase
       .from('enrollments')

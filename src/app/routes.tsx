@@ -3,7 +3,6 @@ import LoginPage from './pages/LoginPage';
 import Layout from './components/Layout';
 import Dashboard from './pages/Dashboard';
 import StudentList from './pages/students/StudentList';
-import StudentRegistration from './pages/students/StudentRegistration';
 import RegistrationApproval from './pages/students/RegistrationApproval';
 import StudentProfile from './pages/students/StudentProfile';
 import StudentProgress from './pages/students/StudentProgress';
@@ -40,6 +39,9 @@ import UserManagement from './pages/UserManagement';
 import AuditLogs from './pages/AuditLogs';
 import Settings from './pages/Settings';
 import NotificationCenter from './pages/NotificationCenter';
+import ProtectedRoute from './components/ProtectedRoute';
+import AccessDenied from './pages/AccessDenied';
+import StudentRegistration from './pages/students/StudentRegistration';
 
 export const router = createBrowserRouter([
   {
@@ -47,10 +49,24 @@ export const router = createBrowserRouter([
     Component: LoginPage,
   },
   {
-    path: '/app',
-    Component: Layout,
-    children: [
+  path: '/student-registration',
+  Component: StudentRegistration,
+},
+  {
+  path: '/app',
+  element: (
+    <ProtectedRoute>
+      <Layout />
+    </ProtectedRoute>
+  ),
+  children: [
+    // your existing app routes
+  
       { path: 'dashboard', Component: Dashboard },
+      {
+  path: 'access-denied',
+  Component: AccessDenied,
+  },
 
       // Student Management
       { path: 'students/list', Component: StudentList },

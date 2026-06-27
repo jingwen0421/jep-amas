@@ -1,94 +1,76 @@
 import { useEffect, useState } from 'react';
-import { Calendar, Clock, User, Plus } from 'lucide-react';
+import { CalendarClock, Save, User, Clock } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-
-interface Appointment {
-  id: string;
-  student: string;
-  teacher: string;
-  date: string;
-  time: string;
-  duration: string;
-  purpose: string;
-  status: 'Confirmed' | 'Pending' | 'Completed' | 'Cancelled';
-}
-
-interface TeacherOption {
-  id: string;
-  specialization: string | null;
-  users?: { full_name: string }[] | { full_name: string } | null;
-}
+import { getCurrentUser } from '../../utils/session';
+import { getCurrentStudentId } from '../../utils/studentAccess';
+import { notifyAppointmentBooked } from '../../services/systemNotificationService';
 
 interface StudentOption {
   id: string;
   full_name: string;
+  email: string;
+}
+
+interface TeacherOption {
+  id: string;
+  name: string;
+  specialization: string;
 }
 
 export default function TeacherBooking() {
-  const [showBookingModal, setShowBookingModal] = useState(false);
-  const [appointments, setAppointments] = useState<Appointment[]>([]);
-  const [teachers, setTeachers] = useState<TeacherOption[]>([]);
-  const [students, setStudents] = useState<StudentOption[]>([]);
-  const [loading, setLoading] = useState(true);
+  const currentUser = getCurrentUser();
+  const isStudentView = currentUser.role === 'student';
 
-  const [formData, setFormData] = useState({
-    studentId: '',
-    teacherId: '',
-    date: '',
-    time: '',
-    duration: '30',
-    purpose: 'Portfolio Review',
-    notes: '',
-  });
+  const [students, setStudents] = useState<StudentOption[]>([]);
+  const [teachers, setTeachers] = useState<TeacherOption[]>([]);
+
+  const [selectedStudentId, setSelectedStudentId] = useState('');
+  const [selectedTeacherId, setSelectedTeacherId] = useState('');
+  const [appointmentDate, setAppointmentDate] = useState('');
+  const [appointmentTime, setAppointmentTime] = useState('');
+  const [purpose, setPurpose] = useState('');
+  const [remarks, setRemarks] = useState('');
+
+  const [studentProfileFound, setStudentProfileFound] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    fetchAppointments();
-    fetchTeachers();
-    fetchStudents();
+    fetchInitialData();
   }, []);
 
-  async function fetchAppointments() {
+  async function fetchInitialData() {
     setLoading(true);
 
+    if (isStudentView) {
+      const studentId = await getCurrentStudentId();
+
+      if (!studentId) {
+        setStudentProfileFound(false);
+      } else {
+        setSelectedStudentId(studentId);
+      }
+    } else {
+      await fetchStudents();
+    }
+
+    await fetchTeachers();
+
+    setLoading(false);
+  }
+
+  async function fetchStudents() {
     const { data, error } = await supabase
-      .from('appointments')
-      .select(`
-        id,
-        appointment_datetime,
-        duration_minutes,
-        appointment_status,
-        notes,
-        students(full_name),
-        teachers(
-          specialization,
-          users(full_name)
-        )
-      `)
-      .order('appointment_datetime', { ascending: true });
+      .from('students')
+      .select('id, full_name, email')
+      .order('full_name', { ascending: true });
 
     if (error) {
-      console.error('Error fetching appointments:', error.message);
-      setLoading(false);
+      console.error('Failed to fetch students:', error.message);
       return;
     }
 
-    const mapped: Appointment[] = (data || []).map((apt: any) => {
-      const dateObj = new Date(apt.appointment_datetime);
-
-      return {
-        id: apt.id,
-        student: getStudentName(apt.students),
-        teacher: getTeacherName(apt.teachers),
-        date: dateObj.toISOString().slice(0, 10),
-        time: dateObj.toTimeString().slice(0, 5),
-        duration: `${apt.duration_minutes || 30} mins`,
-        purpose: apt.notes || 'Consultation',
-        status: mapStatus(apt.appointment_status),
-      };
-    });
-
-    setAppointments(mapped);
-    setLoading(false);
+    setStudents(data || []);
   }
 
   async function fetchTeachers() {
@@ -98,435 +80,338 @@ export default function TeacherBooking() {
         id,
         specialization,
         users(full_name)
-      `)
-      .eq('status', 'active');
+      `);
 
     if (error) {
-      console.error('Error fetching teachers:', error.message);
+      console.error('Failed to fetch teachers:', error.message);
       return;
     }
 
-    setTeachers((data || []) as unknown as TeacherOption[]);
+    const mapped: TeacherOption[] = (data || []).map((teacher: any) => ({
+      id: teacher.id,
+      name: getUserName(teacher.users),
+      specialization: teacher.specialization || '-',
+    }));
+
+    setTeachers(mapped);
   }
 
-  async function fetchStudents() {
-    const { data, error } = await supabase
-      .from('students')
-      .select('id, full_name')
-      .eq('status', 'active')
-      .order('full_name', { ascending: true });
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    setSaving(true);
 
-    if (error) {
-      console.error('Error fetching students:', error.message);
+    let finalStudentId = selectedStudentId;
+    let notificationUserId = currentUser.id || '';
+    let bookingStudentName = currentUser.name || 'Student';
+
+    if (isStudentView) {
+      const studentId = await getCurrentStudentId();
+
+      if (!studentId) {
+        alert('Student profile not found. Please complete student registration first.');
+        setSaving(false);
+        return;
+      }
+
+      finalStudentId = studentId;
+      notificationUserId = currentUser.id || '';
+      bookingStudentName = currentUser.name || 'Student';
+    }
+
+    if (!finalStudentId) {
+      alert('Please select a student.');
+      setSaving(false);
       return;
     }
 
-    setStudents(data || []);
-  }
-
-  async function createAppointment() {
-    if (!formData.studentId || !formData.teacherId || !formData.date || !formData.time) {
-      alert('Please select student, teacher, date, and time.');
+    if (!appointmentDate || !appointmentTime) {
+      alert('Please select appointment date and time.');
+      setSaving(false);
       return;
     }
 
-    const appointmentDateTime = `${formData.date}T${formData.time}:00+08:00`;
+    if (!isStudentView) {
+      const selectedStudent = students.find(
+        (student) => student.id === finalStudentId
+      );
 
-    const { error } = await supabase.from('appointments').insert({
-      student_id: formData.studentId,
-      teacher_id: formData.teacherId,
-      appointment_datetime: appointmentDateTime,
-      duration_minutes: Number(formData.duration),
-      appointment_status: 'pending',
-      notes: formData.purpose + (formData.notes ? ` - ${formData.notes}` : ''),
-    });
+      bookingStudentName = selectedStudent?.full_name || 'Student';
+      notificationUserId = await getUserIdByEmail(selectedStudent?.email || '');
+    }
+
+    const appointmentDateTime = `${appointmentDate}T${appointmentTime}:00`;
+
+    const { data: createdAppointment, error } = await supabase
+      .from('appointments')
+      .insert({
+        student_id: finalStudentId,
+        teacher_id: selectedTeacherId || null,
+        appointment_datetime: appointmentDateTime,
+        appointment_status: 'pending',
+        purpose: purpose || null,
+        remarks: remarks || null,
+        created_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
 
     if (error) {
       alert(`Failed to book appointment: ${error.message}`);
+      setSaving(false);
       return;
     }
 
-    setFormData({
-      studentId: '',
-      teacherId: '',
-      date: '',
-      time: '',
-      duration: '30',
-      purpose: 'Portfolio Review',
-      notes: '',
+    await notifyAppointmentBooked(bookingStudentName, appointmentDateTime, {
+      userId: notificationUserId || null,
     });
 
-    setShowBookingModal(false);
-    fetchAppointments();
+    await supabase.from('audit_logs').insert({
+      user_id: currentUser.id || null,
+      action: 'Appointment Booked',
+      module: 'Appointments',
+      target_id: createdAppointment?.id || finalStudentId,
+      old_data: null,
+      new_data: {
+        student_id: finalStudentId,
+        teacher_id: selectedTeacherId || null,
+        appointment_datetime: appointmentDateTime,
+        purpose,
+        booked_by: currentUser.email,
+        role: currentUser.role,
+      },
+      created_at: new Date().toISOString(),
+    });
+
+    alert(
+      isStudentView
+        ? 'Your appointment request has been submitted.'
+        : 'Appointment has been created.'
+    );
+
+    setSelectedStudentId(isStudentView ? finalStudentId : '');
+    setSelectedTeacherId('');
+    setAppointmentDate('');
+    setAppointmentTime('');
+    setPurpose('');
+    setRemarks('');
+    setSaving(false);
   }
 
-  async function cancelAppointment(id: string) {
-    const { error } = await supabase
-      .from('appointments')
-      .update({ appointment_status: 'cancelled' })
-      .eq('id', id);
-
-    if (error) {
-      alert(`Failed to cancel appointment: ${error.message}`);
-      return;
-    }
-
-    fetchAppointments();
+  if (loading) {
+    return (
+      <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
+        Loading appointment booking...
+      </div>
+    );
   }
 
-  const upcomingCount = appointments.filter((a) => a.status === 'Confirmed').length;
-  const pendingCount = appointments.filter((a) => a.status === 'Pending').length;
-  const completedCount = appointments.filter((a) => a.status === 'Completed').length;
-
-  return (
-    <div className="space-y-6">
-      <div className="flex items-center justify-between">
+  if (isStudentView && !studentProfileFound) {
+    return (
+      <div className="space-y-6">
         <div>
           <h1 className="text-3xl text-[#284342]">
             Teacher Consultation Booking
           </h1>
           <p className="text-[#6b6b6b] mt-1">
-            Book one-on-one sessions with teachers
+            Appointment booking is linked to your student profile.
           </p>
         </div>
 
-        <button
-          onClick={() => setShowBookingModal(true)}
-          className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
-        >
-          <Plus size={20} />
-          Book Appointment
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <SummaryCard label="Upcoming" value={upcomingCount} color="text-[#284342]" />
-        <SummaryCard label="Pending" value={pendingCount} color="text-yellow-700" />
-        <SummaryCard label="Completed" value={completedCount} color="text-green-700" />
-      </div>
-
-      <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
-        <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-lg text-[#284342]">My Appointments</h2>
-        </div>
-
-        <div className="divide-y divide-[rgba(40,67,66,0.1)]">
-          {loading && (
-            <div className="p-6 text-center text-[#6b6b6b]">
-              Loading appointments...
-            </div>
-          )}
-
-          {!loading && appointments.length === 0 && (
-            <div className="p-6 text-center text-[#6b6b6b]">
-              No appointments found.
-            </div>
-          )}
-
-          {!loading &&
-            appointments.map((appointment) => (
-              <div
-                key={appointment.id}
-                className="p-6 hover:bg-[#f8f8f6] transition-colors"
-              >
-                <div className="flex items-start justify-between mb-3">
-                  <div className="flex-1">
-                    <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-lg text-[#284342]">
-                        {appointment.purpose}
-                      </h3>
-
-                      <StatusBadge status={appointment.status} />
-                    </div>
-
-                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
-                      <Info icon={<User size={14} />} label="Student" value={appointment.student} />
-                      <Info icon={<User size={14} />} label="Teacher" value={appointment.teacher} />
-                      <Info icon={<Calendar size={14} />} label="Date" value={appointment.date} />
-                      <Info icon={<Clock size={14} />} label="Time" value={appointment.time} />
-                      <Info icon={<Clock size={14} />} label="Duration" value={appointment.duration} />
-                    </div>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 pt-4 border-t border-[rgba(40,67,66,0.1)]">
-                  {(appointment.status === 'Confirmed' || appointment.status === 'Pending') && (
-                    <button
-                      onClick={() => cancelAppointment(appointment.id)}
-                      className="px-4 py-2 rounded-lg border border-red-600 text-red-600 hover:bg-red-50 transition-colors text-sm"
-                    >
-                      Cancel
-                    </button>
-                  )}
-
-                  <button className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm">
-                    View Details
-                  </button>
-                </div>
-              </div>
-            ))}
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-yellow-800">
+          Your student profile was not found. Please complete your student
+          registration first or wait for admin approval.
         </div>
       </div>
+    );
+  }
 
-      {showBookingModal && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-2xl w-full p-6">
-            <h2 className="text-xl text-[#284342] mb-6">
-              Book Teacher Consultation
-            </h2>
+  return (
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl text-[#284342]">
+          Teacher Consultation Booking
+        </h1>
+        <p className="text-[#6b6b6b] mt-1">
+          {isStudentView
+            ? 'Book a consultation appointment for your own student account.'
+            : 'Book consultation appointments for students.'}
+        </p>
+      </div>
 
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm text-[#284342] mb-2">
-                  Student
-                </label>
+      <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
+        <div className="flex items-center gap-3 mb-6">
+          <div className="p-3 rounded-lg bg-[#e9da95]/20 text-[#284342]">
+            <CalendarClock size={22} />
+          </div>
 
-                <select
-                  value={formData.studentId}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      studentId: e.target.value,
-                    }))
-                  }
-                  className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
-                >
-                  <option value="">Select Student</option>
-                  {students.map((student) => (
-                    <option key={student.id} value={student.id}>
-                      {student.full_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm text-[#284342] mb-2">
-                  Select Teacher
-                </label>
-
-                <select
-                  value={formData.teacherId}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      teacherId: e.target.value,
-                    }))
-                  }
-                  className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
-                >
-                  <option value="">Select Teacher</option>
-                  {teachers.map((teacher) => (
-                    <option key={teacher.id} value={teacher.id}>
-                      {getTeacherName(teacher)}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <Input
-                  label="Date"
-                  type="date"
-                  value={formData.date}
-                  onChange={(value) =>
-                    setFormData((prev) => ({ ...prev, date: value }))
-                  }
-                />
-
-                <Input
-                  label="Time"
-                  type="time"
-                  value={formData.time}
-                  onChange={(value) =>
-                    setFormData((prev) => ({ ...prev, time: value }))
-                  }
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm text-[#284342] mb-2">
-                  Duration
-                </label>
-
-                <select
-                  value={formData.duration}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      duration: e.target.value,
-                    }))
-                  }
-                  className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
-                >
-                  <option value="30">30 mins</option>
-                  <option value="45">45 mins</option>
-                  <option value="60">60 mins</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm text-[#284342] mb-2">
-                  Purpose
-                </label>
-
-                <select
-                  value={formData.purpose}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      purpose: e.target.value,
-                    }))
-                  }
-                  className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
-                >
-                  <option>Portfolio Review</option>
-                  <option>Technique Guidance</option>
-                  <option>Career Advice</option>
-                  <option>Course Progress Discussion</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm text-[#284342] mb-2">
-                  Additional Notes
-                </label>
-
-                <textarea
-                  rows={3}
-                  value={formData.notes}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      notes: e.target.value,
-                    }))
-                  }
-                  className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
-                  placeholder="Any specific topics you'd like to discuss..."
-                />
-              </div>
-            </div>
-
-            <div className="flex items-center gap-3 mt-6">
-              <button
-                onClick={() => setShowBookingModal(false)}
-                className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
-              >
-                Cancel
-              </button>
-
-              <button
-                onClick={createAppointment}
-                className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors"
-              >
-                Submit Request
-              </button>
-            </div>
+          <div>
+            <h2 className="text-xl text-[#284342]">Appointment Details</h2>
+            <p className="text-sm text-[#6b6b6b]">
+              {isStudentView
+                ? 'Your student profile will be used automatically.'
+                : 'Select student, teacher and appointment time.'}
+            </p>
           </div>
         </div>
-      )}
-    </div>
-  );
-}
 
-function mapStatus(status: string): Appointment['status'] {
-  if (status === 'confirmed') return 'Confirmed';
-  if (status === 'completed') return 'Completed';
-  if (status === 'cancelled') return 'Cancelled';
-  return 'Pending';
-}
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {!isStudentView && (
+            <div>
+              <label className="block text-sm text-[#284342] mb-2">
+                Student
+              </label>
 
-function getStudentName(student: any) {
-  if (!student) return 'Unnamed Student';
-  if (Array.isArray(student)) return student[0]?.full_name || 'Unnamed Student';
-  return student.full_name || 'Unnamed Student';
-}
+              <select
+                value={selectedStudentId}
+                onChange={(e) => setSelectedStudentId(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+                required
+              >
+                <option value="">Select Student</option>
+                {students.map((student) => (
+                  <option key={student.id} value={student.id}>
+                    {student.full_name} - {student.email}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
-function getTeacherName(teacher: any) {
-  if (!teacher) return 'Unnamed Teacher';
+          {isStudentView && (
+            <div className="p-4 rounded-lg bg-[#f8f8f6] flex items-center gap-3">
+              <User size={20} className="text-[#284342]" />
+              <div>
+                <p className="text-sm text-[#284342]">
+                  Booking for: {currentUser.name}
+                </p>
+                <p className="text-xs text-[#6b6b6b]">
+                  {currentUser.email}
+                </p>
+              </div>
+            </div>
+          )}
 
-  const actualTeacher = Array.isArray(teacher) ? teacher[0] : teacher;
-  const user = Array.isArray(actualTeacher?.users)
-    ? actualTeacher.users[0]
-    : actualTeacher?.users;
+          <div>
+            <label className="block text-sm text-[#284342] mb-2">
+              Preferred Teacher
+            </label>
 
-  return user?.full_name || actualTeacher?.specialization || 'Unnamed Teacher';
-}
+            <select
+              value={selectedTeacherId}
+              onChange={(e) => setSelectedTeacherId(e.target.value)}
+              className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+            >
+              <option value="">No preference</option>
+              {teachers.map((teacher) => (
+                <option key={teacher.id} value={teacher.id}>
+                  {teacher.name} - {teacher.specialization}
+                </option>
+              ))}
+            </select>
+          </div>
 
-function SummaryCard({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: number;
-  color: string;
-}) {
-  return (
-    <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-      <p className="text-sm text-[#6b6b6b] mb-2">{label}</p>
-      <p className={`text-3xl ${color}`}>{value}</p>
-    </div>
-  );
-}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-sm text-[#284342] mb-2">
+                Date
+              </label>
 
-function StatusBadge({ status }: { status: Appointment['status'] }) {
-  const className =
-    status === 'Confirmed'
-      ? 'bg-green-100 text-green-700'
-      : status === 'Pending'
-      ? 'bg-yellow-100 text-yellow-700'
-      : status === 'Completed'
-      ? 'bg-blue-100 text-blue-700'
-      : 'bg-gray-100 text-gray-700';
+              <input
+                type="date"
+                value={appointmentDate}
+                onChange={(e) => setAppointmentDate(e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] focus:outline-none focus:ring-2 focus:ring-[#284342]"
+                required
+              />
+            </div>
 
-  return (
-    <span className={`text-xs px-3 py-1 rounded-full ${className}`}>
-      {status}
-    </span>
-  );
-}
+            <div>
+              <label className="block text-sm text-[#284342] mb-2">
+                Time
+              </label>
 
-function Info({
-  icon,
-  label,
-  value,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-}) {
-  return (
-    <div>
-      <div className="flex items-center gap-2 text-[#6b6b6b] mb-1">
-        {icon}
-        <span className="text-xs">{label}</span>
+              <div className="relative">
+                <Clock
+                  size={18}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6b6b6b]"
+                />
+
+                <input
+                  type="time"
+                  value={appointmentTime}
+                  onChange={(e) => setAppointmentTime(e.target.value)}
+                  className="w-full pl-10 pr-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] focus:outline-none focus:ring-2 focus:ring-[#284342]"
+                  required
+                />
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-sm text-[#284342] mb-2">
+              Purpose
+            </label>
+
+            <select
+              value={purpose}
+              onChange={(e) => setPurpose(e.target.value)}
+              className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+            >
+              <option value="">Select Purpose</option>
+              <option value="Course Consultation">Course Consultation</option>
+              <option value="Portfolio Review">Portfolio Review</option>
+              <option value="Makeup Class Discussion">
+                Makeup Class Discussion
+              </option>
+              <option value="Payment Discussion">Payment Discussion</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm text-[#284342] mb-2">
+              Remarks
+            </label>
+
+            <textarea
+              value={remarks}
+              onChange={(e) => setRemarks(e.target.value)}
+              rows={4}
+              placeholder="Add any notes or request details..."
+              className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] focus:outline-none focus:ring-2 focus:ring-[#284342]"
+            />
+          </div>
+
+          <button
+            type="submit"
+            disabled={saving}
+            className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] disabled:opacity-50 flex items-center gap-2"
+          >
+            <Save size={18} />
+            {saving ? 'Submitting...' : 'Submit Appointment Request'}
+          </button>
+        </form>
       </div>
-      <p className="text-[#284342]">{value}</p>
     </div>
   );
 }
 
-function Input({
-  label,
-  value,
-  onChange,
-  type = 'text',
-}: {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  type?: string;
-}) {
-  return (
-    <div>
-      <label className="block text-sm text-[#284342] mb-2">{label}</label>
-      <input
-        type={type}
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
-      />
-    </div>
-  );
+async function getUserIdByEmail(email: string) {
+  if (!email) return '';
+
+  const { data, error } = await supabase
+    .from('users')
+    .select('id')
+    .eq('email', email)
+    .maybeSingle();
+
+  if (error || !data) return '';
+
+  return data.id;
+}
+
+function getUserName(user: any) {
+  if (!user) return 'Unnamed Teacher';
+  if (Array.isArray(user)) return user[0]?.full_name || 'Unnamed Teacher';
+  return user.full_name || 'Unnamed Teacher';
 }

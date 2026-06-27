@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Award, Download, Eye, CheckCircle, Plus, X, Printer } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import jsPDF from 'jspdf';
+import { getCurrentUser } from '../../utils/session';
+import { getCurrentStudentId } from '../../utils/studentAccess';
 import html2canvas from 'html2canvas';
 
 interface AttendanceCertificate {
@@ -33,57 +35,82 @@ export default function AttendanceCertificates() {
   const [selectedEligible, setSelectedEligible] = useState('');
   const [showModal, setShowModal] = useState(false);
   const [loading, setLoading] = useState(true);
+  const currentUser = getCurrentUser();
+  const isStudentView = currentUser.role === 'student';
+  const canIssueCertificate =
+    currentUser.role === 'super_admin' ||
+    currentUser.role === 'admin' ||
+    currentUser.role === 'owner';
 
   const certificateRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    fetchCertificates();
+  fetchCertificates();
+
+  if (canIssueCertificate) {
     fetchEligibleStudents();
-  }, []);
+  }
+}, []);
 
-  async function fetchCertificates() {
-    setLoading(true);
+ async function fetchCertificates() {
+  setLoading(true);
 
-    const { data, error } = await supabase
-      .from('certificates')
-      .select(`
-        id,
-        student_id,
-        course_id,
-        certificate_number,
-        certificate_url,
-        issued_date,
-        certificate_type,
-        students(full_name),
-        courses(course_name)
-      `)
-      .eq('certificate_type', 'attendance')
-      .order('issued_date', { ascending: false });
+  const currentUser = getCurrentUser();
 
-    if (error) {
-      console.error('Error fetching attendance certificates:', error.message);
+  let query = supabase
+    .from('certificates')
+    .select(`
+      id,
+      student_id,
+      course_id,
+      certificate_number,
+      certificate_url,
+      issued_date,
+      certificate_type,
+      students(full_name, email, attendance_rate),
+      courses(course_name)
+    `)
+    .eq('certificate_type', 'attendance')
+    .order('issued_date', { ascending: false });
+
+  if (currentUser.role === 'student') {
+    const studentId = await getCurrentStudentId();
+
+    if (!studentId) {
+      setCertificates([]);
       setLoading(false);
       return;
     }
 
-    const mapped: AttendanceCertificate[] = (data || []).map((cert: any) => ({
-      id: cert.id,
-      studentId: cert.student_id,
-      courseId: cert.course_id,
-      student: getStudentName(cert.students),
-      course: getCourseName(cert.courses),
-      attendanceRate: 100,
-      issueDate: cert.issued_date
-        ? new Date(cert.issued_date).toISOString().slice(0, 10)
-        : '-',
-      certificateNumber: cert.certificate_number || '-',
-      status: 'Issued',
-      url: cert.certificate_url || '',
-    }));
-
-    setCertificates(mapped);
-    setLoading(false);
+    query = query.eq('student_id', studentId);
   }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('Error fetching attendance certificates:', error.message);
+    setLoading(false);
+    return;
+  }
+
+  const mapped: AttendanceCertificate[] = (data || []).map((cert: any) => ({
+    id: cert.id,
+
+    studentId: cert.student_id || '',
+    courseId: cert.course_id || '',
+
+    student: getStudentName(cert.students),
+    course: getCourseName(cert.courses, cert.students),
+    attendanceRate: getAttendanceRate(cert.students),
+    issueDate: cert.issued_date || '-',
+    certificateNumber: cert.certificate_number || '-',
+    status: cert.certificate_url ? 'Issued' : 'Ready',
+    url: cert.certificate_url,
+  }));
+
+  setCertificates(mapped);
+  setLoading(false);
+}
 
   async function fetchEligibleStudents() {
     const { data, error } = await supabase
@@ -276,36 +303,42 @@ export default function AttendanceCertificates() {
             Full Attendance Certificates
           </h1>
           <p className="text-[#6b6b6b] mt-1">
-            Award certificates for students with full attendance
-          </p>
+  {isStudentView
+    ? 'View and download your full attendance certificates'
+    : 'Award certificates for students with full attendance'}
+</p>
         </div>
 
-        <button
-          onClick={() => setShowModal(true)}
-          className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
-        >
-          <Plus size={18} />
-          Issue Certificate
-        </button>
+        {canIssueCertificate && (
+  <button
+    onClick={() => setShowModal(true)}
+    className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
+  >
+    <Plus size={18} />
+    Issue Certificate
+  </button>
+)}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <SummaryCard
-          icon={<CheckCircle size={24} className="text-green-700" />}
-          label="Issued"
-          value={issued}
-        />
-        <SummaryCard
-          icon={<Award size={24} className="text-blue-700" />}
-          label="Eligible Students"
-          value={ready}
-        />
-        <SummaryCard
-          icon={<Award size={24} className="text-yellow-700" />}
-          label="Pending"
-          value={pending}
-        />
-      </div>
+     {!isStudentView && (
+  <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+    <SummaryCard
+      icon={<CheckCircle size={24} className="text-green-700" />}
+      label="Issued"
+      value={issued}
+    />
+    <SummaryCard
+      icon={<Award size={24} className="text-blue-700" />}
+      label="Eligible Students"
+      value={ready}
+    />
+    <SummaryCard
+      icon={<Award size={24} className="text-yellow-700" />}
+      label="Pending"
+      value={pending}
+    />
+  </div>
+)}
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
@@ -700,15 +733,7 @@ function SummaryCard({
   );
 }
 
-function getStudentName(student: any) {
-  const actual = getSingle(student);
-  return actual?.full_name || 'Unnamed Student';
-}
 
-function getCourseName(course: any) {
-  const actual = getSingle(course);
-  return actual?.course_name || '-';
-}
 
 function getSingle(value: any) {
   if (!value) return null;
@@ -733,4 +758,38 @@ function sanitizeColors(element: HTMLElement) {
       el.style.borderColor = '#284342';
     }
   });
+}
+
+function getStudentName(student: any) {
+  if (!student) return 'Unnamed Student';
+
+  if (Array.isArray(student)) {
+    return student[0]?.full_name || 'Unnamed Student';
+  }
+
+  return student.full_name || 'Unnamed Student';
+}
+
+function getCourseName(course: any, student?: any) {
+  if (course) {
+    if (Array.isArray(course)) return course[0]?.course_name || '-';
+    return course.course_name || '-';
+  }
+
+  if (student) {
+    if (Array.isArray(student)) return student[0]?.course || '-';
+    return student.course || '-';
+  }
+
+  return '-';
+}
+
+function getAttendanceRate(student: any) {
+  if (!student) return 100;
+
+  if (Array.isArray(student)) {
+    return Number(student[0]?.attendance_rate || 100);
+  }
+
+  return Number(student.attendance_rate || 100);
 }

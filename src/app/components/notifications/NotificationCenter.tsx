@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import WhatsAppQueue from './WhatsAppQueue';
+import { getCurrentUser } from '../../utils/session';
 import {
   Bell,
   CheckCircle2,
@@ -26,11 +27,23 @@ interface NotificationItem {
 }
 
 export default function NotificationCenter() {
+  const currentUser = getCurrentUser();
+
+  const isPersonalView =
+    currentUser.role === 'student' || currentUser.role === 'parent';
+
+  const canManageNotifications =
+    currentUser.role === 'super_admin' ||
+    currentUser.role === 'admin' ||
+    currentUser.role === 'finance' ||
+    currentUser.role === 'teacher';
+
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
+
   const [searchTerm, setSearchTerm] = useState('');
-const [channelFilter, setChannelFilter] = useState('all');
-const [statusFilter, setStatusFilter] = useState('all');
+  const [channelFilter, setChannelFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState('all');
 
   useEffect(() => {
     fetchNotifications();
@@ -39,7 +52,7 @@ const [statusFilter, setStatusFilter] = useState('all');
   async function fetchNotifications() {
     setLoading(true);
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('notifications')
       .select(`
         id,
@@ -56,6 +69,12 @@ const [statusFilter, setStatusFilter] = useState('all');
       `)
       .order('created_at', { ascending: false });
 
+    if (isPersonalView) {
+      query = query.eq('user_id', currentUser.id);
+    }
+
+    const { data, error } = await query;
+
     if (error) {
       console.error('Error fetching notifications:', error.message);
       setLoading(false);
@@ -67,6 +86,8 @@ const [statusFilter, setStatusFilter] = useState('all');
   }
 
   async function markAsSent(id: string) {
+    if (!canManageNotifications) return;
+
     const { error } = await supabase
       .from('notifications')
       .update({
@@ -84,6 +105,8 @@ const [statusFilter, setStatusFilter] = useState('all');
   }
 
   async function deleteNotification(id: string) {
+    if (!canManageNotifications) return;
+
     const confirmed = confirm('Delete this notification?');
     if (!confirmed) return;
 
@@ -106,44 +129,49 @@ const [statusFilter, setStatusFilter] = useState('all');
   }
 
   const pendingCount = notifications.filter(
-    (n) => n.delivery_status === 'pending'
+    (notification) => notification.delivery_status === 'pending'
   ).length;
 
   const sentCount = notifications.filter(
-    (n) => n.delivery_status === 'sent'
+    (notification) => notification.delivery_status === 'sent'
   ).length;
 
   const whatsappCount = notifications.filter(
-    (n) => n.channel === 'whatsapp'
+    (notification) => notification.channel === 'whatsapp'
   ).length;
 
   const highPriorityCount = notifications.filter(
-    (n) => n.priority === 'high'
+    (notification) => notification.priority === 'high'
   ).length;
 
   const filteredNotifications = notifications.filter((item) => {
-  const search = searchTerm.toLowerCase();
+    const search = searchTerm.toLowerCase();
 
-  const matchesSearch =
-    item.title.toLowerCase().includes(search) ||
-    item.message.toLowerCase().includes(search);
+    const matchesSearch =
+      item.title.toLowerCase().includes(search) ||
+      item.message.toLowerCase().includes(search);
 
-  const matchesChannel =
-    channelFilter === 'all' || item.channel === channelFilter;
+    const matchesChannel =
+      channelFilter === 'all' || item.channel === channelFilter;
 
-  const matchesStatus =
-    statusFilter === 'all' || item.delivery_status === statusFilter;
+    const matchesStatus =
+      statusFilter === 'all' || item.delivery_status === statusFilter;
 
-  return matchesSearch && matchesChannel && matchesStatus;
-});
+    return matchesSearch && matchesChannel && matchesStatus;
+  });
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl text-[#284342]">Notification Center</h1>
+          <h1 className="text-3xl text-[#284342]">
+            {isPersonalView ? 'My Notifications' : 'Notification Center'}
+          </h1>
+
           <p className="text-[#6b6b6b] mt-1">
-            Manage system alerts and WhatsApp reminders
+            {isPersonalView
+              ? 'View your personal updates, reminders and alerts.'
+              : 'Manage system alerts, reminders and WhatsApp notifications.'}
           </p>
         </div>
 
@@ -156,58 +184,107 @@ const [statusFilter, setStatusFilter] = useState('all');
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <SummaryCard icon={<Bell size={24} />} label="Total" value={notifications.length} color="text-[#284342]" />
-        <SummaryCard icon={<AlertCircle size={24} />} label="Pending" value={pendingCount} color="text-yellow-700" />
-        <SummaryCard icon={<CheckCircle2 size={24} />} label="Sent" value={sentCount} color="text-green-700" />
-        <SummaryCard icon={<MessageCircle size={24} />} label="WhatsApp" value={whatsappCount} color="text-green-700" />
-      </div>
-
-      <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-    <input
-      value={searchTerm}
-      onChange={(e) => setSearchTerm(e.target.value)}
-      placeholder="Search notifications..."
-      className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
+     {isPersonalView ? (
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+    <SummaryCard
+      icon={<Bell size={24} />}
+      label="My Notifications"
+      value={notifications.length}
+      color="text-[#284342]"
     />
 
-    <select
-      value={channelFilter}
-      onChange={(e) => setChannelFilter(e.target.value)}
-      className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
-    >
-      <option value="all">All Channels</option>
-      <option value="in_app">In App</option>
-      <option value="whatsapp">WhatsApp</option>
-      <option value="email">Email</option>
-    </select>
-
-    <select
-      value={statusFilter}
-      onChange={(e) => setStatusFilter(e.target.value)}
-      className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
-    >
-      <option value="all">All Status</option>
-      <option value="pending">Pending</option>
-      <option value="sent">Sent</option>
-      <option value="failed">Failed</option>
-    </select>
+    <SummaryCard
+      icon={<AlertCircle size={24} />}
+      label="Important"
+      value={highPriorityCount}
+      color="text-red-700"
+    />
   </div>
-</div>
+) : (
+  <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+    <SummaryCard
+      icon={<Bell size={24} />}
+      label="Total"
+      value={notifications.length}
+      color="text-[#284342]"
+    />
+
+    <SummaryCard
+      icon={<AlertCircle size={24} />}
+      label="Pending"
+      value={pendingCount}
+      color="text-yellow-700"
+    />
+
+    <SummaryCard
+      icon={<CheckCircle2 size={24} />}
+      label="Sent"
+      value={sentCount}
+      color="text-green-700"
+    />
+
+    <SummaryCard
+      icon={<MessageCircle size={24} />}
+      label="WhatsApp"
+      value={whatsappCount}
+      color="text-green-700"
+    />
+  </div>
+)}
+
+      <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
+  <div className={`grid grid-cols-1 ${isPersonalView ? '' : 'md:grid-cols-3'} gap-4`}>
+          <input
+            value={searchTerm}
+            onChange={(event) => setSearchTerm(event.target.value)}
+            placeholder="Search notifications..."
+            className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
+          />
+{!isPersonalView && (
+    <>
+          <select
+            value={channelFilter}
+            onChange={(event) => setChannelFilter(event.target.value)}
+            className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
+          >
+            <option value="all">All Channels</option>
+            <option value="in_app">In App</option>
+            <option value="whatsapp">WhatsApp</option>
+            <option value="email">Email</option>
+          </select>
+
+          <select
+            value={statusFilter}
+            onChange={(event) => setStatusFilter(event.target.value)}
+            className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
+          >
+            <option value="all">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="sent">Sent</option>
+            <option value="failed">Failed</option>
+          </select>
+           </>
+)}
+        </div>
+      </div>
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)] flex items-center justify-between">
-          <h2 className="text-lg text-[#284342]">Recent Notifications</h2>
+          <h2 className="text-lg text-[#284342]">
+            {isPersonalView ? 'Recent Updates' : 'Recent Notifications'}
+          </h2>
+
           <p className="text-sm text-[#6b6b6b]">
             {highPriorityCount} high priority
           </p>
         </div>
 
-        <WhatsAppQueue
-        notifications={notifications}
-        onMarkSent={markAsSent}
-        />
+        {!isPersonalView && canManageNotifications && (
+          <WhatsAppQueue
+            notifications={notifications}
+            onMarkSent={markAsSent}
+          />
+        )}
 
         <div className="divide-y divide-[rgba(40,67,66,0.1)]">
           {loading && (
@@ -232,7 +309,11 @@ const [statusFilter, setStatusFilter] = useState('all');
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-start gap-4">
-                    <div className={`p-3 rounded-lg ${getIconBg(item.type || item.channel)}`}>
+                    <div
+                      className={`p-3 rounded-lg ${getIconBg(
+                        item.type || item.channel
+                      )}`}
+                    >
                       {getNotificationIcon(item.type || item.channel)}
                     </div>
 
@@ -256,7 +337,7 @@ const [statusFilter, setStatusFilter] = useState('all');
                   </div>
 
                   <div className="flex items-center gap-2">
-                    {item.channel === 'whatsapp' && (
+                    {item.channel === 'whatsapp' && canManageNotifications && (
                       <button
                         onClick={() => openWhatsApp(item)}
                         className="p-2 hover:bg-green-50 rounded-lg"
@@ -266,23 +347,26 @@ const [statusFilter, setStatusFilter] = useState('all');
                       </button>
                     )}
 
-                    {item.delivery_status === 'pending' && (
+                    {item.delivery_status === 'pending' &&
+                      canManageNotifications && (
+                        <button
+                          onClick={() => markAsSent(item.id)}
+                          className="p-2 hover:bg-[#e9da95]/20 rounded-lg"
+                          title="Mark as Sent"
+                        >
+                          <CheckCircle2 size={18} className="text-[#284342]" />
+                        </button>
+                      )}
+
+                    {canManageNotifications && (
                       <button
-                        onClick={() => markAsSent(item.id)}
-                        className="p-2 hover:bg-[#e9da95]/20 rounded-lg"
-                        title="Mark as Sent"
+                        onClick={() => deleteNotification(item.id)}
+                        className="p-2 hover:bg-red-50 rounded-lg"
+                        title="Delete"
                       >
-                        <CheckCircle2 size={18} className="text-[#284342]" />
+                        <Trash2 size={18} className="text-red-600" />
                       </button>
                     )}
-
-                    <button
-                      onClick={() => deleteNotification(item.id)}
-                      className="p-2 hover:bg-red-50 rounded-lg"
-                      title="Delete"
-                    >
-                      <Trash2 size={18} className="text-red-600" />
-                    </button>
                   </div>
                 </div>
               </div>
@@ -310,6 +394,7 @@ function SummaryCard({
         <div className={`p-3 rounded-lg bg-[#e9da95]/20 ${color}`}>
           {icon}
         </div>
+
         <div>
           <p className="text-sm text-[#6b6b6b]">{label}</p>
           <p className={`text-2xl ${color}`}>{value}</p>
@@ -364,10 +449,26 @@ function ChannelBadge({ channel }: { channel: string }) {
 }
 
 function getNotificationIcon(type: string) {
-  if (type === 'payment') return <AlertCircle size={20} className="text-red-700" />;
-  if (type === 'portfolio') return <Bell size={20} className="text-blue-700" />;
-  if (type === 'attendance') return <Clock size={20} className="text-yellow-700" />;
-  if (type === 'whatsapp') return <MessageCircle size={20} className="text-green-700" />;
+  if (type === 'payment') {
+    return <AlertCircle size={20} className="text-red-700" />;
+  }
+
+  if (type === 'portfolio') {
+    return <Bell size={20} className="text-blue-700" />;
+  }
+
+  if (type === 'attendance') {
+    return <Clock size={20} className="text-yellow-700" />;
+  }
+
+  if (type === 'appointment') {
+    return <Clock size={20} className="text-blue-700" />;
+  }
+
+  if (type === 'whatsapp') {
+    return <MessageCircle size={20} className="text-green-700" />;
+  }
+
   return <Bell size={20} className="text-[#284342]" />;
 }
 
@@ -375,6 +476,7 @@ function getIconBg(type: string) {
   if (type === 'payment') return 'bg-red-100';
   if (type === 'portfolio') return 'bg-blue-100';
   if (type === 'attendance') return 'bg-yellow-100';
+  if (type === 'appointment') return 'bg-blue-100';
   if (type === 'whatsapp') return 'bg-green-100';
   return 'bg-[#e9da95]/20';
 }

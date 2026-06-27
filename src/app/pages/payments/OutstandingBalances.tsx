@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { notifyPaymentOverdue } from '../../services/systemNotificationService';
+import { getCurrentUser } from '../../utils/session';
+import { getCurrentStudentId } from '../../utils/studentAccess';
 
 interface OutstandingBalance {
   id: string;
@@ -27,9 +29,20 @@ interface OutstandingBalance {
 
 export default function OutstandingBalances() {
   const navigate = useNavigate();
+  const currentUser = getCurrentUser();
+
+  const isStudentView = currentUser.role === 'student';
+
+  const canManagePayments =
+    currentUser.role === 'super_admin' ||
+    currentUser.role === 'admin' ||
+    currentUser.role === 'finance' ||
+    currentUser.role === 'internal_sales' ||
+    currentUser.role === 'external_sales';
 
   const [balances, setBalances] = useState<OutstandingBalance[]>([]);
   const [loading, setLoading] = useState(true);
+  const [studentProfileFound, setStudentProfileFound] = useState(true);
 
   useEffect(() => {
     fetchOutstandingBalances();
@@ -38,14 +51,14 @@ export default function OutstandingBalances() {
   async function fetchOutstandingBalances() {
     setLoading(true);
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('payment_plans')
       .select(`
         id,
         student_id,
         final_amount,
         original_fee,
-        students!payment_plans_student_id_fkey(full_name, phone),
+        students!payment_plans_student_id_fkey(full_name, phone, email),
         enrollments!payment_plans_enrollment_id_fkey(
           class_batches(
             courses(course_name)
@@ -59,6 +72,21 @@ export default function OutstandingBalances() {
         )
       `)
       .order('created_at', { ascending: false });
+
+    if (isStudentView) {
+      const studentId = await getCurrentStudentId();
+
+      if (!studentId) {
+        setStudentProfileFound(false);
+        setBalances([]);
+        setLoading(false);
+        return;
+      }
+
+      query = query.eq('student_id', studentId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('Error fetching outstanding balances:', error.message);
@@ -121,23 +149,25 @@ export default function OutstandingBalances() {
           status,
         };
       })
-      .filter((item: OutstandingBalance) => item.outstandingAmount > 0);
+      .filter((item: OutstandingBalance) =>
+        isStudentView ? item.totalFee > 0 : item.outstandingAmount > 0
+      );
 
     setBalances(mapped);
     setLoading(false);
   }
 
   async function sendReminder(balance: OutstandingBalance) {
-    // 1. Create notification
+    if (!canManagePayments) return;
+
     await notifyPaymentOverdue(
       balance.student,
       balance.outstandingAmount,
       balance.nextDueDate
     );
 
-    // 2. Record audit log
     await supabase.from('audit_logs').insert({
-      user_id: null,
+      user_id: currentUser.id || null,
       action: 'Payment Reminder Sent',
       module: 'Payments',
       target_id: balance.id,
@@ -148,36 +178,33 @@ export default function OutstandingBalances() {
         outstanding_amount: balance.outstandingAmount,
         next_due_date: balance.nextDueDate,
         days_overdue: balance.daysOverdue,
+        sent_by: currentUser.email,
+        role: currentUser.role,
       },
       created_at: new Date().toISOString(),
     });
 
-    // 3. Open WhatsApp
-    const phone = balance.phone
-      ?.replace(/\D/g, '')
-      .replace(/^0/, '60');
+    const phone = balance.phone?.replace(/\D/g, '').replace(/^0/, '60');
 
     const message = encodeURIComponent(
-  `Hi ${balance.student},
+      `Hi ${balance.student},
 
-  This is a friendly reminder from JEP Image Makeup Academy.
+This is a friendly reminder from JEP Image Makeup Academy.
 
-  Our records show an outstanding balance of RM ${balance.outstandingAmount.toLocaleString()}.
+Our records show an outstanding balance of RM ${balance.outstandingAmount.toLocaleString()}.
 
-  Due Date: ${balance.nextDueDate}
+Due Date: ${balance.nextDueDate}
 
-  If you have already made the payment, please ignore this message.
+If you have already made the payment, please ignore this message.
 
-  Thank you.`
+Thank you.`
     );
 
     if (phone) {
       window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
     }
 
-    alert(
-      `Notification created.\nWhatsApp reminder opened for ${balance.student}.`
-    );
+    alert(`Notification created.\nWhatsApp reminder opened for ${balance.student}.`);
   }
 
   const totalOutstanding = balances.reduce(
@@ -187,6 +214,11 @@ export default function OutstandingBalances() {
 
   const totalPaid = balances.reduce(
     (acc, balance) => acc + balance.paidAmount,
+    0
+  );
+
+  const totalFee = balances.reduce(
+    (acc, balance) => acc + balance.totalFee,
     0
   );
 
@@ -203,12 +235,33 @@ export default function OutstandingBalances() {
     (balance) => balance.status === 'Overdue'
   ).length;
 
+  if (isStudentView && !studentProfileFound) {
+    return (
+      <div className="space-y-6">
+        <div>
+          <h1 className="text-3xl text-[#284342]">My Payments</h1>
+          <p className="text-[#6b6b6b] mt-1">
+            View your own tuition fee and outstanding balance.
+          </p>
+        </div>
+
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-yellow-800">
+          Your student profile was not found. Please complete student registration first or wait for admin approval.
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl text-[#284342]">Outstanding Balances</h1>
+        <h1 className="text-3xl text-[#284342]">
+          {isStudentView ? 'My Payments' : 'Outstanding Balances'}
+        </h1>
         <p className="text-[#6b6b6b] mt-1">
-          Follow up unpaid balances and overdue student payments
+          {isStudentView
+            ? 'View your payment progress, next due date and outstanding amount.'
+            : 'Follow up unpaid balances and overdue student payments.'}
         </p>
       </div>
 
@@ -217,7 +270,9 @@ export default function OutstandingBalances() {
           <div className="flex items-center gap-3 mb-2">
             <DollarSign size={24} className="text-red-700" />
             <div>
-              <p className="text-sm text-[#6b6b6b]">Total Outstanding</p>
+              <p className="text-sm text-[#6b6b6b]">
+                {isStudentView ? 'My Outstanding' : 'Total Outstanding'}
+              </p>
               <p className="text-2xl text-red-700">
                 RM {totalOutstanding.toLocaleString()}
               </p>
@@ -226,17 +281,19 @@ export default function OutstandingBalances() {
         </div>
 
         <SummaryCard
-          label="Students Owing"
-          value={balances.length.toString()}
+          label={isStudentView ? 'Total Fee' : 'Students Owing'}
+          value={isStudentView ? `RM ${totalFee.toLocaleString()}` : balances.length.toString()}
           color="text-[#284342]"
         />
+
         <SummaryCard
-          label="Critical"
-          value={criticalCount.toString()}
-          color="text-red-700"
+          label={isStudentView ? 'Paid Amount' : 'Critical'}
+          value={isStudentView ? `RM ${totalPaid.toLocaleString()}` : criticalCount.toString()}
+          color={isStudentView ? 'text-green-700' : 'text-red-700'}
         />
+
         <SummaryCard
-          label="Collection Rate"
+          label="Payment Progress"
           value={`${collectionRate}%`}
           color="text-green-700"
         />
@@ -245,42 +302,60 @@ export default function OutstandingBalances() {
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)] flex items-center justify-between">
           <h2 className="text-lg text-[#284342]">
-            Collection Follow-Up List
+            {isStudentView ? 'My Payment Plan' : 'Collection Follow-Up List'}
           </h2>
 
-          <p className="text-sm text-[#6b6b6b]">
-            {overdueCount} overdue account(s)
-          </p>
+          {!isStudentView && (
+            <p className="text-sm text-[#6b6b6b]">
+              {overdueCount} overdue account(s)
+            </p>
+          )}
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
               <tr>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Student</th>
+                {!isStudentView && (
+                  <th className="px-6 py-4 text-left text-sm text-[#284342]">
+                    Student
+                  </th>
+                )}
                 <th className="px-6 py-4 text-left text-sm text-[#284342]">Course</th>
                 <th className="px-6 py-4 text-left text-sm text-[#284342]">Payment Progress</th>
                 <th className="px-6 py-4 text-left text-sm text-[#284342]">Outstanding</th>
                 <th className="px-6 py-4 text-left text-sm text-[#284342]">Next Due</th>
                 <th className="px-6 py-4 text-left text-sm text-[#284342]">Overdue</th>
                 <th className="px-6 py-4 text-left text-sm text-[#284342]">Status</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Actions</th>
+                {!isStudentView && (
+                  <th className="px-6 py-4 text-left text-sm text-[#284342]">
+                    Actions
+                  </th>
+                )}
               </tr>
             </thead>
 
             <tbody className="divide-y divide-[rgba(40,67,66,0.1)]">
               {loading && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-[#6b6b6b]">
-                    Loading outstanding balances...
+                  <td
+                    colSpan={isStudentView ? 6 : 8}
+                    className="px-6 py-8 text-center text-[#6b6b6b]"
+                  >
+                    Loading payment information...
                   </td>
                 </tr>
               )}
 
               {!loading && balances.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-[#6b6b6b]">
-                    No outstanding balances found.
+                  <td
+                    colSpan={isStudentView ? 6 : 8}
+                    className="px-6 py-8 text-center text-[#6b6b6b]"
+                  >
+                    {isStudentView
+                      ? 'No payment plan found.'
+                      : 'No outstanding balances found.'}
                   </td>
                 </tr>
               )}
@@ -296,15 +371,19 @@ export default function OutstandingBalances() {
                     <tr
                       key={balance.id}
                       className={`hover:bg-[#f8f8f6] transition-colors ${
-                        balance.status === 'Critical' ? 'bg-red-50' : ''
+                        balance.status === 'Critical' && !isStudentView
+                          ? 'bg-red-50'
+                          : ''
                       }`}
                     >
-                      <td className="px-6 py-4">
-                        <p className="text-sm text-[#284342]">{balance.student}</p>
-                        <p className="text-xs text-[#6b6b6b] mt-1">
-                          {balance.phone || 'No phone'}
-                        </p>
-                      </td>
+                      {!isStudentView && (
+                        <td className="px-6 py-4">
+                          <p className="text-sm text-[#284342]">{balance.student}</p>
+                          <p className="text-xs text-[#6b6b6b] mt-1">
+                            {balance.phone || 'No phone'}
+                          </p>
+                        </td>
+                      )}
 
                       <td className="px-6 py-4 text-sm text-[#6b6b6b]">
                         {balance.course}
@@ -348,39 +427,43 @@ export default function OutstandingBalances() {
                         <StatusBadge status={balance.status} />
                       </td>
 
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2">
-                          <button
-                            onClick={() =>
-                              navigate(`/app/students/profile/${balance.studentId}`)
-                            }
-                            className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                            title="View Student"
-                          >
-                            <User size={16} className="text-[#284342]" />
-                          </button>
+                      {!isStudentView && (
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() =>
+                                navigate(`/app/students/profile/${balance.studentId}`)
+                              }
+                              className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
+                              title="View Student"
+                            >
+                              <User size={16} className="text-[#284342]" />
+                            </button>
 
-                          <button
-                            onClick={() => navigate('/app/payments/installments')}
-                            className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                            title="Record Payment"
-                          >
-                            <CreditCard size={16} className="text-[#284342]" />
-                          </button>
+                            <button
+                              onClick={() => navigate('/app/payments/installments')}
+                              className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
+                              title="Record Payment"
+                            >
+                              <CreditCard size={16} className="text-[#284342]" />
+                            </button>
 
-                          <button
-                            onClick={() => sendReminder(balance)}
-                            className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                            title="Send Reminder"
-                          >
-                            <Send size={16} className="text-[#284342]" />
-                          </button>
+                            {canManagePayments && (
+                              <button
+                                onClick={() => sendReminder(balance)}
+                                className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
+                                title="Send Reminder"
+                              >
+                                <Send size={16} className="text-[#284342]" />
+                              </button>
+                            )}
 
-                          {balance.status === 'Critical' && (
-                            <AlertTriangle size={16} className="text-red-700" />
-                          )}
-                        </div>
-                      </td>
+                            {balance.status === 'Critical' && (
+                              <AlertTriangle size={16} className="text-red-700" />
+                            )}
+                          </div>
+                        </td>
+                      )}
                     </tr>
                   );
                 })}
@@ -459,4 +542,3 @@ function StatusBadge({ status }: { status: OutstandingBalance['status'] }) {
     </span>
   );
 }
-

@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react';
 import { DollarSign, Calendar, CheckCircle2, X } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { getCurrentUser } from '../../utils/session';
+import { getCurrentStudentId } from '../../utils/studentAccess';
+
 
 interface InstallmentSchedule {
   id: string;
@@ -27,74 +30,97 @@ export default function Installments() {
   const [referenceNo, setReferenceNo] = useState('');
   const [recording, setRecording] = useState(false);
 
+  const currentUser = getCurrentUser();
+const isStudentView = currentUser.role === 'student';
+
+const canRecordPayment =
+  currentUser.role === 'super_admin' ||
+  currentUser.role === 'admin' ||
+  currentUser.role === 'finance';
+
   useEffect(() => {
     fetchInstallments();
   }, []);
 
   async function fetchInstallments() {
-    setLoading(true);
+  setLoading(true);
 
-    const { data, error } = await supabase
-      .from('installments')
-      .select(`
+  let query = supabase
+    .from('installments')
+    .select(`
+      id,
+      payment_plan_id,
+      amount,
+      due_date,
+      paid_date,
+      status,
+      payment_plans!inner(
         id,
-        payment_plan_id,
-        amount,
-        due_date,
-        paid_date,
+        student_id,
+        final_amount,
         status,
-        payment_plans(
-          id,
-          student_id,
-          final_amount,
-          status,
-          students(full_name),
-          enrollments(
-            class_batches(
-              courses(course_name)
-            )
-          ),
-          installments(id, due_date)
-        )
-      `)
-      .order('due_date', { ascending: true });
+        students(full_name),
+        enrollments(
+          class_batches(
+            courses(course_name)
+          )
+        ),
+        installments(id, due_date)
+      )
+    `)
+    .order('due_date', { ascending: true });
 
-    if (error) {
-      console.error('Error fetching installments:', error.message);
+  if (isStudentView) {
+    const studentId = await getCurrentStudentId();
+
+    if (!studentId) {
+      setInstallments([]);
       setLoading(false);
       return;
     }
 
-    const mapped: InstallmentSchedule[] = (data || []).map((item: any) => {
-      const plan = getSingle(item.payment_plans);
-      const allInstallments = plan?.installments || [];
-      const sortedInstallments = [...allInstallments].sort((a: any, b: any) =>
-        String(a.due_date).localeCompare(String(b.due_date))
-      );
-
-      const installmentIndex = sortedInstallments.findIndex(
-        (inst: any) => inst.id === item.id
-      );
-
-      return {
-        id: item.id,
-        paymentPlanId: item.payment_plan_id,
-        studentId: plan?.student_id || '',
-        student: getStudentName(plan?.students),
-        course: getCourseNameFromPlan(plan),
-        totalFee: Number(plan?.final_amount || 0),
-        installmentNumber: installmentIndex >= 0 ? installmentIndex + 1 : 1,
-        totalInstallments: sortedInstallments.length || 1,
-        amount: Number(item.amount || 0),
-        dueDate: item.due_date || '-',
-        paidDate: item.paid_date ? item.paid_date.slice(0, 10) : undefined,
-        status: mapInstallmentStatus(item.status, item.due_date),
-      };
-    });
-
-    setInstallments(mapped);
-    setLoading(false);
+    query = query.eq('payment_plans.student_id', studentId);
   }
+
+  const { data, error } = await query;
+
+  if (error) {
+    console.error('Error fetching installments:', error.message);
+    setLoading(false);
+    return;
+  }
+
+  const mapped: InstallmentSchedule[] = (data || []).map((item: any) => {
+    const plan = getSingle(item.payment_plans);
+    const allInstallments = plan?.installments || [];
+
+    const sortedInstallments = [...allInstallments].sort((a: any, b: any) =>
+      String(a.due_date).localeCompare(String(b.due_date))
+    );
+
+    const installmentIndex = sortedInstallments.findIndex(
+      (inst: any) => inst.id === item.id
+    );
+
+    return {
+      id: item.id,
+      paymentPlanId: item.payment_plan_id,
+      studentId: plan?.student_id || '',
+      student: getStudentName(plan?.students),
+      course: getCourseNameFromPlan(plan),
+      totalFee: Number(plan?.final_amount || 0),
+      installmentNumber: installmentIndex >= 0 ? installmentIndex + 1 : 1,
+      totalInstallments: sortedInstallments.length || 1,
+      amount: Number(item.amount || 0),
+      dueDate: item.due_date || '-',
+      paidDate: item.paid_date ? item.paid_date.slice(0, 10) : undefined,
+      status: mapInstallmentStatus(item.status, item.due_date),
+    };
+  });
+
+  setInstallments(mapped);
+  setLoading(false);
+}
 
   async function recordPayment() {
     if (!selectedInstallment) return;
@@ -220,9 +246,14 @@ export default function Installments() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl text-[#284342]">Installments</h1>
+        <h1 className="text-3xl text-[#284342]">
+          {isStudentView ? 'My Installments' : 'Installments'}
+        </h1>
+
         <p className="text-[#6b6b6b] mt-1">
-          Track and manage payment installment schedules
+          {isStudentView
+            ? 'View your installment schedule and payment due dates.'
+            : 'Track and manage payment installment schedules'}
         </p>
       </div>
 
@@ -242,7 +273,11 @@ export default function Installments() {
           <table className="w-full">
             <thead className="bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
               <tr>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Student</th>
+                {!isStudentView && (
+                  <th className="px-6 py-4 text-left text-sm text-[#284342]">
+                    Student
+                  </th>
+                )}
                 <th className="px-6 py-4 text-left text-sm text-[#284342]">Course</th>
                 <th className="px-6 py-4 text-left text-sm text-[#284342]">Installment</th>
                 <th className="px-6 py-4 text-left text-sm text-[#284342]">Amount</th>
@@ -256,7 +291,7 @@ export default function Installments() {
             <tbody className="divide-y divide-[rgba(40,67,66,0.1)]">
               {loading && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-[#6b6b6b]">
+                  <td colSpan={isStudentView ? 7 : 8} className="px-6 py-8 text-center text-[#6b6b6b]">
                     Loading installments...
                   </td>
                 </tr>
@@ -264,7 +299,7 @@ export default function Installments() {
 
               {!loading && installments.length === 0 && (
                 <tr>
-                  <td colSpan={8} className="px-6 py-8 text-center text-[#6b6b6b]">
+                  <td colSpan={isStudentView ? 7 : 8} className="px-6 py-8 text-center text-[#6b6b6b]">
                     No installments found.
                   </td>
                 </tr>
@@ -273,7 +308,11 @@ export default function Installments() {
               {!loading &&
                 installments.map((inst) => (
                   <tr key={inst.id} className="hover:bg-[#f8f8f6] transition-colors">
-                    <td className="px-6 py-4 text-sm text-[#284342]">{inst.student}</td>
+                    {!isStudentView && (
+                      <td className="px-6 py-4 text-sm text-[#284342]">
+                        {inst.student}
+                      </td>
+                    )}
                     <td className="px-6 py-4 text-sm text-[#6b6b6b]">{inst.course}</td>
                     <td className="px-6 py-4 text-sm text-[#6b6b6b]">
                       {inst.installmentNumber}/{inst.totalInstallments}
@@ -300,16 +339,18 @@ export default function Installments() {
                     <td className="px-6 py-4">
                       <StatusBadge status={inst.status} />
                     </td>
-                    <td className="px-6 py-4">
-                      {inst.status !== 'Paid' ? (
+                 <td className="px-6 py-4">
+                      {canRecordPayment && inst.status !== 'Paid' ? (
                         <button
                           onClick={() => setSelectedInstallment(inst)}
                           className="px-4 py-2 rounded-lg bg-[#284342] text-[#e9da95] hover:bg-[#1a2f2e] transition-colors text-sm"
                         >
                           Record Payment
                         </button>
-                      ) : (
+                      ) : inst.status === 'Paid' ? (
                         <span className="text-sm text-green-700">Completed</span>
+                      ) : (
+                        <span className="text-sm text-[#6b6b6b]">Pending Payment</span>
                       )}
                     </td>
                   </tr>
@@ -319,11 +360,14 @@ export default function Installments() {
         </div>
       </div>
 
-      {selectedInstallment && (
+      {selectedInstallment && canRecordPayment && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-lg w-full p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl text-[#284342]">Record Payment</h2>
+              
+   <h2 className="text-xl text-[#284342]">Record Payment</h2>
+
+             
               <button onClick={() => setSelectedInstallment(null)}>
                 <X size={20} className="text-[#284342]" />
               </button>

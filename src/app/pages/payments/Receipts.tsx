@@ -10,6 +10,8 @@ import {
   Printer,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { getCurrentUser } from '../../utils/session';
+import { getCurrentStudentId } from '../../utils/studentAccess';
 
 interface PaymentReceipt {
   id: string;
@@ -28,8 +30,13 @@ interface PaymentReceipt {
 }
 
 export default function Receipts() {
+  const currentUser = getCurrentUser();
+  const isStudentView = currentUser.role === 'student';
+
   const [receipts, setReceipts] = useState<PaymentReceipt[]>([]);
-  const [selectedReceipt, setSelectedReceipt] = useState<PaymentReceipt | null>(null);
+  const [selectedReceipt, setSelectedReceipt] = useState<PaymentReceipt | null>(
+    null
+  );
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -39,7 +46,7 @@ export default function Receipts() {
   async function fetchReceipts() {
     setLoading(true);
 
-    const { data, error } = await supabase
+    let query = supabase
       .from('receipts')
       .select(`
         id,
@@ -47,8 +54,9 @@ export default function Receipts() {
         receipt_number,
         receipt_url,
         issued_at,
-        payments(
+        payments!inner(
           id,
+          student_id,
           amount_paid,
           payment_method,
           payment_reference,
@@ -66,6 +74,20 @@ export default function Receipts() {
         )
       `)
       .order('issued_at', { ascending: false });
+
+    if (isStudentView) {
+      const studentId = await getCurrentStudentId();
+
+      if (!studentId) {
+        setReceipts([]);
+        setLoading(false);
+        return;
+      }
+
+      query = query.eq('payments.student_id', studentId);
+    }
+
+    const { data, error } = await query;
 
     if (error) {
       console.error('Error fetching receipts:', error.message);
@@ -104,7 +126,7 @@ export default function Receipts() {
 
   async function logReceiptAction(action: string, receipt: PaymentReceipt) {
     await supabase.from('audit_logs').insert({
-      user_id: null,
+      user_id: currentUser.id || null,
       action,
       module: 'Receipts',
       target_id: receipt.id,
@@ -113,6 +135,8 @@ export default function Receipts() {
         receipt_number: receipt.receiptNumber,
         student: receipt.student,
         amount: receipt.amount,
+        action_by: currentUser.email,
+        role: currentUser.role,
       },
       created_at: new Date().toISOString(),
     });
@@ -123,69 +147,70 @@ export default function Receipts() {
     logReceiptAction('Viewed Receipt', receipt);
   }
 
-  
-async function downloadReceipt(receipt: PaymentReceipt) {
-  await logReceiptAction('Downloaded Receipt PDF', receipt);
+  async function downloadReceipt(receipt: PaymentReceipt) {
+    await logReceiptAction('Downloaded Receipt PDF', receipt);
 
-  const hiddenContainer = document.createElement('div');
-  hiddenContainer.style.position = 'fixed';
-  hiddenContainer.style.left = '-9999px';
-  hiddenContainer.style.top = '0';
-  hiddenContainer.style.width = '800px';
-  hiddenContainer.innerHTML = generateReceiptHtml(receipt);
+    const hiddenContainer = document.createElement('div');
+    hiddenContainer.style.position = 'fixed';
+    hiddenContainer.style.left = '-9999px';
+    hiddenContainer.style.top = '0';
+    hiddenContainer.style.width = '800px';
+    hiddenContainer.innerHTML = generateReceiptHtml(receipt);
 
-  document.body.appendChild(hiddenContainer);
+    document.body.appendChild(hiddenContainer);
 
-  const receiptElement = hiddenContainer.querySelector('.receipt') as HTMLElement;
+    const receiptElement = hiddenContainer.querySelector(
+      '.receipt'
+    ) as HTMLElement;
 
-  if (!receiptElement) {
+    if (!receiptElement) {
+      document.body.removeChild(hiddenContainer);
+      alert('Unable to generate receipt PDF.');
+      return;
+    }
+
+    const canvas = await html2canvas(receiptElement, {
+      scale: 2,
+      backgroundColor: '#ffffff',
+    });
+
+    const imgData = canvas.toDataURL('image/png');
+
+    const pdf = new jsPDF('p', 'mm', 'a4');
+    const pageWidth = pdf.internal.pageSize.getWidth();
+    const pageHeight = pdf.internal.pageSize.getHeight();
+
+    const imgWidth = pageWidth - 20;
+    const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+    pdf.addImage(
+      imgData,
+      'PNG',
+      10,
+      10,
+      imgWidth,
+      Math.min(imgHeight, pageHeight - 20)
+    );
+
+    pdf.save(`${receipt.receiptNumber}.pdf`);
+
     document.body.removeChild(hiddenContainer);
-    alert('Unable to generate receipt PDF.');
-    return;
   }
 
-  const canvas = await html2canvas(receiptElement, {
-    scale: 2,
-    backgroundColor: '#ffffff',
-  });
+  async function printReceipt(receipt: PaymentReceipt) {
+    await logReceiptAction('Printed Receipt', receipt);
 
-  const imgData = canvas.toDataURL('image/png');
+    const printWindow = window.open('', '_blank');
 
-  const pdf = new jsPDF('p', 'mm', 'a4');
-  const pageWidth = pdf.internal.pageSize.getWidth();
-  const pageHeight = pdf.internal.pageSize.getHeight();
-
-  const imgWidth = pageWidth - 20;
-  const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-  pdf.addImage(
-    imgData,
-    'PNG',
-    10,
-    10,
-    imgWidth,
-    Math.min(imgHeight, pageHeight - 20)
-  );
-
-  pdf.save(`${receipt.receiptNumber}.pdf`);
-
-  document.body.removeChild(hiddenContainer);
-}
-
-    function printReceipt(receipt: PaymentReceipt) {
-      logReceiptAction('Printed Receipt', receipt);
-
-      const printWindow = window.open('', '_blank');
-
-      if (!printWindow) {
-        alert('Unable to open print window.');
-        return;
-      }
-
-      printWindow.document.write(generateReceiptHtml(receipt));
-      printWindow.document.close();
-      printWindow.print();
+    if (!printWindow) {
+      alert('Unable to open print window.');
+      return;
     }
+
+    printWindow.document.write(generateReceiptHtml(receipt));
+    printWindow.document.close();
+    printWindow.print();
+  }
 
   const totalAmount = receipts
     .filter((receipt) => receipt.status === 'Issued')
@@ -201,9 +226,14 @@ async function downloadReceipt(receipt: PaymentReceipt) {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl text-[#284342]">Payment Receipts</h1>
+          <h1 className="text-3xl text-[#284342]">
+            {isStudentView ? 'My Receipts' : 'Payment Receipts'}
+          </h1>
+
           <p className="text-[#6b6b6b] mt-1">
-            View, preview, and download payment receipts
+            {isStudentView
+              ? 'View, print and download your own payment receipts.'
+              : 'View, preview, print and download payment receipts.'}
           </p>
         </div>
 
@@ -218,14 +248,14 @@ async function downloadReceipt(receipt: PaymentReceipt) {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <SummaryCard
           icon={<ReceiptIcon size={24} className="text-[#284342]" />}
-          label="Total Receipts"
+          label={isStudentView ? 'My Receipts' : 'Total Receipts'}
           value={receipts.length.toString()}
           color="text-[#284342]"
         />
 
         <SummaryCard
           icon={<DollarSign size={24} className="text-green-700" />}
-          label="Total Amount"
+          label={isStudentView ? 'My Paid Amount' : 'Total Amount'}
           value={`RM ${totalAmount.toLocaleString()}`}
           color="text-green-700"
         />
@@ -240,29 +270,56 @@ async function downloadReceipt(receipt: PaymentReceipt) {
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-lg text-[#284342]">All Receipts</h2>
+          <h2 className="text-lg text-[#284342]">
+            {isStudentView ? 'My Receipt History' : 'All Receipts'}
+          </h2>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
               <tr>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Receipt No.</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Student</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Course</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Amount</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Payment Method</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Reference</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Issued Date</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Status</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Actions</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">
+                  Receipt No.
+                </th>
+
+                {!isStudentView && (
+                  <th className="px-6 py-4 text-left text-sm text-[#284342]">
+                    Student
+                  </th>
+                )}
+
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">
+                  Course
+                </th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">
+                  Amount
+                </th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">
+                  Payment Method
+                </th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">
+                  Reference
+                </th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">
+                  Issued Date
+                </th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">
+                  Status
+                </th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">
+                  Actions
+                </th>
               </tr>
             </thead>
 
             <tbody className="divide-y divide-[rgba(40,67,66,0.1)]">
               {loading && (
                 <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-[#6b6b6b]">
+                  <td
+                    colSpan={isStudentView ? 8 : 9}
+                    className="px-6 py-8 text-center text-[#6b6b6b]"
+                  >
                     Loading receipts...
                   </td>
                 </tr>
@@ -270,41 +327,59 @@ async function downloadReceipt(receipt: PaymentReceipt) {
 
               {!loading && receipts.length === 0 && (
                 <tr>
-                  <td colSpan={9} className="px-6 py-8 text-center text-[#6b6b6b]">
-                    No receipts found.
+                  <td
+                    colSpan={isStudentView ? 8 : 9}
+                    className="px-6 py-8 text-center text-[#6b6b6b]"
+                  >
+                    {isStudentView
+                      ? 'No receipts found for your account.'
+                      : 'No receipts found.'}
                   </td>
                 </tr>
               )}
 
               {!loading &&
                 receipts.map((receipt) => (
-                  <tr key={receipt.id} className="hover:bg-[#f8f8f6] transition-colors">
+                  <tr
+                    key={receipt.id}
+                    className="hover:bg-[#f8f8f6] transition-colors"
+                  >
                     <td className="px-6 py-4 text-sm text-[#284342]">
                       {receipt.receiptNumber}
                     </td>
-                    <td className="px-6 py-4 text-sm text-[#6b6b6b]">
-                      {receipt.student}
-                    </td>
+
+                    {!isStudentView && (
+                      <td className="px-6 py-4 text-sm text-[#6b6b6b]">
+                        {receipt.student}
+                      </td>
+                    )}
+
                     <td className="px-6 py-4 text-sm text-[#6b6b6b]">
                       {receipt.course}
                     </td>
+
                     <td className="px-6 py-4 text-sm text-[#284342]">
                       RM {receipt.amount.toLocaleString()}
                     </td>
+
                     <td className="px-6 py-4 text-sm text-[#6b6b6b]">
                       {receipt.paymentMethod}
                     </td>
+
                     <td className="px-6 py-4 text-sm text-[#6b6b6b]">
                       {receipt.paymentReference}
                     </td>
+
                     <td className="px-6 py-4 text-sm text-[#6b6b6b]">
                       {receipt.date}
                     </td>
+
                     <td className="px-6 py-4">
                       <span className="text-xs px-3 py-1 rounded-full bg-green-100 text-green-700">
                         {receipt.status}
                       </span>
                     </td>
+
                     <td className="px-6 py-4">
                       <div className="flex items-center gap-2">
                         <button
@@ -398,8 +473,11 @@ function ReceiptPreview({ receipt }: { receipt: PaymentReceipt }) {
         <div className="flex items-center justify-between border-y border-[rgba(40,67,66,0.2)] py-4 mb-6">
           <div>
             <p className="text-xs text-[#6b6b6b] mb-1">Receipt No.</p>
-            <p className="text-sm text-[#284342]">{receipt.receiptNumber}</p>
+            <p className="text-sm text-[#284342]">
+              {receipt.receiptNumber}
+            </p>
           </div>
+
           <div className="text-right">
             <p className="text-xs text-[#6b6b6b] mb-1">Issued Date</p>
             <p className="text-sm text-[#284342]">{receipt.date}</p>
@@ -431,7 +509,9 @@ function ReceiptPreview({ receipt }: { receipt: PaymentReceipt }) {
           </div>
 
           <div className="text-right">
-            <p className="text-sm text-[#284342]">Thank you for your payment.</p>
+            <p className="text-sm text-[#284342]">
+              Thank you for your payment.
+            </p>
             <p className="text-xs text-[#6b6b6b] mt-1">
               This is a computer-generated receipt.
             </p>

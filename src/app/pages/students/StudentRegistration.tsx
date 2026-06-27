@@ -3,6 +3,7 @@ import SignatureCanvas from 'react-signature-canvas';
 import { supabase } from '../../lib/supabase';
 import { useNavigate } from 'react-router';
 import { Upload, X } from 'lucide-react';
+import { notifyStudentRegistrationSubmitted } from '../../services/systemNotificationService';
 
 interface Course {
   id: string;
@@ -13,15 +14,21 @@ export default function StudentRegistration() {
   const navigate = useNavigate();
   const signatureRef = useRef<SignatureCanvas | null>(null);
 
+  const signupUserId = localStorage.getItem('studentSignupUserId') || '';
+  const signupName = localStorage.getItem('studentSignupName') || '';
+  const signupEmail = localStorage.getItem('studentSignupEmail') || '';
+
+  const isSignupFlow = !!signupUserId;
+
   const [courses, setCourses] = useState<Course[]>([]);
   const [icFile, setIcFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
-    fullName: '',
+    fullName: signupName,
     icPassport: '',
     phone: '',
-    email: '',
+    email: signupEmail,
     emergencyContact: '',
     emergencyRelation: '',
     makeupExperience: '',
@@ -56,8 +63,18 @@ export default function StudentRegistration() {
     }
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+
+    if (!formData.fullName.trim()) {
+      alert('Please enter full name.');
+      return;
+    }
+
+    if (!formData.email.trim()) {
+      alert('Please enter email.');
+      return;
+    }
 
     if (!formData.courseId) {
       alert('Please select a course.');
@@ -77,6 +94,7 @@ export default function StudentRegistration() {
     setSubmitting(true);
 
     const duplicate = await checkDuplicateStudent();
+
     if (duplicate) {
       setSubmitting(false);
       return;
@@ -87,6 +105,7 @@ export default function StudentRegistration() {
     const { data: newStudent, error: studentError } = await supabase
       .from('students')
       .insert({
+        user_id: signupUserId || null,
         student_code: studentCode,
         full_name: formData.fullName.trim(),
         ic_passport: formData.icPassport.trim(),
@@ -110,12 +129,14 @@ export default function StudentRegistration() {
     }
 
     const icUrl = await uploadIcDocument(newStudent.id);
+
     if (!icUrl) {
       setSubmitting(false);
       return;
     }
 
     const signatureUrl = await uploadSignature(newStudent.id);
+
     if (!signatureUrl) {
       setSubmitting(false);
       return;
@@ -131,7 +152,9 @@ export default function StudentRegistration() {
 
     if (updateStudentError) {
       setSubmitting(false);
-      alert(`Student created, but document URLs failed: ${updateStudentError.message}`);
+      alert(
+        `Student created, but document URLs failed: ${updateStudentError.message}`
+      );
       return;
     }
 
@@ -169,12 +192,18 @@ export default function StudentRegistration() {
 
     if (applicationError) {
       setSubmitting(false);
-      alert(`Student created, but failed to send approval: ${applicationError.message}`);
+      alert(
+        `Student created, but failed to send approval: ${applicationError.message}`
+      );
       return;
     }
 
+    await notifyStudentRegistrationSubmitted(formData.fullName.trim(), {
+      userId: signupUserId || null,
+    });
+
     await supabase.from('audit_logs').insert({
-      user_id: null,
+      user_id: signupUserId || null,
       action: 'Student Registration Submitted',
       module: 'Student Registration',
       target_id: newStudent.id,
@@ -183,14 +212,25 @@ export default function StudentRegistration() {
         student_name: formData.fullName,
         email: formData.email,
         course_id: formData.courseId,
+        user_id: signupUserId || null,
       },
       created_at: new Date().toISOString(),
     });
 
+    localStorage.removeItem('studentSignupUserId');
+    localStorage.removeItem('studentSignupName');
+    localStorage.removeItem('studentSignupEmail');
+
     setSubmitting(false);
-    alert('Application submitted successfully. It has been sent for approval.');
-    navigate('/app/students/approval');
-  };
+
+    alert(
+      isSignupFlow
+        ? 'Application submitted successfully. Please wait for admin approval before logging in.'
+        : 'Application submitted successfully. It has been sent for approval.'
+    );
+
+    navigate('/');
+  }
 
   async function checkDuplicateStudent() {
     const { data: existingByIc } = await supabase
@@ -286,29 +326,45 @@ export default function StudentRegistration() {
     return new Blob([u8arr], { type: mime });
   }
 
-  const handleChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
-  ) => {
+  function handleChange(
+    e: React.ChangeEvent<
+      HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+    >
+  ) {
     const { name, value, type } = e.target;
 
     setFormData((prev) => ({
       ...prev,
-      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : value,
+      [name]:
+        type === 'checkbox'
+          ? (e.target as HTMLInputElement).checked
+          : value,
     }));
-  };
+  }
 
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
         <h1 className="text-3xl text-[#284342]">Student Registration</h1>
         <p className="text-[#6b6b6b] mt-1">
-          Register a new student for JEP Academy
+          {isSignupFlow
+            ? 'Complete your student profile before admin approval.'
+            : 'Register a new student for JEP Academy.'}
         </p>
       </div>
 
+      {isSignupFlow && (
+        <div className="bg-[#e9da95]/20 border border-[#e9da95] rounded-xl p-4 text-sm text-[#284342]">
+          Your account has been created. Please complete this registration form
+          so admin can review and approve your student access.
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-xl text-[#284342] mb-6">Personal Information</h2>
+          <h2 className="text-xl text-[#284342] mb-6">
+            Personal Information
+          </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <TextInput
@@ -319,6 +375,7 @@ export default function StudentRegistration() {
               required
               placeholder="As per IC/Passport"
               full
+              disabled={isSignupFlow && !!signupName}
             />
 
             <TextInput
@@ -348,6 +405,7 @@ export default function StudentRegistration() {
               required
               placeholder="student@email.com"
               full
+              disabled={isSignupFlow && !!signupEmail}
             />
           </div>
         </div>
@@ -359,6 +417,7 @@ export default function StudentRegistration() {
             <label className="block text-sm text-[#284342] mb-2">
               Course <span className="text-red-500">*</span>
             </label>
+
             <select
               name="courseId"
               value={formData.courseId}
@@ -366,7 +425,10 @@ export default function StudentRegistration() {
               required
               className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
             >
-              {courses.length === 0 && <option value="">No course available</option>}
+              {courses.length === 0 && (
+                <option value="">No course available</option>
+              )}
+
               {courses.map((course) => (
                 <option key={course.id} value={course.id}>
                   {course.course_name}
@@ -393,6 +455,7 @@ export default function StudentRegistration() {
               <label className="block text-sm text-[#284342] mb-2">
                 Relationship <span className="text-red-500">*</span>
               </label>
+
               <select
                 name="emergencyRelation"
                 value={formData.emergencyRelation}
@@ -412,13 +475,16 @@ export default function StudentRegistration() {
         </div>
 
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-xl text-[#284342] mb-6">Background Information</h2>
+          <h2 className="text-xl text-[#284342] mb-6">
+            Background Information
+          </h2>
 
           <div className="space-y-6">
             <div>
               <label className="block text-sm text-[#284342] mb-2">
                 Makeup Experience
               </label>
+
               <select
                 name="makeupExperience"
                 value={formData.makeupExperience}
@@ -427,7 +493,9 @@ export default function StudentRegistration() {
               >
                 <option value="">Select Experience Level</option>
                 <option value="Beginner">Beginner (No experience)</option>
-                <option value="Some Experience">Some Experience (1-2 years)</option>
+                <option value="Some Experience">
+                  Some Experience (1-2 years)
+                </option>
                 <option value="Intermediate">Intermediate (3-5 years)</option>
                 <option value="Advanced">Advanced (5+ years)</option>
                 <option value="Professional">Professional</option>
@@ -438,6 +506,7 @@ export default function StudentRegistration() {
               <label className="block text-sm text-[#284342] mb-2">
                 Health Conditions / Allergies
               </label>
+
               <textarea
                 name="healthConditions"
                 value={formData.healthConditions}
@@ -452,6 +521,7 @@ export default function StudentRegistration() {
               <label className="block text-sm text-[#284342] mb-2">
                 Preferred Language
               </label>
+
               <select
                 name="languagePreference"
                 value={formData.languagePreference}
@@ -504,12 +574,16 @@ export default function StudentRegistration() {
         </div>
 
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-xl text-[#284342] mb-6">Consent & Agreement</h2>
+          <h2 className="text-xl text-[#284342] mb-6">
+            Consent & Agreement
+          </h2>
 
           <div className="space-y-4">
             <div className="p-4 bg-[#f8f8f6] rounded-lg">
               <p className="text-sm text-[#6b6b6b] mb-4">
-                I consent to JEP Image Makeup Academy collecting, using, and processing my personal data in accordance with the Personal Data Protection Act 2010.
+                I consent to JEP Image Makeup Academy collecting, using, and
+                processing my personal data in accordance with the Personal Data
+                Protection Act 2010.
               </p>
 
               <label className="flex items-start gap-3 cursor-pointer">
@@ -521,6 +595,7 @@ export default function StudentRegistration() {
                   required
                   className="mt-1 w-5 h-5 rounded border-[rgba(40,67,66,0.2)] text-[#284342] focus:ring-2 focus:ring-[#284342]"
                 />
+
                 <span className="text-sm text-[#284342]">
                   I have read and agree to the terms and conditions{' '}
                   <span className="text-red-500">*</span>
@@ -533,6 +608,7 @@ export default function StudentRegistration() {
                 <p className="text-sm text-[#284342]">
                   Digital Signature <span className="text-red-500">*</span>
                 </p>
+
                 <button
                   type="button"
                   onClick={() => signatureRef.current?.clear()}
@@ -564,7 +640,7 @@ export default function StudentRegistration() {
         <div className="flex items-center justify-end gap-4">
           <button
             type="button"
-            onClick={() => navigate('/app/students/list')}
+            onClick={() => navigate(isSignupFlow ? '/' : '/app/students/list')}
             className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
           >
             Cancel
@@ -592,6 +668,7 @@ function TextInput({
   placeholder = '',
   type = 'text',
   full = false,
+  disabled = false,
 }: {
   label: string;
   name: string;
@@ -601,6 +678,7 @@ function TextInput({
   placeholder?: string;
   type?: string;
   full?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <div className={full ? 'md:col-span-2' : ''}>
@@ -615,7 +693,8 @@ function TextInput({
         onChange={onChange}
         required={required}
         placeholder={placeholder}
-        className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+        disabled={disabled}
+        className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342] disabled:bg-[#f8f8f6] disabled:text-[#6b6b6b]"
       />
     </div>
   );
