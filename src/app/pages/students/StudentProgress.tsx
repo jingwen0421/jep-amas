@@ -1,9 +1,18 @@
 import { useEffect, useState } from 'react';
-import { TrendingUp, CheckCircle2, Clock, Award, Target } from 'lucide-react';
+import {
+  TrendingUp,
+  CheckCircle2,
+  Clock,
+  Award,
+  Target,
+  RefreshCw,
+} from 'lucide-react';
+import { Link } from 'react-router';
 import { supabase } from '../../lib/supabase';
 
 interface StudentProgressData {
   id: string;
+  studentId: string;
   name: string;
   course: string;
   batch: string;
@@ -30,7 +39,27 @@ export default function StudentProgress() {
 
     const { data, error } = await supabase
       .from('students')
-      .select('*')
+      .select(`
+        id,
+        student_code,
+        full_name,
+        progress,
+        status,
+        enrollments(
+          enrollment_status,
+          class_batches(
+            batch_name,
+            courses(course_name),
+            lessons(id)
+          )
+        ),
+        attendance(attendance_status),
+       portfolio_items(
+          id,
+          portfolio_status,
+          portfolio_feedback(score)
+        )
+      `)
       .eq('status', 'active')
       .order('created_at', { ascending: false });
 
@@ -40,19 +69,72 @@ export default function StudentProgress() {
       return;
     }
 
-    const mappedStudents: StudentProgressData[] = (data || []).map((student) => ({
-      id: student.student_code || student.id,
-      name: student.full_name || 'Unnamed Student',
-      course: student.course || '-',
-      batch: student.batch || '-',
-      overallProgress: student.progress || 0,
-      lessonsCompleted: student.lessons_completed || 0,
-      totalLessons: student.total_lessons || 24,
-      attendanceRate: student.attendance_rate || 0,
-      assignmentsCompleted: student.assignments_completed || 0,
-      totalAssignments: student.total_assignments || 15,
-      averageScore: student.average_score || 0,
-    }));
+    const mappedStudents: StudentProgressData[] = (data || []).map((student: any) => {
+      const activeEnrollment =
+        (student.enrollments || []).find(
+          (item: any) => item.enrollment_status === 'active'
+        ) || getSingle(student.enrollments);
+
+      const batch = getSingle(activeEnrollment?.class_batches);
+      const course = getSingle(batch?.courses);
+
+      const lessons = batch?.lessons || [];
+      const totalLessons = lessons.length || 0;
+
+      const attendance = student.attendance || [];
+      const presentCount = attendance.filter((record: any) =>
+        ['present', 'late'].includes(
+          String(record.attendance_status).toLowerCase()
+        )
+      ).length;
+
+      const attendanceRate =
+        attendance.length > 0
+          ? Math.round((presentCount / attendance.length) * 100)
+          : 0;
+
+      const portfolioItems = student.portfolio_items || [];
+      const completedAssignments = portfolioItems.filter((item: any) =>
+        ['approved', 'reviewed'].includes(
+          String(item.portfolio_status).toLowerCase()
+        )
+      ).length;
+
+      const scores = portfolioItems
+        .map((item: any) => {
+          const feedback = getSingle(item.portfolio_feedback);
+          return Number(feedback?.score ?? 0);
+        })
+        .filter((score: number) => score > 0);
+
+      const averageScore =
+        scores.length > 0
+          ? Math.round(scores.reduce((sum: number, score: number) => sum + score, 0) / scores.length)
+          : 0;
+
+      const progressFromLessons =
+        totalLessons > 0
+          ? Math.round((presentCount / totalLessons) * 100)
+          : Number(student.progress || 0);
+
+      return {
+        id: student.student_code || student.id,
+        studentId: student.id,
+        name: student.full_name || 'Unnamed Student',
+        course: course?.course_name || '-',
+        batch: batch?.batch_name || '-',
+        overallProgress: Math.min(
+          100,
+          Number(student.progress || progressFromLessons || 0)
+        ),
+        lessonsCompleted: presentCount,
+        totalLessons,
+        attendanceRate,
+        assignmentsCompleted: completedAssignments,
+        totalAssignments: portfolioItems.length,
+        averageScore,
+      };
+    });
 
     setStudents(mappedStudents);
     setLoading(false);
@@ -100,19 +182,30 @@ export default function StudentProgress() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl text-[#284342]">
             Student Progress Tracking
           </h1>
           <p className="text-[#6b6b6b] mt-1">
-            Monitor student course completion and performance
+            Monitor student course completion, attendance and portfolio progress.
           </p>
         </div>
 
-        <button className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors">
-          Export Report
+        <button
+          onClick={fetchStudents}
+          className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
+        >
+          <RefreshCw size={18} />
+          Refresh
         </button>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <OverviewCard value={`${avgProgress}%`} label="Avg Progress" color="#284342" />
+        <OverviewCard value={`${avgAttendance}%`} label="Avg Attendance" color="green" />
+        <OverviewCard value={onTrackCount.toString()} label="On Track" color="blue" />
+        <OverviewCard value={`${avgScore}%`} label="Avg Score" color="purple" />
       </div>
 
       <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
@@ -146,10 +239,10 @@ export default function StudentProgress() {
           {!loading &&
             filteredStudents.map((student) => (
               <div
-                key={student.id}
+                key={student.studentId}
                 className="p-6 rounded-xl border border-[rgba(40,67,66,0.1)] hover:shadow-lg transition-shadow"
               >
-                <div className="flex items-start justify-between mb-4">
+                <div className="flex items-start justify-between mb-4 gap-4">
                   <div>
                     <h3 className="text-lg text-[#284342] mb-1">
                       {student.name}
@@ -187,7 +280,11 @@ export default function StudentProgress() {
                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
                   <MetricCard
                     icon={<CheckCircle2 size={20} className="text-[#284342]" />}
-                    value={`${student.lessonsCompleted}/${student.totalLessons}`}
+                    value={
+                      student.totalLessons > 0
+                        ? `${student.lessonsCompleted}/${student.totalLessons}`
+                        : `${student.lessonsCompleted}`
+                    }
                     label="Lessons"
                     color="#284342"
                   />
@@ -202,7 +299,7 @@ export default function StudentProgress() {
                   <MetricCard
                     icon={<Target size={20} className="text-blue-700" />}
                     value={`${student.assignmentsCompleted}/${student.totalAssignments}`}
-                    label="Assignments"
+                    label="Portfolio"
                     color="blue"
                   />
 
@@ -242,29 +339,24 @@ export default function StudentProgress() {
                 </div>
 
                 <div className="mt-4 flex items-center gap-3 pt-4 border-t border-[rgba(40,67,66,0.1)]">
-                  <button className="px-4 py-2 rounded-lg bg-[#284342] text-[#e9da95] hover:bg-[#1a2f2e] transition-colors text-sm">
+                  <Link
+                    to={`/app/students/profile/${student.studentId}`}
+                    className="px-4 py-2 rounded-lg bg-[#284342] text-[#e9da95] hover:bg-[#1a2f2e] transition-colors text-sm"
+                  >
                     View Details
-                  </button>
+                  </Link>
 
-                  <button className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm">
+                  <button
+                    onClick={() =>
+                      alert('Progress report sending can be connected after client confirms report format.')
+                    }
+                    className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm"
+                  >
                     Send Progress Report
                   </button>
                 </div>
               </div>
             ))}
-        </div>
-      </div>
-
-      <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-        <h2 className="text-xl text-[#284342] mb-4">
-          Batch Performance Overview
-        </h2>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <OverviewCard value={`${avgProgress}%`} label="Avg Progress" color="#284342" />
-          <OverviewCard value={`${avgAttendance}%`} label="Avg Attendance" color="green" />
-          <OverviewCard value={onTrackCount.toString()} label="On Track" color="blue" />
-          <OverviewCard value={`${avgScore}%`} label="Avg Score" color="purple" />
         </div>
       </div>
     </div>
@@ -319,9 +411,15 @@ function OverviewCard({
       : 'text-[#284342]';
 
   return (
-    <div className="text-center p-4 rounded-lg bg-[#f8f8f6]">
+    <div className="text-center p-4 rounded-lg bg-white border border-[rgba(40,67,66,0.1)]">
       <p className={`text-3xl mb-2 ${colorClass}`}>{value}</p>
       <p className="text-sm text-[#6b6b6b]">{label}</p>
     </div>
   );
+}
+
+function getSingle(value: any) {
+  if (!value) return null;
+  if (Array.isArray(value)) return value[0] || null;
+  return value;
 }

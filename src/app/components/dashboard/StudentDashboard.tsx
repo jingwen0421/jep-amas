@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import StudentAppointmentCard from '../../components/dashboard/StudentAppointmentCard';
 import {
   BookOpen,
   ClipboardCheck,
@@ -7,6 +8,7 @@ import {
   Briefcase,
   CalendarClock,
   Bell,
+  Receipt,
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { supabase } from '../../lib/supabase';
@@ -20,7 +22,6 @@ interface StudentDashboardData {
   outstandingAmount: number;
   portfolioCount: number;
   certificateCount: number;
-  nextAppointment: string;
   notificationCount: number;
 }
 
@@ -37,7 +38,6 @@ export default function StudentDashboard() {
     outstandingAmount: 0,
     portfolioCount: 0,
     certificateCount: 0,
-    nextAppointment: '-',
     notificationCount: 0,
   });
 
@@ -65,7 +65,6 @@ export default function StudentDashboard() {
       paymentRes,
       portfolioRes,
       certRes,
-      appointmentRes,
       notificationRes,
     ] = await Promise.all([
       supabase
@@ -77,6 +76,7 @@ export default function StudentDashboard() {
           )
         `)
         .eq('student_id', student.id)
+        .eq('enrollment_status', 'active')
         .limit(1)
         .maybeSingle(),
 
@@ -105,28 +105,23 @@ export default function StudentDashboard() {
         .eq('student_id', student.id),
 
       supabase
-        .from('appointments')
-        .select('appointment_datetime')
-        .eq('student_id', student.id)
-        .order('appointment_datetime', { ascending: true })
-        .limit(1)
-        .maybeSingle(),
-
-      supabase
         .from('notifications')
         .select('id')
-        .eq('user_id', currentUser.id)
-        .eq('delivery_status', 'pending'),
+        .eq('user_id', currentUser.id),
     ]);
 
     const attendance = attendanceRes.data || [];
 
-    const present = attendance.filter((a: any) =>
-      ['present', 'late'].includes(String(a.attendance_status).toLowerCase())
+    const present = attendance.filter((item: any) =>
+      ['present', 'late'].includes(
+        String(item.attendance_status).toLowerCase()
+      )
     ).length;
 
     const attendanceRate =
-      attendance.length > 0 ? Math.round((present / attendance.length) * 100) : 0;
+      attendance.length > 0
+        ? Math.round((present / attendance.length) * 100)
+        : 0;
 
     const paymentPlans = paymentRes.data || [];
 
@@ -139,7 +134,10 @@ export default function StudentDashboard() {
     const paid = paymentPlans.reduce((sum: number, plan: any) => {
       const paidInstallments = (plan.installments || [])
         .filter((item: any) => String(item.status).toLowerCase() === 'paid')
-        .reduce((acc: number, item: any) => acc + Number(item.amount || 0), 0);
+        .reduce(
+          (acc: number, item: any) => acc + Number(item.amount || 0),
+          0
+        );
 
       return sum + paidInstallments;
     }, 0);
@@ -152,9 +150,6 @@ export default function StudentDashboard() {
       outstandingAmount: Math.max(totalFee - paid, 0),
       portfolioCount: portfolioRes.data?.length || 0,
       certificateCount: certRes.data?.length || 0,
-      nextAppointment: appointmentRes.data?.appointment_datetime
-        ? new Date(appointmentRes.data.appointment_datetime).toLocaleString()
-        : '-',
       notificationCount: notificationRes.data?.length || 0,
     });
 
@@ -176,38 +171,93 @@ export default function StudentDashboard() {
           Welcome, {data.name}
         </h1>
         <p className="text-[#6b6b6b] mt-1">
-          View your course progress, attendance, payments, certificates and appointments.
+          View your course progress, attendance, payments, certificates and
+          appointments.
         </p>
       </div>
 
       {!data.studentId && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-yellow-800">
-          Student profile not found yet. Please complete your student registration or wait for admin approval.
+          Student profile not found yet. Please complete your student
+          registration or wait for admin approval.
         </div>
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <StudentCard icon={<BookOpen size={24} />} label="My Course" value={data.course} />
-        <StudentCard icon={<ClipboardCheck size={24} />} label="Attendance" value={`${data.attendanceRate}%`} />
-        <StudentCard icon={<CreditCard size={24} />} label="Outstanding" value={`RM ${data.outstandingAmount.toLocaleString()}`} />
-        <StudentCard icon={<Award size={24} />} label="Certificates" value={data.certificateCount.toString()} />
+        <StudentCard
+          icon={<BookOpen size={24} />}
+          label="My Course"
+          value={data.course}
+        />
+
+        <StudentCard
+          icon={<ClipboardCheck size={24} />}
+          label="Attendance"
+          value={`${data.attendanceRate}%`}
+        />
+
+        <StudentCard
+          icon={<CreditCard size={24} />}
+          label="Outstanding"
+          value={`RM ${data.outstandingAmount.toLocaleString()}`}
+        />
+
+        <StudentCard
+          icon={<Award size={24} />}
+          label="Certificates"
+          value={data.certificateCount.toString()}
+        />
       </div>
+
+      <StudentAppointmentCard />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <Panel title="Quick Actions">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <QuickLink to="/app/portfolio/submissions" icon={<Briefcase size={22} />} label="Submit Portfolio" />
-            <QuickLink to="/app/appointments/booking" icon={<CalendarClock size={22} />} label="Book Appointment" />
-            <QuickLink to="/app/certificates/completion" icon={<Award size={22} />} label="View Certificates" />
-            <QuickLink to="/app/notifications" icon={<Bell size={22} />} label="View Notifications" />
+            <QuickLink
+              to="/app/portfolio/submissions"
+              icon={<Briefcase size={22} />}
+              label="Submit Portfolio"
+            />
+
+            <QuickLink
+              to="/app/appointments/booking"
+              icon={<CalendarClock size={22} />}
+              label="Book Appointment"
+            />
+
+            <QuickLink
+              to="/app/payments/plans"
+              icon={<Receipt size={22} />}
+              label="View Payment Plan"
+            />
+
+            <QuickLink
+              to="/app/certificates/completion"
+              icon={<Award size={22} />}
+              label="View Certificates"
+            />
+
+            <QuickLink
+              to="/app/notifications"
+              icon={<Bell size={22} />}
+              label={`Notifications (${data.notificationCount})`}
+            />
           </div>
         </Panel>
 
-        <Panel title="Next Appointment">
-          <p className="text-[#284342] text-lg">{data.nextAppointment}</p>
-          <p className="text-sm text-[#6b6b6b] mt-2">
-            Appointment booking uses your own student account automatically.
+        <Panel title="Student Notes">
+          <p className="text-sm text-[#6b6b6b]">
+            Your appointment booking, payment plan, portfolio submissions and
+            certificates are linked to your own student account.
           </p>
+
+          <div className="mt-4 p-4 rounded-lg bg-[#f8f8f6]">
+            <p className="text-sm text-[#284342]">
+              Need help? Please contact academy admin or your teacher for
+              assistance.
+            </p>
+          </div>
         </Panel>
       </div>
     </div>
@@ -228,6 +278,7 @@ function StudentCard({
       <div className="p-3 rounded-lg bg-[#e9da95]/20 text-[#284342] inline-block mb-4">
         {icon}
       </div>
+
       <p className="text-sm text-[#6b6b6b]">{label}</p>
       <p className="text-xl text-[#284342] mt-1">{value}</p>
     </div>

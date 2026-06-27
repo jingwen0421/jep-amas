@@ -9,8 +9,14 @@ import {
   FileText,
   ArrowLeft,
   ExternalLink,
+  CreditCard,
+  Briefcase,
+  Edit,
+  X,
+  Save,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { getCurrentUser } from '../../utils/session';
 
 interface StudentProfileData {
   id: string;
@@ -62,15 +68,50 @@ interface DocumentRecord {
   uploadedAt: string;
 }
 
+interface EditFormData {
+  fullName: string;
+  email: string;
+  phone: string;
+  icPassport: string;
+  emergencyContact: string;
+  emergencyRelation: string;
+  experience: string;
+  healthCondition: string;
+  progress: string;
+  status: string;
+}
+
 export default function StudentProfile() {
   const { id } = useParams();
+  const currentUser = getCurrentUser();
+
+  const canEditProfile =
+    currentUser.role === 'super_admin' ||
+    currentUser.role === 'admin';
 
   const [student, setStudent] = useState<StudentProfileData | null>(null);
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [paymentHistory, setPaymentHistory] = useState<PaymentRecord[]>([]);
   const [portfolioItems, setPortfolioItems] = useState<PortfolioRecord[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
+  const [outstandingBalance, setOutstandingBalance] = useState(0);
   const [loading, setLoading] = useState(true);
+
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [saving, setSaving] = useState(false);
+
+  const [editForm, setEditForm] = useState<EditFormData>({
+    fullName: '',
+    email: '',
+    phone: '',
+    icPassport: '',
+    emergencyContact: '',
+    emergencyRelation: '',
+    experience: '',
+    healthCondition: '',
+    progress: '0',
+    status: 'active',
+  });
 
   useEffect(() => {
     if (id) fetchStudentProfile(id);
@@ -112,6 +153,7 @@ export default function StudentProfile() {
       enrollmentRes,
       attendanceRes,
       paymentRes,
+      planRes,
       portfolioRes,
       documentRes,
     ] = await Promise.all([
@@ -119,12 +161,14 @@ export default function StudentProfile() {
         .from('enrollments')
         .select(`
           id,
+          enrollment_status,
           class_batches(
             batch_name,
             courses(course_name)
           )
         `)
         .eq('student_id', studentId)
+        .order('enrolled_at', { ascending: false })
         .limit(1)
         .maybeSingle(),
 
@@ -148,13 +192,22 @@ export default function StudentProfile() {
         .limit(5),
 
       supabase
+        .from('payment_plans')
+        .select(`
+          final_amount,
+          original_fee,
+          installments(amount, status)
+        `)
+        .eq('student_id', studentId),
+
+      supabase
         .from('portfolio_items')
         .select(`
           id,
           title,
           portfolio_status,
           submitted_at,
-          portfolio_reviews(score)
+          portfolio_feedback(score)
         `)
         .eq('student_id', studentId)
         .order('submitted_at', { ascending: false })
@@ -196,9 +249,23 @@ export default function StudentProfile() {
 
     setStudent(mappedStudent);
 
+    setEditForm({
+      fullName: studentData.full_name || '',
+      email: studentData.email || '',
+      phone: studentData.phone || '',
+      icPassport: studentData.ic_passport || '',
+      emergencyContact: studentData.emergency_contact_phone || '',
+      emergencyRelation: studentData.emergency_contact_name || '',
+      experience: studentData.makeup_experience || '',
+      healthCondition: studentData.health_condition || '',
+      progress: String(studentData.progress || 0),
+      status: studentData.status || 'active',
+    });
+
     setAttendanceRecords(
       (attendanceRes.data || []).map((record: any) => {
         const lesson = getSingle(record.lessons);
+
         return {
           id: record.id,
           date:
@@ -216,19 +283,39 @@ export default function StudentProfile() {
         id: payment.id,
         date: payment.paid_at ? payment.paid_at.slice(0, 10) : '-',
         amount: Number(payment.amount_paid || 0),
-        type: payment.payment_method || 'Payment',
+        type: formatPaymentMethod(payment.payment_method || 'Payment'),
         status: 'Paid',
       }))
     );
 
+    const plans = planRes.data || [];
+
+    const totalFee = plans.reduce(
+      (sum: number, plan: any) =>
+        sum + Number(plan.final_amount || plan.original_fee || 0),
+      0
+    );
+
+    const paidAmount = plans.reduce((sum: number, plan: any) => {
+      const paid = (plan.installments || [])
+        .filter((item: any) => String(item.status).toLowerCase() === 'paid')
+        .reduce((acc: number, item: any) => acc + Number(item.amount || 0), 0);
+
+      return sum + paid;
+    }, 0);
+
+    setOutstandingBalance(Math.max(totalFee - paidAmount, 0));
+
     setPortfolioItems(
       (portfolioRes.data || []).map((item: any) => {
-        const review = getSingle(item.portfolio_reviews);
+        const feedback = getSingle(item.portfolio_feedback);
+        const score = feedback?.score;
+
         return {
           id: item.id,
           title: item.title || 'Portfolio Submission',
           date: item.submitted_at ? item.submitted_at.slice(0, 10) : '-',
-          score: review?.score ? `${review.score}%` : '-',
+          score: score !== undefined && score !== null ? `${score}%` : '-',
           status: formatPortfolioStatus(item.portfolio_status),
         };
       })
@@ -246,16 +333,74 @@ export default function StudentProfile() {
     setLoading(false);
   }
 
+  async function saveStudentProfile() {
+    if (!student) return;
+
+    if (!editForm.fullName.trim()) {
+      alert('Full name is required.');
+      return;
+    }
+
+    setSaving(true);
+
+    const { error } = await supabase
+      .from('students')
+      .update({
+        full_name: editForm.fullName.trim(),
+        email: editForm.email.trim(),
+        phone: editForm.phone.trim(),
+        ic_passport: editForm.icPassport.trim(),
+        emergency_contact_phone: editForm.emergencyContact.trim(),
+        emergency_contact_name: editForm.emergencyRelation.trim(),
+        makeup_experience: editForm.experience,
+        health_condition: editForm.healthCondition,
+        progress: Number(editForm.progress || 0),
+        status: editForm.status,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', student.id);
+
+    if (error) {
+      alert(`Failed to update student profile: ${error.message}`);
+      setSaving(false);
+      return;
+    }
+
+    await supabase.from('audit_logs').insert({
+      user_id: currentUser.id || null,
+      action: 'Student Profile Updated',
+      module: 'Student Management',
+      target_id: student.id,
+      old_data: {
+        name: student.name,
+        email: student.email,
+        phone: student.phone,
+        progress: student.progress,
+        status: student.status,
+      },
+      new_data: {
+        ...editForm,
+        updated_by: currentUser.email,
+      },
+      created_at: new Date().toISOString(),
+    });
+
+    setSaving(false);
+    setShowEditModal(false);
+
+    await fetchStudentProfile(student.id);
+  }
+
   const attendanceRate =
     attendanceRecords.length > 0
       ? Math.round(
-          (attendanceRecords.filter((r) => r.status === 'Present' || r.status === 'Late').length /
+          (attendanceRecords.filter(
+            (record) => record.status === 'Present' || record.status === 'Late'
+          ).length /
             attendanceRecords.length) *
             100
         )
       : 0;
-
-  const outstandingBalance = 0;
 
   if (loading) {
     return (
@@ -271,6 +416,7 @@ export default function StudentProfile() {
         <Link to="/app/students/list" className="text-[#284342] hover:underline">
           Back to Student List
         </Link>
+
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
           Student not found.
         </div>
@@ -290,12 +436,16 @@ export default function StudentProfile() {
 
       <div className="flex items-center justify-between">
         <h1 className="text-3xl text-[#284342]">Student Profile</h1>
-        <button
-          onClick={() => alert('Edit profile form can be added next.')}
-          className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors"
-        >
-          Edit Profile
-        </button>
+
+        {canEditProfile && (
+          <button
+            onClick={() => setShowEditModal(true)}
+            className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
+          >
+            <Edit size={18} />
+            Edit Profile
+          </button>
+        )}
       </div>
 
       <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
@@ -330,21 +480,24 @@ export default function StudentProfile() {
           icon={<TrendingUp size={20} />}
           progress={student.progress}
         />
+
         <StatCard
           label="Attendance Rate"
           value={`${attendanceRate}%`}
           icon={<Award size={20} />}
         />
+
         <StatCard
           label="Portfolio Items"
           value={portfolioItems.length.toString()}
-          icon={<FileText size={20} />}
+          icon={<Briefcase size={20} />}
         />
+
         <StatCard
           label="Outstanding Balance"
           value={`RM ${outstandingBalance.toLocaleString()}`}
-          icon={<FileText size={20} />}
-          danger
+          icon={<CreditCard size={20} />}
+          danger={outstandingBalance > 0}
         />
       </div>
 
@@ -361,6 +514,7 @@ export default function StudentProfile() {
         <Panel title="Registration Documents">
           <DocumentLink label="IC / Passport Copy" url={student.icDocumentUrl} />
           <DocumentLink label="Digital Signature" url={student.signatureUrl} />
+
           {documents.map((doc) => (
             <DocumentLink
               key={doc.id}
@@ -372,6 +526,7 @@ export default function StudentProfile() {
 
         <Panel title="Recent Attendance">
           {attendanceRecords.length === 0 && <EmptyText text="No attendance records." />}
+
           {attendanceRecords.map((record) => (
             <ListRow
               key={record.id}
@@ -384,6 +539,7 @@ export default function StudentProfile() {
 
         <Panel title="Payment History">
           {paymentHistory.length === 0 && <EmptyText text="No payment records." />}
+
           {paymentHistory.map((payment) => (
             <ListRow
               key={payment.id}
@@ -403,6 +559,7 @@ export default function StudentProfile() {
 
         <Panel title="Portfolio Submissions">
           {portfolioItems.length === 0 && <EmptyText text="No portfolio submissions." />}
+
           {portfolioItems.map((item) => (
             <ListRow
               key={item.id}
@@ -418,6 +575,191 @@ export default function StudentProfile() {
           ))}
         </Panel>
       </div>
+
+      {showEditModal && (
+        <EditStudentModal
+          form={editForm}
+          setForm={setEditForm}
+          saving={saving}
+          onClose={() => setShowEditModal(false)}
+          onSave={saveStudentProfile}
+        />
+      )}
+    </div>
+  );
+}
+
+function EditStudentModal({
+  form,
+  setForm,
+  saving,
+  onClose,
+  onSave,
+}: {
+  form: EditFormData;
+  setForm: React.Dispatch<React.SetStateAction<EditFormData>>;
+  saving: boolean;
+  onClose: () => void;
+  onSave: () => void;
+}) {
+  function updateField(field: keyof EditFormData, value: string) {
+    setForm((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  }
+
+  return (
+    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+      <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-auto">
+        <div className="p-6 border-b border-[rgba(40,67,66,0.1)] flex items-center justify-between">
+          <h2 className="text-xl text-[#284342]">Edit Student Profile</h2>
+
+          <button onClick={onClose}>
+            <X size={20} className="text-[#284342]" />
+          </button>
+        </div>
+
+        <div className="p-6 space-y-5">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <InputField
+              label="Full Name"
+              value={form.fullName}
+              onChange={(value) => updateField('fullName', value)}
+            />
+
+            <InputField
+              label="Email"
+              type="email"
+              value={form.email}
+              onChange={(value) => updateField('email', value)}
+            />
+
+            <InputField
+              label="Phone"
+              value={form.phone}
+              onChange={(value) => updateField('phone', value)}
+            />
+
+            <InputField
+              label="IC / Passport"
+              value={form.icPassport}
+              onChange={(value) => updateField('icPassport', value)}
+            />
+
+            <InputField
+              label="Emergency Contact"
+              value={form.emergencyContact}
+              onChange={(value) => updateField('emergencyContact', value)}
+            />
+
+            <InputField
+              label="Emergency Relation"
+              value={form.emergencyRelation}
+              onChange={(value) => updateField('emergencyRelation', value)}
+            />
+
+            <div>
+              <label className="block text-sm text-[#284342] mb-2">
+                Experience Level
+              </label>
+
+              <select
+                value={form.experience}
+                onChange={(e) => updateField('experience', e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white"
+              >
+                <option value="">Select Experience</option>
+                <option value="Beginner">Beginner</option>
+                <option value="Some Experience">Some Experience</option>
+                <option value="Intermediate">Intermediate</option>
+                <option value="Advanced">Advanced</option>
+                <option value="Professional">Professional</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="block text-sm text-[#284342] mb-2">
+                Status
+              </label>
+
+              <select
+                value={form.status}
+                onChange={(e) => updateField('status', e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white"
+              >
+                <option value="active">Active</option>
+                <option value="completed">Completed</option>
+                <option value="inactive">Inactive</option>
+                <option value="suspended">Suspended</option>
+              </select>
+            </div>
+
+            <InputField
+              label="Progress (%)"
+              type="number"
+              value={form.progress}
+              onChange={(value) => updateField('progress', value)}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm text-[#284342] mb-2">
+              Health Condition / Allergies
+            </label>
+
+            <textarea
+              value={form.healthCondition}
+              onChange={(e) => updateField('healthCondition', e.target.value)}
+              rows={4}
+              className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white"
+            />
+          </div>
+        </div>
+
+        <div className="p-6 border-t border-[rgba(40,67,66,0.1)] flex items-center gap-3">
+          <button
+            onClick={onClose}
+            className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6]"
+          >
+            Cancel
+          </button>
+
+          <button
+            onClick={onSave}
+            disabled={saving}
+            className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] disabled:opacity-50 flex items-center gap-2"
+          >
+            <Save size={18} />
+            {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function InputField({
+  label,
+  value,
+  onChange,
+  type = 'text',
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+}) {
+  return (
+    <div>
+      <label className="block text-sm text-[#284342] mb-2">{label}</label>
+
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white"
+      />
     </div>
   );
 }
@@ -470,6 +812,7 @@ function StatCard({
           {icon}
         </span>
       </div>
+
       <p className={`text-2xl ${danger ? 'text-[#d4183d]' : 'text-[#284342]'} mb-1`}>
         {value}
       </p>
@@ -501,6 +844,7 @@ function ListRow({
         <p className="text-sm text-[#284342]">{title}</p>
         <p className="text-xs text-[#6b6b6b] mt-1">{subtitle}</p>
       </div>
+
       {right}
     </div>
   );
@@ -555,6 +899,8 @@ function StatusBadge({ status }: { status: string }) {
       ? 'bg-green-100 text-green-700'
       : status === 'Completed'
       ? 'bg-blue-100 text-blue-700'
+      : status === 'Suspended'
+      ? 'bg-red-100 text-red-700'
       : status === 'Inactive'
       ? 'bg-gray-100 text-gray-700'
       : 'bg-yellow-100 text-yellow-700';
@@ -586,6 +932,7 @@ function formatStudentStatus(status: string) {
   if (status === 'active') return 'Active';
   if (status === 'completed') return 'Completed';
   if (status === 'inactive') return 'Inactive';
+  if (status === 'suspended') return 'Suspended';
   return 'On Hold';
 }
 
@@ -602,4 +949,10 @@ function formatPortfolioStatus(status: string) {
   if (status === 'revision_required') return 'Revision Required';
   if (status === 'submitted') return 'Submitted';
   return status || '-';
+}
+
+function formatPaymentMethod(method: string) {
+  return method
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
