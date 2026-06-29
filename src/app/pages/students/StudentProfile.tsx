@@ -27,6 +27,8 @@ interface StudentProfileData {
   icPassport: string;
   course: string;
   batch: string;
+  batchId: string;
+  enrollmentId: string;
   status: string;
   progress: number;
   joinDate: string;
@@ -36,6 +38,12 @@ interface StudentProfileData {
   healthCondition: string;
   icDocumentUrl: string;
   signatureUrl: string;
+}
+
+interface BatchOption {
+  id: string;
+  batchName: string;
+  courseName: string;
 }
 
 interface AttendanceRecord {
@@ -79,6 +87,7 @@ interface EditFormData {
   healthCondition: string;
   progress: string;
   status: string;
+  batchId: string;
 }
 
 export default function StudentProfile() {
@@ -90,13 +99,15 @@ export default function StudentProfile() {
     currentUser.role === 'admin';
 
   const [student, setStudent] = useState<StudentProfileData | null>(null);
+  const [batchOptions, setBatchOptions] = useState<BatchOption[]>([]);
+
   const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([]);
   const [paymentHistory, setPaymentHistory] = useState<PaymentRecord[]>([]);
   const [portfolioItems, setPortfolioItems] = useState<PortfolioRecord[]>([]);
   const [documents, setDocuments] = useState<DocumentRecord[]>([]);
   const [outstandingBalance, setOutstandingBalance] = useState(0);
-  const [loading, setLoading] = useState(true);
 
+  const [loading, setLoading] = useState(true);
   const [showEditModal, setShowEditModal] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -111,11 +122,56 @@ export default function StudentProfile() {
     healthCondition: '',
     progress: '0',
     status: 'active',
+    batchId: '',
   });
 
   useEffect(() => {
-    if (id) fetchStudentProfile(id);
+    fetchBatchOptions();
+
+    if (id) {
+      fetchStudentProfile(id);
+    }
   }, [id]);
+
+  async function fetchBatchOptions() {
+    const { data: batches, error: batchError } = await supabase
+      .from('class_batches')
+      .select('id, batch_name, course_id')
+      .order('batch_name', { ascending: true });
+
+    if (batchError) {
+      console.error('Failed to fetch class batches:', batchError.message);
+      return;
+    }
+
+    const courseIds = Array.from(
+      new Set((batches || []).map((batch: any) => batch.course_id).filter(Boolean))
+    );
+
+    const { data: courses, error: courseError } =
+      courseIds.length > 0
+        ? await supabase
+            .from('courses')
+            .select('id, course_name')
+            .in('id', courseIds)
+        : { data: [], error: null };
+
+    if (courseError) {
+      console.error('Failed to fetch courses:', courseError.message);
+    }
+
+    const courseMap = new Map(
+      (courses || []).map((course: any) => [course.id, course.course_name])
+    );
+
+    const mapped: BatchOption[] = (batches || []).map((batch: any) => ({
+      id: batch.id,
+      batchName: batch.batch_name || 'Unnamed Batch',
+      courseName: courseMap.get(batch.course_id) || 'No Course Linked',
+    }));
+
+    setBatchOptions(mapped);
+  }
 
   async function fetchStudentProfile(studentId: string) {
     setLoading(true);
@@ -159,14 +215,7 @@ export default function StudentProfile() {
     ] = await Promise.all([
       supabase
         .from('enrollments')
-        .select(`
-          id,
-          enrollment_status,
-          class_batches(
-            batch_name,
-            courses(course_name)
-          )
-        `)
+        .select('id, batch_id, enrollment_status, enrolled_at')
         .eq('student_id', studentId)
         .order('enrolled_at', { ascending: false })
         .limit(1)
@@ -220,9 +269,10 @@ export default function StudentProfile() {
         .order('uploaded_at', { ascending: false }),
     ]);
 
-    const enrollment = getSingle(enrollmentRes.data);
-    const batch = getSingle(enrollment?.class_batches);
-    const course = getSingle(batch?.courses);
+    const enrollment = enrollmentRes.data;
+    const batchId = enrollment?.batch_id || '';
+
+    const batchCourseInfo = await getBatchCourseInfo(batchId);
 
     const mappedStudent: StudentProfileData = {
       id: studentData.id,
@@ -231,8 +281,10 @@ export default function StudentProfile() {
       email: studentData.email || '-',
       phone: studentData.phone || '-',
       icPassport: studentData.ic_passport || '-',
-      course: course?.course_name || '-',
-      batch: batch?.batch_name || '-',
+      course: batchCourseInfo.courseName,
+      batch: batchCourseInfo.batchName,
+      batchId,
+      enrollmentId: enrollment?.id || '',
       status: formatStudentStatus(studentData.status),
       progress: Number(studentData.progress || 0),
       joinDate:
@@ -260,6 +312,7 @@ export default function StudentProfile() {
       healthCondition: studentData.health_condition || '',
       progress: String(studentData.progress || 0),
       status: studentData.status || 'active',
+      batchId,
     });
 
     setAttendanceRecords(
@@ -333,6 +386,39 @@ export default function StudentProfile() {
     setLoading(false);
   }
 
+  async function getBatchCourseInfo(batchId: string) {
+    if (!batchId) {
+      return {
+        batchName: '-',
+        courseName: '-',
+      };
+    }
+
+    const { data: batch, error: batchError } = await supabase
+      .from('class_batches')
+      .select('id, batch_name, course_id')
+      .eq('id', batchId)
+      .maybeSingle();
+
+    if (batchError || !batch) {
+      return {
+        batchName: '-',
+        courseName: '-',
+      };
+    }
+
+    const { data: course } = await supabase
+      .from('courses')
+      .select('course_name')
+      .eq('id', batch.course_id)
+      .maybeSingle();
+
+    return {
+      batchName: batch.batch_name || '-',
+      courseName: course?.course_name || '-',
+    };
+  }
+
   async function saveStudentProfile() {
     if (!student) return;
 
@@ -366,6 +452,15 @@ export default function StudentProfile() {
       return;
     }
 
+    if (editForm.batchId !== student.batchId) {
+      const batchUpdated = await updateStudentEnrollment(student, editForm.batchId);
+
+      if (!batchUpdated) {
+        setSaving(false);
+        return;
+      }
+    }
+
     await supabase.from('audit_logs').insert({
       user_id: currentUser.id || null,
       action: 'Student Profile Updated',
@@ -377,6 +472,9 @@ export default function StudentProfile() {
         phone: student.phone,
         progress: student.progress,
         status: student.status,
+        batch_id: student.batchId,
+        batch: student.batch,
+        course: student.course,
       },
       new_data: {
         ...editForm,
@@ -389,6 +487,50 @@ export default function StudentProfile() {
     setShowEditModal(false);
 
     await fetchStudentProfile(student.id);
+  }
+
+  async function updateStudentEnrollment(
+    currentStudent: StudentProfileData,
+    newBatchId: string
+  ) {
+    if (!newBatchId) {
+      alert('Please select a valid class batch.');
+      return false;
+    }
+
+    if (currentStudent.enrollmentId) {
+      const { error } = await supabase
+        .from('enrollments')
+        .update({
+          batch_id: newBatchId,
+          enrollment_status: 'active',
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', currentStudent.enrollmentId);
+
+      if (error) {
+        alert(`Failed to update enrollment class: ${error.message}`);
+        return false;
+      }
+
+      return true;
+    }
+
+    const { error } = await supabase.from('enrollments').insert({
+      student_id: currentStudent.id,
+      batch_id: newBatchId,
+      enrollment_status: 'active',
+      enrolled_at: new Date().toISOString(),
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    });
+
+    if (error) {
+      alert(`Failed to create student enrollment: ${error.message}`);
+      return false;
+    }
+
+    return true;
   }
 
   const attendanceRate =
@@ -580,6 +722,7 @@ export default function StudentProfile() {
         <EditStudentModal
           form={editForm}
           setForm={setEditForm}
+          batches={batchOptions}
           saving={saving}
           onClose={() => setShowEditModal(false)}
           onSave={saveStudentProfile}
@@ -592,12 +735,14 @@ export default function StudentProfile() {
 function EditStudentModal({
   form,
   setForm,
+  batches,
   saving,
   onClose,
   onSave,
 }: {
   form: EditFormData;
   setForm: React.Dispatch<React.SetStateAction<EditFormData>>;
+  batches: BatchOption[];
   saving: boolean;
   onClose: () => void;
   onSave: () => void;
@@ -701,6 +846,26 @@ function EditStudentModal({
               value={form.progress}
               onChange={(value) => updateField('progress', value)}
             />
+
+            <div>
+              <label className="block text-sm text-[#284342] mb-2">
+                Enrolment Class / Batch
+              </label>
+
+              <select
+                value={form.batchId}
+                onChange={(e) => updateField('batchId', e.target.value)}
+                className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white"
+              >
+                <option value="">Select Class Batch</option>
+
+                {batches.map((batch) => (
+                  <option key={batch.id} value={batch.id}>
+                    {batch.batchName} - {batch.courseName}
+                  </option>
+                ))}
+              </select>
+            </div>
           </div>
 
           <div>
