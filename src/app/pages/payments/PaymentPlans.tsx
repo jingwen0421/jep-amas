@@ -42,22 +42,31 @@ interface PaymentPlan {
 
 interface EnrollmentOption {
   id: string;
-  student_id: string;
-  students?: { full_name: string }[] | { full_name: string } | null;
-  class_batches?:
-    | {
-        courses?:
-          | { course_name: string; course_fee: number }[]
-          | { course_name: string; course_fee: number }
-          | null;
-      }[]
-    | {
-        courses?:
-          | { course_name: string; course_fee: number }
-          | { course_name: string; course_fee: number }[]
-          | null;
-      }
-    | null;
+  studentId: string;
+  studentName: string;
+  courseName: string;
+  courseFee: number;
+  hasEnrollment: boolean;
+}
+
+interface CreateFormData {
+  enrollmentId: string;
+  studentId: string;
+  originalFee: string;
+  discountAmount: string;
+  finalAmount: string;
+  planType: string;
+  installments: string;
+  firstDueDate: string;
+}
+
+interface EditFormData {
+  originalFee: string;
+  discountAmount: string;
+  finalAmount: string;
+  planType: string;
+  installments: string;
+  firstDueDate: string;
 }
 
 export default function PaymentPlans() {
@@ -73,14 +82,16 @@ export default function PaymentPlans() {
 
   const [plans, setPlans] = useState<PaymentPlan[]>([]);
   const [enrollments, setEnrollments] = useState<EnrollmentOption[]>([]);
+
   const [selectedPlan, setSelectedPlan] = useState<PaymentPlan | null>(null);
   const [editingPlan, setEditingPlan] = useState<PaymentPlan | null>(null);
 
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [loading, setLoading] = useState(true);
 
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<CreateFormData>({
     enrollmentId: '',
+    studentId: '',
     originalFee: '',
     discountAmount: '0',
     finalAmount: '',
@@ -89,7 +100,7 @@ export default function PaymentPlans() {
     firstDueDate: new Date().toISOString().slice(0, 10),
   });
 
-  const [editData, setEditData] = useState({
+  const [editData, setEditData] = useState<EditFormData>({
     originalFee: '',
     discountAmount: '0',
     finalAmount: '',
@@ -102,39 +113,14 @@ export default function PaymentPlans() {
     fetchPaymentPlans();
 
     if (canManagePaymentPlans) {
-      fetchEnrollments();
+      fetchStudentOptions();
     }
   }, []);
 
   async function fetchPaymentPlans() {
     setLoading(true);
 
-    let query = supabase
-      .from('payment_plans')
-      .select(`
-        id,
-        enrollment_id,
-        student_id,
-        original_fee,
-        discount_amount,
-        final_amount,
-        plan_type,
-        status,
-        students!payment_plans_student_id_fkey(full_name),
-        enrollments!payment_plans_enrollment_id_fkey(
-          class_batches(
-            courses(course_name)
-          )
-        ),
-        installments(
-          id,
-          amount,
-          due_date,
-          paid_date,
-          status
-        )
-      `)
-      .order('created_at', { ascending: false });
+    let studentIdFilter = '';
 
     if (isStudentView) {
       const studentId = await getCurrentStudentId();
@@ -145,31 +131,164 @@ export default function PaymentPlans() {
         return;
       }
 
-      query = query.eq('student_id', studentId);
+      studentIdFilter = studentId;
     }
 
-    const { data, error } = await query;
+    let planQuery = supabase
+      .from('payment_plans')
+      .select(`
+        id,
+        enrollment_id,
+        student_id,
+        original_fee,
+        discount_amount,
+        final_amount,
+        plan_type,
+        status,
+        created_at
+      `)
+      .order('created_at', { ascending: false });
 
-    if (error) {
-      console.error('Error fetching payment plans:', error.message);
+    if (studentIdFilter) {
+      planQuery = planQuery.eq('student_id', studentIdFilter);
+    }
+
+    const { data: planRows, error: planError } = await planQuery;
+
+    if (planError) {
+      console.error('Error fetching payment plans:', planError.message);
       setLoading(false);
       return;
     }
 
-    const mapped: PaymentPlan[] = (data || []).map((plan: any) => {
-      const installments = (plan.installments || []).sort((a: any, b: any) =>
-        String(a.due_date).localeCompare(String(b.due_date))
+    const paymentPlans = planRows || [];
+
+    const studentIds = Array.from(
+      new Set(paymentPlans.map((plan: any) => plan.student_id).filter(Boolean))
+    );
+
+    const enrollmentIds = Array.from(
+      new Set(paymentPlans.map((plan: any) => plan.enrollment_id).filter(Boolean))
+    );
+
+    const planIds = paymentPlans.map((plan: any) => plan.id);
+
+    const [
+      studentsRes,
+      enrollmentsRes,
+      installmentsRes,
+    ] = await Promise.all([
+      studentIds.length > 0
+        ? supabase
+            .from('students')
+            .select('id, full_name')
+            .in('id', studentIds)
+        : Promise.resolve({ data: [], error: null }),
+
+      enrollmentIds.length > 0
+        ? supabase
+            .from('enrollments')
+            .select('id, batch_id')
+            .in('id', enrollmentIds)
+        : Promise.resolve({ data: [], error: null }),
+
+      planIds.length > 0
+        ? supabase
+            .from('installments')
+            .select('id, payment_plan_id, amount, due_date, paid_date, status')
+            .in('payment_plan_id', planIds)
+        : Promise.resolve({ data: [], error: null }),
+    ]);
+
+    if (studentsRes.error) {
+      console.error('Error fetching payment students:', studentsRes.error.message);
+    }
+
+    if (enrollmentsRes.error) {
+      console.error('Error fetching payment enrollments:', enrollmentsRes.error.message);
+    }
+
+    if (installmentsRes.error) {
+      console.error('Error fetching installments:', installmentsRes.error.message);
+    }
+
+    const enrollmentRows = enrollmentsRes.data || [];
+    const batchIds = Array.from(
+      new Set(enrollmentRows.map((item: any) => item.batch_id).filter(Boolean))
+    );
+
+    const { data: batchRows, error: batchError } =
+      batchIds.length > 0
+        ? await supabase
+            .from('class_batches')
+            .select('id, course_id')
+            .in('id', batchIds)
+        : { data: [], error: null };
+
+    if (batchError) {
+      console.error('Error fetching class batches:', batchError.message);
+    }
+
+    const courseIds = Array.from(
+      new Set((batchRows || []).map((item: any) => item.course_id).filter(Boolean))
+    );
+
+    const { data: courseRows, error: courseError } =
+      courseIds.length > 0
+        ? await supabase
+            .from('courses')
+            .select('id, course_name')
+            .in('id', courseIds)
+        : { data: [], error: null };
+
+    if (courseError) {
+      console.error('Error fetching courses:', courseError.message);
+    }
+
+    const studentMap = new Map(
+      (studentsRes.data || []).map((student: any) => [student.id, student])
+    );
+
+    const enrollmentMap = new Map(
+      enrollmentRows.map((enrollment: any) => [enrollment.id, enrollment])
+    );
+
+    const batchMap = new Map(
+      (batchRows || []).map((batch: any) => [batch.id, batch])
+    );
+
+    const courseMap = new Map(
+      (courseRows || []).map((course: any) => [course.id, course])
+    );
+
+    const installmentsByPlan = new Map<string, any[]>();
+
+    (installmentsRes.data || []).forEach((installment: any) => {
+      const list = installmentsByPlan.get(installment.payment_plan_id) || [];
+      list.push(installment);
+      installmentsByPlan.set(installment.payment_plan_id, list);
+    });
+
+    const mapped: PaymentPlan[] = paymentPlans.map((plan: any) => {
+      const installmentRows = (installmentsByPlan.get(plan.id) || []).sort(
+        (a: any, b: any) => String(a.due_date).localeCompare(String(b.due_date))
       );
+
+      const student = studentMap.get(plan.student_id);
+
+      const enrollment = enrollmentMap.get(plan.enrollment_id);
+      const batch = batchMap.get(enrollment?.batch_id);
+      const course = courseMap.get(batch?.course_id);
 
       const originalFee = Number(plan.original_fee || 0);
       const discountAmount = Number(plan.discount_amount || 0);
       const totalFee = Number(plan.final_amount || originalFee - discountAmount);
 
-      const paidAmount = installments
+      const paidAmount = installmentRows
         .filter((item: any) => String(item.status).toLowerCase() === 'paid')
         .reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0);
 
-      const unpaidInstallments = installments.filter(
+      const unpaidInstallments = installmentRows.filter(
         (item: any) => String(item.status).toLowerCase() !== 'paid'
       );
 
@@ -177,21 +296,21 @@ export default function PaymentPlans() {
 
       return {
         id: plan.id,
-        enrollmentId: plan.enrollment_id,
-        studentId: plan.student_id,
-        student: getStudentName(plan.students),
-        course: getCourseNameFromEnrollment(plan.enrollments),
+        enrollmentId: plan.enrollment_id || '',
+        studentId: plan.student_id || '',
+        student: student?.full_name || 'Unnamed Student',
+        course: course?.course_name || '-',
         originalFee,
         discountAmount,
         totalFee,
         paidAmount,
         planType: mapPlanType(plan.plan_type),
         rawPlanType: plan.plan_type || 'full_payment',
-        installments: installments.length,
+        installments: installmentRows.length,
         nextPayment: next?.due_date || '-',
         nextAmount: Number(next?.amount || 0),
-        status: mapPaymentStatus(plan.status, installments),
-        installmentDetails: installments.map((item: any) => ({
+        status: mapPaymentStatus(plan.status, installmentRows),
+        installmentDetails: installmentRows.map((item: any) => ({
           id: item.id,
           amount: Number(item.amount || 0),
           dueDate: item.due_date || '-',
@@ -205,45 +324,126 @@ export default function PaymentPlans() {
     setLoading(false);
   }
 
-  async function fetchEnrollments() {
-    const { data, error } = await supabase
-      .from('enrollments')
-      .select(`
-        id,
-        student_id,
-        students(full_name),
-        class_batches(
-          courses(course_name, course_fee)
-        )
-      `)
-      .eq('enrollment_status', 'active');
+  async function fetchStudentOptions() {
+    const { data: students, error: studentError } = await supabase
+      .from('students')
+      .select('id, full_name, status')
+      .in('status', ['active', 'completed'])
+      .order('full_name', { ascending: true });
 
-    if (error) {
-      console.error('Error fetching enrollments:', error.message);
+    if (studentError) {
+      console.error('Error fetching students for payment plan:', studentError.message);
       return;
     }
 
-    setEnrollments((data || []) as unknown as EnrollmentOption[]);
+    const studentRows = students || [];
+    const studentIds = studentRows.map((student: any) => student.id);
+
+    const { data: enrollmentRows, error: enrollmentError } =
+      studentIds.length > 0
+        ? await supabase
+            .from('enrollments')
+            .select('id, student_id, batch_id, enrollment_status')
+            .in('student_id', studentIds)
+        : { data: [], error: null };
+
+    if (enrollmentError) {
+      console.error('Error fetching enrollments for payment plan:', enrollmentError.message);
+    }
+
+    const batchIds = Array.from(
+      new Set((enrollmentRows || []).map((item: any) => item.batch_id).filter(Boolean))
+    );
+
+    const { data: batchRows, error: batchError } =
+      batchIds.length > 0
+        ? await supabase
+            .from('class_batches')
+            .select('id, course_id')
+            .in('id', batchIds)
+        : { data: [], error: null };
+
+    if (batchError) {
+      console.error('Error fetching batches for payment plan:', batchError.message);
+    }
+
+    const courseIds = Array.from(
+      new Set((batchRows || []).map((item: any) => item.course_id).filter(Boolean))
+    );
+
+    const { data: courseRows, error: courseError } =
+      courseIds.length > 0
+        ? await supabase
+            .from('courses')
+            .select('id, course_name, course_fee')
+            .in('id', courseIds)
+        : { data: [], error: null };
+
+    if (courseError) {
+      console.error('Error fetching courses for payment plan:', courseError.message);
+    }
+
+    const enrollmentByStudent = new Map<string, any>();
+
+    (enrollmentRows || []).forEach((enrollment: any) => {
+      const existing = enrollmentByStudent.get(enrollment.student_id);
+
+      if (!existing || enrollment.enrollment_status === 'active') {
+        enrollmentByStudent.set(enrollment.student_id, enrollment);
+      }
+    });
+
+    const batchMap = new Map(
+      (batchRows || []).map((batch: any) => [batch.id, batch])
+    );
+
+    const courseMap = new Map(
+      (courseRows || []).map((course: any) => [course.id, course])
+    );
+
+    const mapped: EnrollmentOption[] = studentRows.map((student: any) => {
+      const enrollment = enrollmentByStudent.get(student.id);
+      const batch = batchMap.get(enrollment?.batch_id);
+      const course = courseMap.get(batch?.course_id);
+
+      return {
+        id: enrollment?.id || '',
+        studentId: student.id,
+        studentName: student.full_name || 'Unnamed Student',
+        courseName: course?.course_name || 'No Course Linked',
+        courseFee: Number(course?.course_fee || 0),
+        hasEnrollment: Boolean(enrollment?.id),
+      };
+    });
+
+    setEnrollments(mapped);
   }
 
   async function createPaymentPlan() {
-    const selectedEnrollment = enrollments.find(
-      (item) => item.id === formData.enrollmentId
+    const selectedStudent = enrollments.find(
+      (item) => item.studentId === formData.studentId
     );
 
-    if (!selectedEnrollment) {
-      alert('Please select student enrollment.');
+    if (!selectedStudent) {
+      alert('Please select a student.');
+      return;
+    }
+
+    if (!selectedStudent.hasEnrollment || !selectedStudent.id) {
+      alert(
+        'This student does not have an enrollment/class batch yet. Please assign the student to a class batch before creating a payment plan.'
+      );
       return;
     }
 
     const { data: existingPlan } = await supabase
       .from('payment_plans')
       .select('id')
-      .eq('enrollment_id', selectedEnrollment.id)
+      .eq('enrollment_id', selectedStudent.id)
       .maybeSingle();
 
     if (existingPlan) {
-      alert('This enrollment already has a payment plan. Please edit the existing plan instead.');
+      alert('This student already has a payment plan. Please edit the existing plan instead.');
       return;
     }
 
@@ -264,8 +464,8 @@ export default function PaymentPlans() {
     const { data: createdPlan, error } = await supabase
       .from('payment_plans')
       .insert({
-        student_id: selectedEnrollment.student_id,
-        enrollment_id: selectedEnrollment.id,
+        student_id: selectedStudent.studentId,
+        enrollment_id: selectedStudent.id,
         original_fee: originalFee,
         discount_amount: discountAmount,
         final_amount: finalAmount,
@@ -308,8 +508,10 @@ export default function PaymentPlans() {
       target_id: createdPlan.id,
       old_data: null,
       new_data: {
-        student_id: selectedEnrollment.student_id,
-        enrollment_id: selectedEnrollment.id,
+        student_id: selectedStudent.studentId,
+        enrollment_id: selectedStudent.id,
+        student_name: selectedStudent.studentName,
+        course: selectedStudent.courseName,
         original_fee: originalFee,
         discount_amount: discountAmount,
         final_amount: finalAmount,
@@ -323,6 +525,7 @@ export default function PaymentPlans() {
     resetCreateForm();
     setShowCreateModal(false);
     fetchPaymentPlans();
+    fetchStudentOptions();
   }
 
   function openEditPlan(plan: PaymentPlan) {
@@ -331,6 +534,7 @@ export default function PaymentPlans() {
       plan.installmentDetails[0];
 
     setEditingPlan(plan);
+
     setEditData({
       originalFee: String(plan.originalFee || plan.totalFee),
       discountAmount: String(plan.discountAmount || 0),
@@ -407,7 +611,9 @@ export default function PaymentPlans() {
         .in('id', unpaidIds);
 
       if (deleteError) {
-        alert(`Plan updated, but failed to remove old unpaid installments: ${deleteError.message}`);
+        alert(
+          `Plan updated, but failed to remove old unpaid installments: ${deleteError.message}`
+        );
         return;
       }
     }
@@ -426,7 +632,9 @@ export default function PaymentPlans() {
         .insert(installmentRows);
 
       if (installmentError) {
-        alert(`Plan updated, but failed to regenerate installments: ${installmentError.message}`);
+        alert(
+          `Plan updated, but failed to regenerate installments: ${installmentError.message}`
+        );
         return;
       }
     }
@@ -483,6 +691,7 @@ export default function PaymentPlans() {
   function resetCreateForm() {
     setFormData({
       enrollmentId: '',
+      studentId: '',
       originalFee: '',
       discountAmount: '0',
       finalAmount: '',
@@ -508,7 +717,7 @@ export default function PaymentPlans() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl text-[#284342]">
             {isStudentView ? 'My Payment Plan' : 'Payment Plans'}
@@ -523,7 +732,10 @@ export default function PaymentPlans() {
 
         {canManagePaymentPlans && (
           <button
-            onClick={() => setShowCreateModal(true)}
+            onClick={() => {
+              fetchStudentOptions();
+              setShowCreateModal(true);
+            }}
             className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
           >
             <Plus size={20} />
@@ -640,6 +852,7 @@ export default function PaymentPlans() {
                           <span className="text-xs text-[#6b6b6b]">
                             Payment Progress
                           </span>
+
                           <span className="text-xs text-[#284342]">
                             {progress}%
                           </span>
@@ -748,6 +961,7 @@ function PlanDetailsModal({
       <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-auto">
         <div className="p-6 border-b border-[rgba(40,67,66,0.1)] flex items-center justify-between">
           <h2 className="text-xl text-[#284342]">Payment Plan Details</h2>
+
           <button onClick={onClose}>
             <X size={20} className="text-[#284342]" />
           </button>
@@ -798,6 +1012,7 @@ function PlanDetailsModal({
                     <p className="text-sm text-[#284342]">
                       Installment {index + 1}
                     </p>
+
                     <p className="text-xs text-[#6b6b6b] mt-1">
                       Due: {item.dueDate}
                     </p>
@@ -807,9 +1022,11 @@ function PlanDetailsModal({
                     <p className="text-sm text-[#284342]">
                       RM {item.amount.toLocaleString()}
                     </p>
+
                     <p className="text-xs text-[#6b6b6b] mt-1">
                       Paid: {item.paidDate}
                     </p>
+
                     <span
                       className={`inline-block mt-2 text-xs px-3 py-1 rounded-full ${
                         item.status === 'Paid'
@@ -849,26 +1066,8 @@ function CreatePlanModal({
   onCreate,
 }: {
   enrollments: EnrollmentOption[];
-  formData: {
-    enrollmentId: string;
-    originalFee: string;
-    discountAmount: string;
-    finalAmount: string;
-    planType: string;
-    installments: string;
-    firstDueDate: string;
-  };
-  setFormData: React.Dispatch<
-    React.SetStateAction<{
-      enrollmentId: string;
-      originalFee: string;
-      discountAmount: string;
-      finalAmount: string;
-      planType: string;
-      installments: string;
-      firstDueDate: string;
-    }>
-  >;
+  formData: CreateFormData;
+  setFormData: React.Dispatch<React.SetStateAction<CreateFormData>>;
   onClose: () => void;
   onCreate: () => void;
 }) {
@@ -893,21 +1092,22 @@ function CreatePlanModal({
         <div className="space-y-4">
           <div>
             <label className="block text-sm text-[#284342] mb-2">
-              Student Enrollment
+              Student
             </label>
 
             <select
-              value={formData.enrollmentId}
-              onChange={(e) => {
-                const enrollment = enrollments.find(
-                  (item) => item.id === e.target.value
+              value={formData.studentId}
+              onChange={(event) => {
+                const selected = enrollments.find(
+                  (item) => item.studentId === event.target.value
                 );
 
-                const fee = getCourseFeeFromEnrollment(enrollment).toString();
+                const fee = String(selected?.courseFee || 0);
 
                 setFormData((prev) => ({
                   ...prev,
-                  enrollmentId: e.target.value,
+                  studentId: selected?.studentId || '',
+                  enrollmentId: selected?.id || '',
                   originalFee: fee,
                   discountAmount: '0',
                   finalAmount: fee,
@@ -916,13 +1116,19 @@ function CreatePlanModal({
               className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
             >
               <option value="">Select Student</option>
+
               {enrollments.map((enrollment) => (
-                <option key={enrollment.id} value={enrollment.id}>
-                  {getStudentName(enrollment.students)} -{' '}
-                  {getCourseNameFromEnrollment(enrollment)}
+                <option key={enrollment.studentId} value={enrollment.studentId}>
+                  {enrollment.studentName} - {enrollment.courseName}
+                  {!enrollment.hasEnrollment ? ' (No Enrollment)' : ''}
                 </option>
               ))}
             </select>
+
+            <p className="text-xs text-[#6b6b6b] mt-2">
+              Students without enrollment are shown, but payment plan can only
+              be created after they are assigned to a class batch.
+            </p>
           </div>
 
           <FeeFields
@@ -983,24 +1189,8 @@ function EditPlanModal({
   onUpdate,
 }: {
   plan: PaymentPlan;
-  editData: {
-    originalFee: string;
-    discountAmount: string;
-    finalAmount: string;
-    planType: string;
-    installments: string;
-    firstDueDate: string;
-  };
-  setEditData: React.Dispatch<
-    React.SetStateAction<{
-      originalFee: string;
-      discountAmount: string;
-      finalAmount: string;
-      planType: string;
-      installments: string;
-      firstDueDate: string;
-    }>
-  >;
+  editData: EditFormData;
+  setEditData: React.Dispatch<React.SetStateAction<EditFormData>>;
   onClose: () => void;
   onUpdate: () => void;
 }) {
@@ -1025,6 +1215,7 @@ function EditPlanModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl max-w-2xl w-full p-6">
         <h2 className="text-xl text-[#284342] mb-2">Edit Payment Plan</h2>
+
         <p className="text-sm text-[#6b6b6b] mb-6">
           {plan.student} - {plan.course}
         </p>
@@ -1108,10 +1299,11 @@ function FeeFields({
         <label className="block text-sm text-[#284342] mb-2">
           Original Fee (RM)
         </label>
+
         <input
           type="number"
           value={originalFee}
-          onChange={(e) => onOriginalFeeChange(e.target.value)}
+          onChange={(event) => onOriginalFeeChange(event.target.value)}
           className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
         />
       </div>
@@ -1120,10 +1312,11 @@ function FeeFields({
         <label className="block text-sm text-[#284342] mb-2">
           Discount (RM)
         </label>
+
         <input
           type="number"
           value={discountAmount}
-          onChange={(e) => onDiscountChange(e.target.value)}
+          onChange={(event) => onDiscountChange(event.target.value)}
           className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
         />
       </div>
@@ -1132,6 +1325,7 @@ function FeeFields({
         <label className="block text-sm text-[#284342] mb-2">
           Final Amount (RM)
         </label>
+
         <input
           type="number"
           value={finalAmount}
@@ -1167,7 +1361,7 @@ function PaymentPlanFields({
 
         <select
           value={planType}
-          onChange={(e) => setPlanType(e.target.value)}
+          onChange={(event) => setPlanType(event.target.value)}
           className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white"
         >
           <option value="full_payment">Full Payment</option>
@@ -1184,7 +1378,7 @@ function PaymentPlanFields({
 
           <select
             value={installments}
-            onChange={(e) => setInstallments(e.target.value)}
+            onChange={(event) => setInstallments(event.target.value)}
             className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white"
           >
             <option value="2">2 Installments</option>
@@ -1204,7 +1398,7 @@ function PaymentPlanFields({
         <input
           type="date"
           value={firstDueDate}
-          onChange={(e) => setFirstDueDate(e.target.value)}
+          onChange={(event) => setFirstDueDate(event.target.value)}
           className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
         />
       </div>
@@ -1270,7 +1464,10 @@ function mapPlanType(type: string): PaymentPlan['planType'] {
   return 'Installments';
 }
 
-function mapPaymentStatus(status: string, installments: any[]): PaymentPlan['status'] {
+function mapPaymentStatus(
+  status: string,
+  installments: any[]
+): PaymentPlan['status'] {
   if (String(status).toLowerCase() === 'paid') return 'Completed';
 
   const hasOverdue = (installments || []).some(
@@ -1299,35 +1496,6 @@ function startOfToday() {
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return today;
-}
-
-function getStudentName(student: any) {
-  if (!student) return 'Unnamed Student';
-  if (Array.isArray(student)) return student[0]?.full_name || 'Unnamed Student';
-  return student.full_name || 'Unnamed Student';
-}
-
-function getCourseNameFromEnrollment(enrollment: any) {
-  if (!enrollment) return '-';
-
-  const actualEnrollment = Array.isArray(enrollment) ? enrollment[0] : enrollment;
-  const batch = actualEnrollment?.class_batches;
-  const actualBatch = Array.isArray(batch) ? batch[0] : batch;
-  const course = actualBatch?.courses;
-  const actualCourse = Array.isArray(course) ? course[0] : course;
-
-  return actualCourse?.course_name || '-';
-}
-
-function getCourseFeeFromEnrollment(enrollment: any) {
-  if (!enrollment) return 0;
-
-  const batch = enrollment.class_batches;
-  const actualBatch = Array.isArray(batch) ? batch[0] : batch;
-  const course = actualBatch?.courses;
-  const actualCourse = Array.isArray(course) ? course[0] : course;
-
-  return Number(actualCourse?.course_fee || 0);
 }
 
 function AmountCard({
@@ -1362,6 +1530,7 @@ function AmountCard({
 
         <div>
           <p className="text-sm text-[#6b6b6b]">{title}</p>
+
           <p className="text-2xl text-[#284342]">
             RM {amount.toLocaleString()}
           </p>
