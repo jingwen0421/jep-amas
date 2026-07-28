@@ -2,6 +2,7 @@ import {
   useState
 } from "react";
 
+
 import {
   Plus,
   Edit,
@@ -25,15 +26,26 @@ import {
 
 const emptyDeal = {
 
-customer_name:"",
-owner_id:"",
-course:"",
-course_type:"",
-list_price:0,
-discount_pct:0,
-final_price:0,
-lead_type:"company",
-signed_at:""
+  customer_name:"",
+
+  owner_id:"",
+
+  course:"",
+
+  course_type:"",
+
+  list_price:0,
+
+  discount_pct:0,
+
+  final_price:0,
+
+  lead_type:"company",
+
+  signed_at:
+  new Date()
+  .toISOString()
+  .substring(0,10)
 
 };
 
@@ -82,10 +94,12 @@ setEditingDeal
 
 
 
+
 const [
 selectedDeal,
 setSelectedDeal
 ]=useState<any>(null);
+
 
 
 
@@ -105,6 +119,7 @@ setDealForm
 
 
 
+
 const [
 paymentForm,
 setPaymentForm
@@ -114,9 +129,15 @@ amount:0,
 
 payment_type:"Full",
 
-installment_no:1
+installment_no:1,
+
+payment_date:
+new Date()
+.toISOString()
+.substring(0,10)
 
 });
+
 
 
 
@@ -133,12 +154,15 @@ discount:number
 
 ){
 
+
 return Number(
 
 price -
-(price * discount /100)
+(price * discount / 100)
 
-).toFixed(2);
+)
+.toFixed(2);
+
 
 }
 
@@ -171,34 +195,40 @@ setShowDealModal(true);
 
 
 
-
 function openEditDeal(deal:any){
-
 
 
 setEditingDeal(deal);
 
 
-
 setDealForm({
 
-customer_name:deal.customer_name,
+customer_name:
+deal.customer_name,
 
-owner_id:deal.owner_id,
+owner_id:
+deal.owner_id,
 
-course:deal.course,
+course:
+deal.course,
 
-course_type:deal.course_type,
+course_type:
+deal.course_type,
 
-list_price:Number(deal.list_price),
+list_price:
+Number(deal.list_price),
 
-discount_pct:Number(deal.discount_pct),
+discount_pct:
+Number(deal.discount_pct),
 
-final_price:Number(deal.final_price),
+final_price:
+Number(deal.final_price),
 
-lead_type:deal.lead_type,
+lead_type:
+deal.lead_type,
 
-signed_at:deal.signed_at
+signed_at:
+deal.signed_at
 
 });
 
@@ -216,14 +246,14 @@ setShowDealModal(true);
 
 
 
-async function saveDeal(){
 
+async function saveDeal(){
 
 
 if(!dealForm.customer_name){
 
 alert(
-"Customer name required"
+"Customer name is required"
 );
 
 return;
@@ -275,10 +305,16 @@ refresh();
 
 
 
+
 async function removeDeal(id:string){
 
 
-if(!confirm("Delete this deal?"))
+if(
+!confirm(
+"Delete this deal?"
+)
+
+)
 
 return;
 
@@ -312,7 +348,12 @@ amount:0,
 
 payment_type:"Full",
 
-installment_no:1
+installment_no:1,
+
+payment_date:
+new Date()
+.toISOString()
+.substring(0,10)
 
 });
 
@@ -329,14 +370,17 @@ setShowPaymentModal(true);
 
 
 
+
 async function savePayment(){
 
 
-
-if(paymentForm.amount<=0){
+if(
+!selectedDeal ||
+paymentForm.amount<=0
+){
 
 alert(
-"Enter payment amount"
+"Please enter payment amount"
 );
 
 return;
@@ -345,11 +389,14 @@ return;
 
 
 
+
 await addPayment({
 
-deal_id:selectedDeal.id,
+deal_id:
+selectedDeal.id,
 
-amount:Number(paymentForm.amount),
+amount:
+Number(paymentForm.amount),
 
 payment_type:
 paymentForm.payment_type,
@@ -358,12 +405,7 @@ installment_no:
 Number(paymentForm.installment_no),
 
 payment_date:
-
-new Date()
-
-.toISOString()
-
-.substring(0,10)
+paymentForm.payment_date
 
 });
 
@@ -388,17 +430,17 @@ refresh();
 async function viewPayments(deal:any){
 
 
-const data=
-
+const data =
 await getDealPayments(
-
 deal.id
-
 );
 
 
 
-setPayments(data || []);
+setPayments(
+data || []
+);
+
 
 
 setSelectedDeal(deal);
@@ -409,21 +451,14 @@ setShowHistoryModal(true);
 
 }
 
-
-
-
-
-
-
-
-
 return (
 
-<div className="space-y-6">
+<div className="
+space-y-6
+">
 
 
-
-
+{/* HEADER */}
 
 <div className="
 flex
@@ -458,6 +493,8 @@ text-[#e9da95]
 px-5
 py-3
 rounded-xl
+text-sm
+font-medium
 "
 
 >
@@ -478,6 +515,8 @@ Add Deal
 
 
 
+
+{/* DEAL TABLE */}
 
 <div className="
 bg-white
@@ -502,9 +541,11 @@ bg-gray-50
 
 
 <th className="
+w-[20%]
 p-4
 text-left
-w-[20%]
+text-sm
+font-semibold
 ">
 
 Customer
@@ -512,9 +553,12 @@ Customer
 </th>
 
 
+
 <th className="
-text-left
 w-[15%]
+text-left
+text-sm
+font-semibold
 ">
 
 Course
@@ -524,8 +568,36 @@ Course
 
 
 <th className="
-text-left
 w-[12%]
+text-left
+text-sm
+font-semibold
+">
+
+List Price
+
+</th>
+
+
+
+<th className="
+w-[10%]
+text-left
+text-sm
+font-semibold
+">
+
+Discount
+
+</th>
+
+
+
+<th className="
+w-[13%]
+text-left
+text-sm
+font-semibold
 ">
 
 Final Price
@@ -535,8 +607,10 @@ Final Price
 
 
 <th className="
-text-left
 w-[15%]
+text-left
+text-sm
+font-semibold
 ">
 
 Owner
@@ -545,10 +619,11 @@ Owner
 
 
 
-
 <th className="
+w-[15%]
 text-center
-w-[20%]
+text-sm
+font-semibold
 ">
 
 Action
@@ -556,11 +631,12 @@ Action
 </th>
 
 
-
 </tr>
 
 
 </thead>
+
+
 
 
 
@@ -580,13 +656,17 @@ key={deal.id}
 
 className="
 border-t
+hover:bg-gray-50
 "
 
 
 >
 
 
-<td className="p-4">
+<td className="
+p-4
+truncate
+">
 
 {deal.customer_name}
 
@@ -594,7 +674,10 @@ border-t
 
 
 
-<td>
+
+<td className="
+truncate
+">
 
 {deal.course}
 
@@ -602,11 +685,42 @@ border-t
 
 
 
+
+
 <td>
 
-RM {deal.final_price}
+RM {Number(
+deal.list_price
+).toLocaleString()}
 
 </td>
+
+
+
+
+
+<td>
+
+{deal.discount_pct}%
+
+</td>
+
+
+
+
+
+<td className="
+font-semibold
+">
+
+RM {Number(
+deal.final_price
+).toLocaleString()}
+
+</td>
+
+
+
 
 
 
@@ -620,13 +734,16 @@ RM {deal.final_price}
 
 
 
+
+
+
 <td>
 
 
 <div className="
 flex
 justify-center
-gap-3
+gap-2
 ">
 
 
@@ -641,11 +758,14 @@ text-green-700
 hover:bg-green-50
 "
 
+title="Add Payment"
+
 >
 
-<CreditCard size={18}/>
+<CreditCard size={17}/>
 
 </button>
+
 
 
 
@@ -661,9 +781,11 @@ text-blue-700
 hover:bg-blue-50
 "
 
+title="Payment History"
+
 >
 
-<Eye size={18}/>
+<Eye size={17}/>
 
 </button>
 
@@ -681,11 +803,14 @@ rounded-lg
 hover:bg-gray-100
 "
 
+title="Edit"
+
 >
 
-<Edit size={18}/>
+<Edit size={17}/>
 
 </button>
+
 
 
 
@@ -702,18 +827,21 @@ text-red-500
 hover:bg-red-50
 "
 
+title="Delete"
+
 >
 
-<Trash2 size={18}/>
+<Trash2 size={17}/>
 
 </button>
-
 
 
 </div>
 
 
 </td>
+
+
 
 
 
@@ -743,8 +871,7 @@ hover:bg-red-50
 
 
 
-{/* DEAL MODAL */}
-
+{/* CREATE / EDIT DEAL MODAL */}
 
 {
 
@@ -766,14 +893,27 @@ close={()=>setShowDealModal(false)}
 >
 
 
-<div className="space-y-4">
+<div className="
+space-y-4
+">
+
+
+
+
+
+<div>
+
+
+<label className="form-label">
+
+Customer Name
+
+</label>
 
 
 <input
 
 className="input"
-
-placeholder="Customer Name"
 
 value={dealForm.customer_name}
 
@@ -792,6 +932,22 @@ customer_name:e.target.value
 />
 
 
+</div>
+
+
+
+
+
+
+
+<div>
+
+
+<label className="form-label">
+
+Owner
+
+</label>
 
 
 
@@ -823,23 +979,27 @@ Select Owner
 </option>
 
 
+
 {
 
-salesPeople.map((p:any)=>(
+salesPeople.map((person:any)=>(
+
 
 <option
 
-key={p.id}
+key={person.id}
 
-value={p.id}
+value={person.id}
 
 >
 
-{p.full_name}
+{person.full_name}
 
 </option>
 
+
 ))
+
 
 }
 
@@ -848,15 +1008,27 @@ value={p.id}
 </select>
 
 
+</div>
 
 
+
+
+
+
+
+<div>
+
+
+<label className="form-label">
+
+Course
+
+</label>
 
 
 <input
 
 className="input"
-
-placeholder="Course"
 
 value={dealForm.course}
 
@@ -875,16 +1047,27 @@ course:e.target.value
 />
 
 
+</div>
 
 
 
+
+
+
+
+<div>
+
+
+<label className="form-label">
+
+Course Type
+
+</label>
 
 
 <input
 
 className="input"
-
-placeholder="Course Type"
 
 value={dealForm.course_type}
 
@@ -903,6 +1086,9 @@ course_type:e.target.value
 />
 
 
+</div>
+
+
 
 
 
@@ -915,17 +1101,16 @@ gap-4
 ">
 
 
-<div className="space-y-2">
 
-<label className="
-text-sm
-font-medium
-text-[#284342]
-">
+<div>
+
+
+<label className="form-label">
 
 List Price (RM)
 
 </label>
+
 
 
 <input
@@ -975,17 +1160,17 @@ dealForm.discount_pct
 
 
 
-<div className="space-y-2">
 
-<label className="
-text-sm
-font-medium
-text-[#284342]
-">
+
+<div>
+
+
+<label className="form-label">
 
 Discount (%)
 
 </label>
+
 
 
 <input
@@ -1032,6 +1217,7 @@ discount
 </div>
 
 
+
 </div>
 
 
@@ -1041,35 +1227,72 @@ discount
 
 
 
-<div className="
-space-y-2
-">
+<div>
 
 
-<label className="
-text-sm
-font-medium
-text-[#284342]
-">
+<label className="form-label">
 
 Final Price (RM)
 
 </label>
 
 
-
 <div className="
 bg-gray-50
 rounded-xl
-p-4
-text-lg
+p-3
 font-semibold
 text-[#284342]
 ">
 
-RM {dealForm.final_price}
+RM {Number(
+dealForm.final_price
+).toLocaleString()}
 
 </div>
+
+
+</div>
+
+
+
+
+
+
+
+
+<div>
+
+
+<label className="form-label">
+
+Signed Date
+
+</label>
+
+
+
+<input
+
+className="input"
+
+type="date"
+
+value={dealForm.signed_at}
+
+onChange={e=>
+
+setDealForm({
+
+...dealForm,
+
+signed_at:e.target.value
+
+})
+
+}
+
+/>
 
 
 </div>
@@ -1095,7 +1318,12 @@ Save Deal
 </button>
 
 
+
+
+
+
 </div>
+
 
 
 </Modal>
@@ -1103,16 +1331,7 @@ Save Deal
 
 }
 
-
-
-
-
-
-
-
-
 {/* PAYMENT MODAL */}
-
 
 {
 
@@ -1128,7 +1347,22 @@ close={()=>setShowPaymentModal(false)}
 >
 
 
-<div className="space-y-4">
+<div className="
+space-y-4
+">
+
+
+
+
+
+<div>
+
+<label className="form-label">
+
+Amount (RM)
+
+</label>
+
 
 
 <input
@@ -1136,8 +1370,6 @@ close={()=>setShowPaymentModal(false)}
 className="input"
 
 type="number"
-
-placeholder="Amount"
 
 value={paymentForm.amount}
 
@@ -1147,7 +1379,9 @@ setPaymentForm({
 
 ...paymentForm,
 
-amount:Number(e.target.value)
+amount:Number(
+e.target.value
+)
 
 })
 
@@ -1156,6 +1390,22 @@ amount:Number(e.target.value)
 />
 
 
+</div>
+
+
+
+
+
+
+
+
+<div>
+
+<label className="form-label">
+
+Payment Type
+
+</label>
 
 
 
@@ -1180,23 +1430,41 @@ payment_type:e.target.value
 >
 
 
-<option>
+<option value="Full">
 
-Full
+Full Payment
 
 </option>
 
 
-<option>
+
+<option value="Installment">
 
 Installment
 
 </option>
 
 
+
 </select>
 
 
+</div>
+
+
+
+
+
+
+
+
+<div>
+
+<label className="form-label">
+
+Installment Number
+
+</label>
 
 
 
@@ -1206,6 +1474,8 @@ className="input"
 
 type="number"
 
+min="1"
+
 value={paymentForm.installment_no}
 
 onChange={e=>
@@ -1214,13 +1484,60 @@ setPaymentForm({
 
 ...paymentForm,
 
-installment_no:Number(e.target.value)
+installment_no:Number(
+e.target.value
+)
 
 })
 
 }
 
 />
+
+
+</div>
+
+
+
+
+
+
+
+<div>
+
+<label className="form-label">
+
+Payment Date
+
+</label>
+
+
+
+<input
+
+className="input"
+
+type="date"
+
+value={paymentForm.payment_date}
+
+onChange={e=>
+
+setPaymentForm({
+
+...paymentForm,
+
+payment_date:e.target.value
+
+})
+
+}
+
+/>
+
+
+</div>
+
 
 
 
@@ -1235,12 +1552,16 @@ className="btn-primary"
 
 >
 
+<Save size={16}/>
+
 Save Payment
 
 </button>
 
 
+
 </div>
+
 
 
 </Modal>
@@ -1256,8 +1577,7 @@ Save Payment
 
 
 
-{/* HISTORY MODAL */}
-
+{/* PAYMENT HISTORY */}
 
 {
 
@@ -1266,49 +1586,172 @@ showHistoryModal &&
 
 <Modal
 
-title="Payment History"
+title={
+`Payment History - ${selectedDeal?.customer_name}`
+}
 
 close={()=>setShowHistoryModal(false)}
 
 >
 
 
+
+<table className="
+w-full
+table-fixed
+">
+
+
+<thead className="
+bg-gray-50
+">
+
+
+<tr>
+
+
+<th className="
+p-3
+text-left
+">
+
+Type
+
+</th>
+
+
+<th className="
+text-left
+">
+
+Installment
+
+</th>
+
+
+<th className="
+text-left
+">
+
+Amount
+
+</th>
+
+
+<th className="
+text-left
+">
+
+Date
+
+</th>
+
+
+</tr>
+
+
+</thead>
+
+
+
+
+
+
+<tbody>
+
+
 {
 
-payments.map((p:any)=>(
+payments.length===0 &&
 
+<tr>
 
-<div
+<td
 
-key={p.id}
+colSpan={4}
 
 className="
-flex
-justify-between
-border-b
-py-3
+p-4
+text-center
+text-gray-500
 "
 
 >
 
+No payment record
 
-<span>
+</td>
 
-{p.payment_type}
-
-#{p.installment_no}
-
-</span>
+</tr>
 
 
-<b>
-
-RM {p.amount}
-
-</b>
+}
 
 
-</div>
+
+
+
+
+
+{
+
+payments.map((payment:any)=>(
+
+
+<tr
+
+key={payment.id}
+
+className="
+border-t
+"
+
+
+>
+
+
+<td className="p-3">
+
+{payment.payment_type}
+
+</td>
+
+
+
+
+<td>
+
+#{payment.installment_no}
+
+</td>
+
+
+
+
+
+<td>
+
+RM {Number(
+payment.amount
+).toLocaleString()}
+
+</td>
+
+
+
+
+
+<td>
+
+{payment.payment_date}
+
+</td>
+
+
+
+
+
+</tr>
 
 
 ))
@@ -1318,6 +1761,15 @@ RM {p.amount}
 
 
 
+</tbody>
+
+
+
+</table>
+
+
+
+
 </Modal>
 
 
@@ -1327,10 +1779,13 @@ RM {p.amount}
 
 
 
+
+
+
+
 </div>
 
 );
-
 
 }
 
@@ -1340,6 +1795,11 @@ RM {p.amount}
 
 
 
+
+
+// ===============================
+// COMMON MODAL
+// ===============================
 
 
 function Modal({
@@ -1353,6 +1813,7 @@ children
 }:any){
 
 
+
 return (
 
 <div className="
@@ -1363,7 +1824,9 @@ flex
 items-center
 justify-center
 z-50
+p-4
 ">
+
 
 
 <div className="
@@ -1372,8 +1835,13 @@ rounded-2xl
 p-8
 w-full
 max-w-xl
+max-h-[90vh]
+overflow-y-auto
 space-y-5
 ">
+
+
+
 
 
 <div className="
@@ -1395,25 +1863,39 @@ text-[#284342]
 
 
 
+
+
 <button
 
 onClick={close}
 
+className="
+p-2
+rounded-lg
+hover:bg-gray-100
+"
+
 >
 
-<X/>
+<X size={18}/>
 
 </button>
 
 
+
 </div>
+
+
+
 
 
 
 {children}
 
 
+
 </div>
+
 
 
 </div>

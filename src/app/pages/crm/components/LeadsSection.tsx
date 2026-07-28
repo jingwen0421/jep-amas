@@ -6,18 +6,13 @@ useState
 import {
 
 Plus,
-
 Edit,
-
 Trash2,
-
 X,
-
 Save,
-
 Search,
-
-RefreshCw
+RefreshCw,
+Briefcase
 
 } from "lucide-react";
 
@@ -26,12 +21,16 @@ RefreshCw
 import {
 
 createLead,
-
 updateLead,
-
 deleteLead
 
 } from "../../../services/crmService";
+
+
+
+import ConvertDealModal from "./ConvertDealModal";
+
+
 
 
 
@@ -55,6 +54,8 @@ const STATUS=[
 
 
 
+
+
 const SOURCES=[
 
 "Company Lead",
@@ -66,6 +67,9 @@ const SOURCES=[
 "Referral"
 
 ];
+
+
+
 
 
 
@@ -97,6 +101,7 @@ setSearch
 
 
 
+
 const [
 
 filter,
@@ -104,6 +109,7 @@ filter,
 setFilter
 
 ]=useState("All");
+
 
 
 
@@ -119,6 +125,20 @@ setShowModal
 
 
 
+
+const [
+
+showConvert,
+
+setShowConvert
+
+]=useState<any>(null);
+
+
+
+
+
+
 const [
 
 editing,
@@ -126,6 +146,7 @@ editing,
 setEditing
 
 ]=useState<any>(null);
+
 
 
 
@@ -165,7 +186,9 @@ note:""
 function openAdd(){
 
 
+
 setEditing(null);
+
 
 
 setForm({
@@ -185,11 +208,12 @@ note:""
 });
 
 
+
 setShowModal(true);
 
 
-}
 
+}
 
 
 
@@ -239,8 +263,8 @@ setShowModal(true);
 
 
 
-
 async function save(){
+
 
 
 if(!form.name){
@@ -252,6 +276,8 @@ alert(
 return;
 
 }
+
+
 
 
 
@@ -274,6 +300,7 @@ form
 else{
 
 
+
 await createLead(
 
 form
@@ -283,6 +310,8 @@ form
 
 
 }
+
+
 
 
 
@@ -303,25 +332,29 @@ refresh();
 
 
 
-
 async function remove(id:string){
 
 
 
 if(
+
 !confirm(
 "Delete this lead?"
 )
+
 )
 
 return;
 
 
 
+
 await deleteLead(id);
 
 
+
 refresh();
+
 
 
 }
@@ -361,6 +394,7 @@ status
 refresh();
 
 
+
 }
 
 
@@ -376,7 +410,7 @@ const filtered = leads.filter(
 (lead:any)=>{
 
 
-const matchSearch =
+const searchMatch =
 
 lead.name
 
@@ -396,7 +430,10 @@ lead.phone
 
 
 
-const matchStatus =
+
+
+
+const statusMatch =
 
 filter==="All"
 
@@ -406,23 +443,22 @@ lead.status===filter;
 
 
 
+
+
 return (
 
-matchSearch
+searchMatch
 
 &&
 
-matchStatus
+statusMatch
 
 );
-
 
 
 }
 
 );
-
-
 
 
 
@@ -440,18 +476,11 @@ space-y-6
 
 
 
-
-
-
-
-
 <div className="
 flex
 justify-between
 items-center
 ">
-
-
 
 
 <h2 className="
@@ -481,8 +510,6 @@ text-[#e9da95]
 px-5
 py-3
 rounded-xl
-text-sm
-font-medium
 "
 
 >
@@ -492,9 +519,6 @@ font-medium
 Add Lead
 
 </button>
-
-
-
 
 
 </div>
@@ -540,7 +564,17 @@ text-gray-400
 
 <input
 
-placeholder="Search name or phone..."
+className="
+w-full
+border
+rounded-xl
+pl-10
+py-3
+"
+
+placeholder="
+Search name or phone...
+"
 
 value={search}
 
@@ -552,15 +586,6 @@ e.target.value
 
 }
 
-className="
-w-full
-border
-rounded-xl
-pl-10
-pr-4
-py-3
-"
-
 />
 
 
@@ -571,7 +596,14 @@ py-3
 
 
 
+
 <select
+
+className="
+border
+rounded-xl
+px-4
+"
 
 value={filter}
 
@@ -582,12 +614,6 @@ e.target.value
 )
 
 }
-
-className="
-border
-rounded-xl
-px-4
-"
 
 >
 
@@ -601,25 +627,24 @@ All
 
 {
 
-STATUS.map(s=>
+STATUS.map(status=>(
 
-<option
+<option key={status}>
 
-key={s}
-
->
-
-{s}
+{status}
 
 </option>
 
-)
+
+))
 
 
 }
 
 
+
 </select>
+
 
 
 
@@ -646,9 +671,6 @@ hover:bg-gray-100
 
 
 
-
-
-
 </div>
 
 
@@ -667,12 +689,10 @@ overflow-hidden
 ">
 
 
-
 <table className="
 w-full
 table-fixed
 ">
-
 
 
 <thead className="
@@ -683,19 +703,15 @@ bg-gray-50
 <tr>
 
 
-
 <th className="
 w-[20%]
 p-4
 text-left
-text-sm
 ">
 
 Customer
 
 </th>
-
-
 
 
 <th className="
@@ -706,8 +722,6 @@ text-left
 Phone
 
 </th>
-
-
 
 
 
@@ -722,9 +736,6 @@ Source
 
 
 
-
-
-
 <th className="
 w-[15%]
 text-left
@@ -736,9 +747,6 @@ Status
 
 
 
-
-
-
 <th className="
 w-[15%]
 text-left
@@ -747,9 +755,6 @@ text-left
 Owner
 
 </th>
-
-
-
 
 
 
@@ -766,25 +771,14 @@ Action
 
 </tr>
 
-
 </thead>
 
-
-
-
-
-
-
-
-
 <tbody>
-
 
 
 {
 
 filtered.map((lead:any)=>(
-
 
 
 <tr
@@ -793,7 +787,9 @@ key={lead.id}
 
 className="
 border-t
+hover:bg-gray-50
 "
+
 
 >
 
@@ -809,13 +805,14 @@ truncate
 
 
 
-<td className="
-truncate
-">
+
+
+<td>
 
 {lead.phone}
 
 </td>
+
 
 
 
@@ -825,6 +822,7 @@ truncate
 {lead.source}
 
 </td>
+
 
 
 
@@ -863,19 +861,22 @@ text-sm
 
 {
 
-STATUS.map(s=>
+STATUS.map(status=>(
+
 
 <option
 
-key={s}
+key={status}
 
 >
 
-{s}
+{status}
 
 </option>
 
-)
+
+))
+
 
 }
 
@@ -883,8 +884,10 @@ key={s}
 </select>
 
 
-
 </td>
+
+
+
 
 
 
@@ -902,6 +905,9 @@ key={s}
 
 
 
+
+
+
 <td>
 
 
@@ -913,6 +919,43 @@ gap-2
 
 
 
+
+
+{
+
+lead.status !== "Converted" &&
+
+
+<button
+
+onClick={()=>setShowConvert(lead)}
+
+className="
+p-2
+rounded-lg
+text-green-700
+hover:bg-green-50
+"
+
+title="
+Convert to Deal
+"
+
+>
+
+<Briefcase size={16}/>
+
+</button>
+
+
+}
+
+
+
+
+
+
+
 <button
 
 onClick={()=>openEdit(lead)}
@@ -921,6 +964,10 @@ className="
 p-2
 rounded-lg
 hover:bg-gray-100
+"
+
+title="
+Edit
 "
 
 >
@@ -942,8 +989,12 @@ onClick={()=>remove(lead.id)}
 className="
 p-2
 rounded-lg
-hover:bg-red-50
 text-red-500
+hover:bg-red-50
+"
+
+title="
+Delete
 "
 
 >
@@ -959,16 +1010,13 @@ text-red-500
 </div>
 
 
-
 </td>
 
 
 
 
 
-
 </tr>
-
 
 
 ))
@@ -982,11 +1030,7 @@ text-red-500
 
 
 
-
 </table>
-
-
-
 
 
 </div>
@@ -999,8 +1043,14 @@ text-red-500
 
 
 
+{/* ADD / EDIT LEAD MODAL */}
+
+
+
 {
+
 showModal &&
+
 
 
 <div className="
@@ -1011,17 +1061,17 @@ flex
 items-center
 justify-center
 z-50
+p-4
 ">
-
 
 
 <div className="
 bg-white
 rounded-2xl
 w-full
-max-w-lg
-p-6
-space-y-4
+max-w-xl
+p-8
+space-y-5
 ">
 
 
@@ -1031,6 +1081,7 @@ space-y-4
 <div className="
 flex
 justify-between
+items-center
 ">
 
 
@@ -1060,14 +1111,19 @@ editing
 
 
 
-
 <button
 
 onClick={()=>setShowModal(false)}
 
+className="
+p-2
+hover:bg-gray-100
+rounded-lg
+"
+
 >
 
-<X/>
+<X size={18}/>
 
 </button>
 
@@ -1080,9 +1136,22 @@ onClick={()=>setShowModal(false)}
 
 
 
+
+
+<div>
+
+
+<label className="form-label">
+
+Customer Name
+
+</label>
+
+
+
 <input
 
-placeholder="Customer Name"
+className="input"
 
 value={form.name}
 
@@ -1098,23 +1167,32 @@ name:e.target.value
 
 }
 
-className="
-w-full
-border
-rounded-xl
-p-3
-"
-
 />
 
 
+</div>
 
+
+
+
+
+
+
+
+<div>
+
+
+<label className="form-label">
+
+Phone
+
+</label>
 
 
 
 <input
 
-placeholder="Phone"
+className="input"
 
 value={form.phone}
 
@@ -1130,21 +1208,33 @@ phone:e.target.value
 
 }
 
-className="
-w-full
-border
-rounded-xl
-p-3
-"
-
 />
 
 
+</div>
 
+
+
+
+
+
+
+
+
+<div>
+
+
+<label className="form-label">
+
+Lead Source
+
+</label>
 
 
 
 <select
+
+className="input"
 
 value={form.source}
 
@@ -1160,40 +1250,59 @@ source:e.target.value
 
 }
 
-className="
-w-full
-border
-rounded-xl
-p-3
-"
-
 >
 
 
 {
 
-SOURCES.map(s=>
+SOURCES.map(source=>(
 
-<option key={s}>
 
-{s}
+<option
+
+key={source}
+
+>
+
+{source}
 
 </option>
 
-)
+
+))
+
 
 }
+
 
 
 </select>
 
 
+</div>
 
 
+
+
+
+
+
+
+
+<div>
+
+
+<label className="form-label">
+
+Salesperson
+
+</label>
 
 
 
 <select
+
+className="input"
 
 value={form.owner_id}
 
@@ -1209,13 +1318,6 @@ owner_id:e.target.value
 
 }
 
-className="
-w-full
-border
-rounded-xl
-p-3
-"
-
 >
 
 
@@ -1227,20 +1329,21 @@ Assign Salesperson
 
 
 
+
 {
 
-salesPeople.map((p:any)=>(
+salesPeople.map((person:any)=>(
 
 
 <option
 
-key={p.id}
+key={person.id}
 
-value={p.id}
+value={person.id}
 
 >
 
-{p.full_name}
+{person.full_name}
 
 </option>
 
@@ -1251,15 +1354,34 @@ value={p.id}
 }
 
 
+
 </select>
 
 
+</div>
 
 
+
+
+
+
+
+
+
+<div>
+
+
+<label className="form-label">
+
+Status
+
+</label>
 
 
 
 <select
+
+className="input"
 
 value={form.status}
 
@@ -1275,43 +1397,61 @@ status:e.target.value
 
 }
 
-className="
-w-full
-border
-rounded-xl
-p-3
-"
-
 >
 
 
 {
 
-STATUS.map(s=>
+STATUS.map(status=>(
 
-<option key={s}>
 
-{s}
+<option
+
+key={status}
+
+>
+
+{status}
 
 </option>
 
-)
+
+))
 
 
 }
 
 
+
 </select>
 
 
+</div>
 
 
+
+
+
+
+
+
+
+<div>
+
+
+<label className="form-label">
+
+Notes
+
+</label>
 
 
 
 <textarea
 
-placeholder="Notes"
+className="input"
+
+rows={3}
 
 value={form.note}
 
@@ -1327,14 +1467,12 @@ note:e.target.value
 
 }
 
-className="
-w-full
-border
-rounded-xl
-p-3
-"
-
 />
+
+
+</div>
+
+
 
 
 
@@ -1347,21 +1485,16 @@ p-3
 onClick={save}
 
 className="
-flex
-items-center
-gap-2
-bg-[#284342]
-text-[#e9da95]
-px-5
-py-3
-rounded-xl
+btn-primary
 "
 
 >
 
+
 <Save size={17}/>
 
 Save Lead
+
 
 </button>
 
@@ -1377,6 +1510,39 @@ Save Lead
 
 
 }
+
+
+
+
+
+
+
+
+
+{/* CONVERT LEAD TO DEAL */}
+
+
+
+{
+
+showConvert &&
+
+
+<ConvertDealModal
+
+lead={showConvert}
+
+salesPeople={salesPeople}
+
+close={()=>setShowConvert(null)}
+
+refresh={refresh}
+
+/>
+
+
+}
+
 
 
 
