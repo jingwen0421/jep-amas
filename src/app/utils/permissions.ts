@@ -30,7 +30,9 @@ export const ROLE_ACCESS: Record<UserRole, string[]> = {
     '/app/documents',
     '/app/users',
     '/app/audit',
+    '/app/crm',
   ],
+
 
   owner: [
     '/app/dashboard',
@@ -40,6 +42,7 @@ export const ROLE_ACCESS: Record<UserRole, string[]> = {
     '/app/documents',
     '/app/users',
     '/app/audit',
+    '/app/crm',
   ],
 
   teacher: [
@@ -95,6 +98,7 @@ export const ROLE_ACCESS: Record<UserRole, string[]> = {
     '/app/students/list',
     '/app/payments/outstanding',
     '/app/reports',
+    '/app/crm',
   ],
 
   external_sales: [
@@ -102,6 +106,7 @@ export const ROLE_ACCESS: Record<UserRole, string[]> = {
     '/app/notifications',
     '/app/students/list',
     '/app/payments/outstanding',
+    '/app/crm',
   ],
 
   parent: [

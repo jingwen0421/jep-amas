@@ -42,6 +42,7 @@ import NotificationCenter from './pages/NotificationCenter';
 import ProtectedRoute from './components/ProtectedRoute';
 import AccessDenied from './pages/AccessDenied';
 import StudentRegistration from './pages/students/StudentRegistration';
+import CRMPage from './pages/crm/CRMPage';
 
 export const router = createBrowserRouter([
   {
@@ -52,6 +53,7 @@ export const router = createBrowserRouter([
   path: '/student-registration',
   Component: StudentRegistration,
 },
+
   {
   path: '/app',
   element: (
@@ -128,6 +130,12 @@ export const router = createBrowserRouter([
 
       // Default redirect
       { index: true, path: '*', element: <Dashboard /> },
+
+     // CRM
+      {
+      path:'crm',
+      Component: CRMPage
+      },
     ],
   },
 ]);

@@ -9,7 +9,7 @@ export default function LoginPage() {
 
   const [mode, setMode] = useState<Mode>('login');
   const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('jingwen0421@gmail.com');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [role, setRole] = useState('student');
   const [loading, setLoading] = useState(false);
@@ -18,68 +18,66 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
 
-    if (email === 'jingwen0421@gmail.com' && password === '123') {
-      localStorage.setItem('userId', 'super-admin-demo');
-      localStorage.setItem('userRole', 'super_admin');
-      localStorage.setItem('userEmail', email);
-      localStorage.setItem('userName', 'Wong Jing Wen');
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
 
+    if (authError || !authData.user) {
       setLoading(false);
-      navigate('/app/dashboard');
+      alert('Invalid email or password.');
       return;
     }
 
-    const { data, error } = await supabase
+    const { data: profile, error: profileError } = await supabase
       .from('users')
-      .select('id, full_name, email, role, status, password')
-      .eq('email', email)
-      .single();
+      .select('id, full_name, email, role, status')
+      .eq('auth_user_id', authData.user.id)
+      .maybeSingle();
 
-    if (error || !data) {
+    if (profileError || !profile) {
       setLoading(false);
-      alert('Invalid email or account not found.');
+      await supabase.auth.signOut();
+      alert('No matching account profile was found. Contact Admin.');
       return;
     }
 
-    if (data.password !== password) {
+    if (profile.status === 'pending') {
       setLoading(false);
-      alert('Invalid password.');
-      return;
-    }
-
-    if (data.status === 'pending') {
-      setLoading(false);
+      await supabase.auth.signOut();
       alert('Your account is pending admin approval.');
       return;
     }
 
-    if (data.status === 'rejected') {
+    if (profile.status === 'rejected') {
       setLoading(false);
+      await supabase.auth.signOut();
       alert('Your account registration has been rejected.');
       return;
     }
 
-    if (data.status !== 'active') {
+    if (profile.status !== 'active') {
       setLoading(false);
+      await supabase.auth.signOut();
       alert('Your account is inactive.');
       return;
     }
 
-    localStorage.setItem('userId', data.id);
-    localStorage.setItem('userRole', data.role);
-    localStorage.setItem('userEmail', data.email);
-    localStorage.setItem('userName', data.full_name);
+    localStorage.setItem('userId', profile.id);
+    localStorage.setItem('userRole', profile.role);
+    localStorage.setItem('userEmail', profile.email);
+    localStorage.setItem('userName', profile.full_name);
 
     await supabase.from('audit_logs').insert({
-      user_id: data.id,
+      user_id: profile.id,
       action: 'Logged In',
       module: 'Authentication',
-      target_id: data.id,
+      target_id: profile.id,
       old_data: null,
       new_data: {
-        full_name: data.full_name,
-        email: data.email,
-        role: data.role,
+        full_name: profile.full_name,
+        email: profile.email,
+        role: profile.role,
       },
       created_at: new Date().toISOString(),
     });
@@ -92,42 +90,39 @@ export default function LoginPage() {
     e.preventDefault();
     setLoading(true);
 
-    if (!fullName.trim()) {
-      alert('Please enter your full name.');
+    if (!fullName.trim() || !email.trim() || !password.trim()) {
+      alert('Please fill in your name, email, and password.');
       setLoading(false);
       return;
     }
 
-    if (!email.trim()) {
-      alert('Please enter your email.');
+    if (password.length < 8) {
+      alert('Password must be at least 8 characters.');
       setLoading(false);
       return;
     }
 
-    if (!password.trim()) {
-      alert('Please enter your password.');
+    // 1. Create the real Supabase Auth credential.
+    const { data: authData, error: authError } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { full_name: fullName.trim(), role } },
+    });
+
+    if (authError || !authData.user) {
+      alert(authError?.message || 'Failed to create account.');
       setLoading(false);
       return;
     }
 
-    const { data: existingUser } = await supabase
-      .from('users')
-      .select('id')
-      .eq('email', email)
-      .maybeSingle();
-
-    if (existingUser) {
-      alert('This email is already registered.');
-      setLoading(false);
-      return;
-    }
-
-    const { data, error } = await supabase
+    // 2. Create the app-level profile row, linked to that auth account.
+    //    Stays 'pending' until Admin approves — same behaviour as before.
+    const { data: profile, error: profileError } = await supabase
       .from('users')
       .insert({
+        auth_user_id: authData.user.id,
         full_name: fullName.trim(),
         email,
-        password,
         role,
         status: 'pending',
         created_at: new Date().toISOString(),
@@ -136,14 +131,8 @@ export default function LoginPage() {
       .select('id')
       .single();
 
-    if (error) {
-      alert(`Failed to submit registration: ${error.message}`);
-      setLoading(false);
-      return;
-    }
-
-    if (!data?.id) {
-      alert('User account was created, but user ID was not returned.');
+    if (profileError) {
+      alert(`Failed to submit registration: ${profileError.message}`);
       setLoading(false);
       return;
     }
@@ -152,26 +141,42 @@ export default function LoginPage() {
       user_id: null,
       action: role === 'student' ? 'Student Signup Submitted' : 'Staff Signup Submitted',
       module: 'User Management',
-      target_id: data.id,
+      target_id: profile.id,
       old_data: null,
-      new_data: {
-        full_name: fullName.trim(),
-        email,
-        role,
-        status: 'pending',
-      },
+      new_data: { full_name: fullName.trim(), email, role, status: 'pending' },
       created_at: new Date().toISOString(),
     });
 
     if (role === 'student') {
-      localStorage.setItem('studentSignupUserId', data.id);
-      localStorage.setItem('studentSignupName', fullName.trim());
-      localStorage.setItem('studentSignupEmail', email);
 
-      setLoading(false);
-      navigate('/student-registration');
-      return;
-    }
+  localStorage.setItem(
+    'studentSignupUserId',
+    profile.id
+  );
+
+
+  localStorage.setItem(
+    'studentSignupName',
+    fullName.trim()
+  );
+
+
+  localStorage.setItem(
+    'studentSignupEmail',
+    email
+  );
+
+
+  await supabase.auth.signOut();
+
+
+  setLoading(false);
+
+  navigate('/student-registration');
+
+  return;
+
+}
 
     alert('Account request submitted. Please wait for admin approval.');
 
@@ -200,9 +205,7 @@ export default function LoginPage() {
               type="button"
               onClick={() => setMode('login')}
               className={`py-2 rounded-md text-sm ${
-                mode === 'login'
-                  ? 'bg-[#284342] text-[#e9da95]'
-                  : 'text-[#284342]'
+                mode === 'login' ? 'bg-[#284342] text-[#e9da95]' : 'text-[#284342]'
               }`}
             >
               Sign In
@@ -216,24 +219,17 @@ export default function LoginPage() {
                 setPassword('');
               }}
               className={`py-2 rounded-md text-sm ${
-                mode === 'signup'
-                  ? 'bg-[#284342] text-[#e9da95]'
-                  : 'text-[#284342]'
+                mode === 'signup' ? 'bg-[#284342] text-[#e9da95]' : 'text-[#284342]'
               }`}
             >
               Sign Up
             </button>
           </div>
 
-          <form
-            onSubmit={mode === 'login' ? handleLogin : handleSignup}
-            className="space-y-5"
-          >
+          <form onSubmit={mode === 'login' ? handleLogin : handleSignup} className="space-y-5">
             {mode === 'signup' && (
               <div>
-                <label className="block text-sm mb-2 text-[#284342]">
-                  Full Name
-                </label>
+                <label className="block text-sm mb-2 text-[#284342]">Full Name</label>
                 <input
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
@@ -245,9 +241,7 @@ export default function LoginPage() {
             )}
 
             <div>
-              <label className="block text-sm mb-2 text-[#284342]">
-                Email Address
-              </label>
+              <label className="block text-sm mb-2 text-[#284342]">Email Address</label>
               <input
                 type="email"
                 value={email}
@@ -259,9 +253,7 @@ export default function LoginPage() {
             </div>
 
             <div>
-              <label className="block text-sm mb-2 text-[#284342]">
-                Password
-              </label>
+              <label className="block text-sm mb-2 text-[#284342]">Password</label>
               <input
                 type="password"
                 value={password}
@@ -274,9 +266,7 @@ export default function LoginPage() {
 
             {mode === 'signup' && (
               <div>
-                <label className="block text-sm mb-2 text-[#284342]">
-                  Register As
-                </label>
+                <label className="block text-sm mb-2 text-[#284342]">Register As</label>
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
@@ -291,12 +281,6 @@ export default function LoginPage() {
                   <option value="parent">Parent / Guardian</option>
                   <option value="admin">Admin</option>
                 </select>
-              </div>
-            )}
-
-            {mode === 'login' && (
-              <div className="p-3 rounded-lg bg-[#f8f8f6] text-sm text-[#6b6b6b]">
-                Demo super admin: jingwen0421@gmail.com / 123
               </div>
             )}
 

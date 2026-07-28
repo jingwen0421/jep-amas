@@ -193,6 +193,16 @@ export default function Layout() {
       ],
     },
     {
+      title: 'Sales',
+      items: [
+        {
+          label: 'Sales CRM',
+          path: '/app/crm',
+          icon: <Briefcase size={20} />,
+        },
+      ],
+    },
+    {
       title: 'Communication',
       items: [
         {

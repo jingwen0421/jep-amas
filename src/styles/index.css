@@ -1,3 +1,32 @@
 @import './fonts.css';
 @import './tailwind.css';
 @import './theme.css';
+
+
+.input{
+    width:100%;
+    border:1px solid #ddd;
+    padding:12px;
+    border-radius:12px;
+    outline:none;
+    font-size:16px;
+}
+
+
+.input:focus{
+    border-color:#284342;
+}
+
+
+.btn-primary{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:8px;
+    background:#284342;
+    color:#e9da95;
+    padding:12px 20px;
+    border-radius:12px;
+    font-weight:600;
+    cursor:pointer;
+}
