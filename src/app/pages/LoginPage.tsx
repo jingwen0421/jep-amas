@@ -86,106 +86,264 @@ export default function LoginPage() {
     navigate('/app/dashboard');
   }
 
-  async function handleSignup(e: React.FormEvent) {
-    e.preventDefault();
-    setLoading(true);
+async function handleSignup(e: React.FormEvent) {
 
-    if (!fullName.trim() || !email.trim() || !password.trim()) {
-      alert('Please fill in your name, email, and password.');
-      setLoading(false);
-      return;
+  e.preventDefault();
+
+  setLoading(true);
+
+
+  try {
+
+
+    if (
+      !fullName.trim() ||
+      !email.trim() ||
+      !password.trim()
+    ) {
+
+      throw new Error(
+        "Please fill in all fields."
+      );
+
     }
 
-    if (password.length < 8) {
-      alert('Password must be at least 8 characters.');
-      setLoading(false);
-      return;
+
+    if(password.length < 8){
+
+      throw new Error(
+        "Password must be at least 8 characters."
+      );
+
     }
 
-    // 1. Create the real Supabase Auth credential.
-    const { data: authData, error: authError } = await supabase.auth.signUp({
+
+
+    // 1. CREATE AUTH USER
+
+    const {
+      data:authData,
+      error:authError
+
+    } = await supabase.auth.signUp({
+
       email,
+
       password,
-      options: { data: { full_name: fullName.trim(), role } },
+
+      options:{
+        data:{
+          full_name:
+          fullName.trim(),
+
+          role
+        }
+      }
+
     });
 
-    if (authError || !authData.user) {
-      alert(authError?.message || 'Failed to create account.');
-      setLoading(false);
-      return;
+
+
+    if(authError)
+      throw authError;
+
+
+
+    if(!authData.user)
+      throw new Error(
+        "Auth account creation failed."
+      );
+
+
+
+
+
+    console.log(
+      "Created auth user:",
+      authData.user.id
+    );
+
+
+
+
+
+    // 2. CREATE PROFILE
+
+    const {
+      data:profile,
+      error:profileError
+
+    } = await supabase
+
+
+    .from("users")
+
+
+    .insert({
+
+      auth_user_id:
+      authData.user.id,
+
+
+      full_name:
+      fullName.trim(),
+
+
+      email,
+
+
+      role,
+
+
+      status:
+      "pending"
+
+
+    })
+
+
+    .select("id")
+
+
+    .single();
+
+
+
+
+
+    if(profileError){
+
+      console.error(
+        profileError
+      );
+
+      throw profileError;
+
     }
 
-    // 2. Create the app-level profile row, linked to that auth account.
-    //    Stays 'pending' until Admin approves — same behaviour as before.
-    const { data: profile, error: profileError } = await supabase
-      .from('users')
-      .insert({
-        auth_user_id: authData.user.id,
-        full_name: fullName.trim(),
+
+
+
+
+
+    // 3. AUDIT LOG
+
+    await supabase
+    .from("audit_logs")
+    .insert({
+
+      user_id:null,
+
+      action:
+      role==="student"
+      ?
+      "Student Signup Submitted"
+      :
+      "Staff Signup Submitted",
+
+
+      module:
+      "User Management",
+
+
+      target_id:
+      profile.id,
+
+
+      new_data:{
+
+        full_name:
+        fullName.trim(),
+
         email,
+
         role,
-        status: 'pending',
-        created_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .select('id')
-      .single();
 
-    if (profileError) {
-      alert(`Failed to submit registration: ${profileError.message}`);
-      setLoading(false);
-      return;
-    }
+        status:"pending"
 
-    await supabase.from('audit_logs').insert({
-      user_id: null,
-      action: role === 'student' ? 'Student Signup Submitted' : 'Staff Signup Submitted',
-      module: 'User Management',
-      target_id: profile.id,
-      old_data: null,
-      new_data: { full_name: fullName.trim(), email, role, status: 'pending' },
-      created_at: new Date().toISOString(),
+      },
+
+
+      created_at:
+      new Date()
+      .toISOString()
+
     });
 
-    if (role === 'student') {
-
-  localStorage.setItem(
-    'studentSignupUserId',
-    profile.id
-  );
 
 
-  localStorage.setItem(
-    'studentSignupName',
-    fullName.trim()
-  );
 
 
-  localStorage.setItem(
-    'studentSignupEmail',
-    email
-  );
 
 
-  await supabase.auth.signOut();
+    if(role==="student"){
 
 
-  setLoading(false);
+      localStorage.setItem(
+        "studentSignupUserId",
+        profile.id
+      );
 
-  navigate('/student-registration');
 
-  return;
+      await supabase.auth.signOut();
+
+
+      navigate(
+        "/student-registration"
+      );
+
+
+      return;
+
+    }
+
+
+
+
+
+    alert(
+      "Account submitted. Waiting for admin approval."
+    );
+
+
+    setMode("login");
+
+    setFullName("");
+
+    setEmail("");
+
+    setPassword("");
+
+    setRole("student");
+
+
+
+  }
+
+  catch(error:any){
+
+
+    console.error(
+      "Signup error:",
+      error
+    );
+
+
+    alert(
+      error.message
+    );
+
+
+  }
+
+
+  finally{
+
+    setLoading(false);
+
+  }
 
 }
-
-    alert('Account request submitted. Please wait for admin approval.');
-
-    setMode('login');
-    setFullName('');
-    setPassword('');
-    setRole('student');
-    setLoading(false);
-  }
 
   return (
     <div className="min-h-screen bg-[#f8f8f6] flex items-center justify-center p-4">

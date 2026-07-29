@@ -1,15 +1,10 @@
 import {
 Users,
 Target,
+Briefcase,
 DollarSign,
 TrendingUp
 } from "lucide-react";
-
-
-import {
-calculateCommission
-} from "../../../services/crmService";
-
 
 
 
@@ -19,17 +14,58 @@ salesPeople,
 
 leads,
 
-deals
+deals,
+
+commissions,
+
+currentUser
 
 }:any){
 
 
 
+const isAdmin =
+currentUser?.role === "super_admin";
 
 
-function getStats(
-person:any
-){
+
+
+// Admin sees everyone
+// Sales/Teacher sees themselves only
+
+const displayPeople =
+
+isAdmin
+
+?
+
+salesPeople.filter(
+(person:any)=>
+[
+"teacher",
+"internal_sales",
+"external_sales",
+"super_admin"
+].includes(person.role)
+)
+
+:
+
+salesPeople.filter(
+
+(person:any)=>
+
+person.id === currentUser?.id
+
+);
+
+
+
+
+
+
+
+function getStats(person:any){
 
 
 
@@ -39,11 +75,9 @@ leads.filter(
 
 (l:any)=>
 
-l.owner_id===person.id
+l.owner_id === person.id
 
 );
-
-
 
 
 
@@ -54,7 +88,21 @@ deals.filter(
 
 (d:any)=>
 
-d.owner_id===person.id
+d.owner_id === person.id
+
+);
+
+
+
+
+
+const personCommission =
+
+commissions.filter(
+
+(c:any)=>
+
+c.salesperson_id === person.id
 
 );
 
@@ -83,42 +131,21 @@ d.final_price || 0
 
 
 
-
-
 const commission =
 
-personDeals.reduce(
+personCommission.reduce(
 
-(sum:number,d:any)=>{
+(sum:number,c:any)=>
 
-
-const result =
-
-calculateCommission(
+sum +
 
 Number(
-d.final_price || 0
+c.commission_amount || 0
 ),
-
-d.lead_type,
-
-Number(
-d.discount_pct || 0
-)
-
-);
-
-
-return sum + result.amount;
-
-
-},
 
 0
 
 );
-
-
 
 
 
@@ -132,13 +159,14 @@ leads:
 personLeads.length,
 
 
+
 converted:
 
 personLeads.filter(
 
-(x:any)=>
+(l:any)=>
 
-x.status==="Converted"
+l.status==="Converted"
 
 ).length,
 
@@ -149,7 +177,9 @@ deals:
 personDeals.length,
 
 
+
 revenue,
+
 
 
 commission
@@ -166,15 +196,11 @@ commission
 
 
 
-
-
 return (
 
 <div className="
 space-y-6
 ">
-
-
 
 
 
@@ -187,6 +213,32 @@ text-[#284342]
 Sales Team Performance
 
 </h2>
+
+
+
+
+
+
+
+{
+
+displayPeople.length===0 &&
+
+
+<div className="
+bg-white
+border
+rounded-2xl
+p-6
+text-gray-500
+">
+
+No sales team member found.
+
+</div>
+
+}
+
 
 
 
@@ -209,8 +261,7 @@ gap-6
 
 {
 
-salesPeople.map((person:any)=>(
-
+displayPeople.map((person:any)=>(
 
 
 <TeamCard
@@ -224,7 +275,6 @@ stats={getStats(person)}
 />
 
 
-
 ))
 
 
@@ -232,17 +282,17 @@ stats={getStats(person)}
 
 
 
-</div>
-
-
-
-
-
-
 
 
 </div>
 
+
+
+
+
+
+
+</div>
 
 );
 
@@ -288,6 +338,7 @@ gap-4
 ">
 
 
+
 <div className="
 w-12
 h-12
@@ -299,7 +350,7 @@ justify-center
 text-[#284342]
 ">
 
-<Users/>
+<Users size={22}/>
 
 </div>
 
@@ -321,6 +372,7 @@ text-[#284342]
 
 
 
+
 <p className="
 text-sm
 text-gray-500
@@ -331,8 +383,8 @@ text-gray-500
 </p>
 
 
-
 </div>
+
 
 
 
@@ -356,7 +408,7 @@ gap-4
 
 
 
-<Stat
+<StatCard
 
 icon={<Users size={18}/>}
 
@@ -370,8 +422,7 @@ value={stats.leads}
 
 
 
-
-<Stat
+<StatCard
 
 icon={<Target size={18}/>}
 
@@ -385,10 +436,9 @@ value={stats.converted}
 
 
 
+<StatCard
 
-<Stat
-
-icon={<TrendingUp size={18}/>}
+icon={<Briefcase size={18}/>}
 
 label="Deals"
 
@@ -400,15 +450,17 @@ value={stats.deals}
 
 
 
-
-
-<Stat
+<StatCard
 
 icon={<DollarSign size={18}/>}
 
 label="Revenue"
 
-value={`RM ${stats.revenue.toLocaleString()}`}
+value={
+
+`RM ${stats.revenue.toLocaleString()}`
+
+}
 
 />
 
@@ -416,46 +468,24 @@ value={`RM ${stats.revenue.toLocaleString()}`}
 
 
 
+<StatCard
 
-</div>
+icon={<TrendingUp size={18}/>}
 
+label="Commission"
 
+value={
 
+`RM ${stats.commission.toLocaleString()}`
 
+}
 
-
-
-
-<div className="
-border-t
-pt-4
-">
-
-
-<p className="
-text-sm
-text-gray-500
-">
-
-Commission
-
-</p>
+/>
 
 
-<p className="
-text-xl
-font-semibold
-text-[#284342]
-">
-
-RM {stats.commission.toFixed(2)}
-
-</p>
 
 
 </div>
-
-
 
 
 
@@ -464,6 +494,7 @@ RM {stats.commission.toFixed(2)}
 </div>
 
 );
+
 
 }
 
@@ -475,7 +506,7 @@ RM {stats.commission.toFixed(2)}
 
 
 
-function Stat({
+function StatCard({
 
 icon,
 
@@ -498,12 +529,14 @@ p-3
 
 <div className="
 text-[#284342]
-mb-1
+mb-2
 ">
 
 {icon}
 
 </div>
+
+
 
 
 
@@ -515,6 +548,8 @@ text-gray-500
 {label}
 
 </p>
+
+
 
 
 
@@ -530,8 +565,10 @@ text-[#284342]
 
 
 
+
 </div>
 
 );
+
 
 }

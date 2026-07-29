@@ -24,7 +24,6 @@ getLeads,
 getDeals,
 getSalesPeople,
 getCRMDashboard
-
 } from "../../services/crmService";
 
 
@@ -33,6 +32,9 @@ getCRMDashboard
 import LeadsSection from "./components/LeadsSection";
 import DealsSection from "./components/DealsSection";
 import TeamSection from "./components/TeamSection";
+import CommissionSettingSection 
+from "./components/CommissionSettingSection";
+import { supabase } from "../../lib/supabase";
 
 
 
@@ -46,8 +48,9 @@ type Tab =
 |
 "deals"
 |
-"team";
-
+"team"
+|
+"commission";
 
 
 
@@ -55,7 +58,7 @@ type Tab =
 
 
 export default function CRMPage(){
-
+const [currentUser,setCurrentUser]=useState<any>(null);
 
 
 const [
@@ -79,7 +82,63 @@ setLoading
 ]=useState(true);
 
 
+async function loadCurrentUser(){
 
+const {
+data:{
+user
+}
+
+}=await supabase.auth.getUser();
+
+
+
+if(!user)
+return;
+
+
+
+const {
+data,
+error
+}=await supabase
+
+
+.from("users")
+
+.select("*")
+
+.eq(
+"auth_user_id",
+user.id
+)
+
+.maybeSingle();
+
+
+
+
+if(error){
+
+console.error(
+"Load user profile error:",
+error
+);
+
+return;
+
+}
+
+
+
+setCurrentUser(data);
+
+console.log(
+"Current CRM User:",
+data
+);
+
+}
 
 
 
@@ -116,16 +175,17 @@ setSalesPeople
 ]=useState<any[]>([]);
 
 
+const [
+commissions,
+setCommissions
+]=useState<any[]>([]);
 
 
 
 
 const [
-
 dashboard,
-
 setDashboard
-
 ]=useState<any>({
 
 totalLeads:0,
@@ -134,7 +194,9 @@ activeLeads:0,
 
 convertedDeals:0,
 
-totalRevenue:0,
+pipelineValue:0,
+
+collectedRevenue:0,
 
 totalCommission:0
 
@@ -148,6 +210,10 @@ totalCommission:0
 
 async function loadCRM(){
 
+    console.log(
+"Loading CRM with user:",
+currentUser
+);
 
 
 try{
@@ -155,7 +221,27 @@ try{
 
 setLoading(true);
 
+const {
+data:commissionData,
+error:commissionError
 
+}=await supabase
+
+
+.from("crm_commissions")
+
+.select("*");
+
+
+
+if(commissionError)
+throw commissionError;
+
+
+
+setCommissions(
+commissionData || []
+);
 
 const [
 
@@ -174,17 +260,19 @@ dashboardData
 await Promise.all([
 
 
-getLeads(),
+getLeads(currentUser),
 
-getDeals(),
+
+getDeals(currentUser),
+
 
 getSalesPeople(),
 
-getCRMDashboard()
+
+getCRMDashboard(currentUser)
 
 
 ]);
-
 
 
 
@@ -218,8 +306,12 @@ dashboardData
 catch(error){
 
 console.error(
-"CRM Load Error",
+"CRM Load Error:",
 error
+);
+
+alert(
+JSON.stringify(error)
 );
 
 }
@@ -243,12 +335,23 @@ setLoading(false);
 
 useEffect(()=>{
 
-
-loadCRM();
-
+loadCurrentUser();
 
 },[]);
 
+
+
+useEffect(()=>{
+
+
+if(currentUser){
+
+loadCRM();
+
+}
+
+
+},[currentUser]);
 
 
 
@@ -340,21 +443,26 @@ gap-2
 w-full
 ">
 
-
 {
 
 [
-
 ["dashboard","Dashboard"],
 
 ["leads","Leads"],
 
 ["deals","Deals"],
 
-["team","Team"]
+["team","Team"],
+
+...(currentUser?.role==="super_admin"
+?
+[
+["commission","Commission"]
+]
+:
+[])
 
 ].map((item:any)=>(
-
 
 
 <button
@@ -364,7 +472,6 @@ key={item[0]}
 onClick={()=>setActiveTab(item[0])}
 
 className={`
-flex-1
 flex-1
 px-6
 py-3
@@ -376,19 +483,22 @@ transition
 
 ${
 activeTab===item[0]
+
 ?
+
 "bg-[#284342] text-[#e9da95]"
+
 :
+
 "text-[#284342] hover:bg-gray-100"
+
 }
 
 `}
 
 >
 
-
 {item[1]}
-
 
 </button>
 
@@ -398,10 +508,7 @@ activeTab===item[0]
 
 }
 
-
-
 </nav>
-
 
 
 
@@ -449,6 +556,8 @@ leads={leads}
 
 salesPeople={salesPeople}
 
+currentUser={currentUser}
+
 refresh={loadCRM}
 
 />
@@ -468,12 +577,13 @@ activeTab==="deals"
 
 &&
 
-
 <DealsSection
 
 deals={deals}
 
 salesPeople={salesPeople}
+
+currentUser={currentUser}
 
 refresh={loadCRM}
 
@@ -494,6 +604,7 @@ activeTab==="team"
 &&
 
 
+
 <TeamSection
 
 salesPeople={salesPeople}
@@ -502,8 +613,24 @@ leads={leads}
 
 deals={deals}
 
+commissions={commissions}
+
+currentUser={currentUser}
+
 />
 
+
+}
+
+{
+activeTab==="commission"
+&&
+
+currentUser?.role==="super_admin"
+
+&&
+
+<CommissionSettingSection/>
 
 }
 
@@ -522,6 +649,7 @@ deals={deals}
 
 
 }
+
 
 
 
@@ -596,7 +724,8 @@ space-y-6
 grid
 grid-cols-1
 sm:grid-cols-2
-xl:grid-cols-5
+lg:grid-cols-3
+xl:grid-cols-4
 gap-5
 ">
 
@@ -654,12 +783,28 @@ icon={<Briefcase size={22}/>}
 
 <MetricCard
 
-title="Revenue"
+title="Pipeline Value"
 
 value={
 
 `RM ${Number(
-data.totalRevenue || 0
+data.pipelineValue || 0
+).toLocaleString()}`
+
+}
+
+icon={<Briefcase size={22}/>}
+
+/>
+
+<MetricCard
+
+title="Collected Revenue"
+
+value={
+
+`RM ${Number(
+data.collectedRevenue || 0
 ).toLocaleString()}`
 
 }
@@ -668,11 +813,21 @@ icon={<DollarSign size={22}/>}
 
 />
 
+<MetricCard
 
+title="Commission"
 
+value={
 
+`RM ${Number(
+data.totalCommission || 0
+).toLocaleString()}`
 
+}
 
+icon={<TrendingUp size={22}/>}
+
+/>
 
 
 <MetricCard
@@ -1022,4 +1177,6 @@ mt-1
 );
 
 }
+
+
 

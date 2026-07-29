@@ -1,11 +1,15 @@
 import { supabase } from "../lib/supabase";
 
 import {
-  CRMLead,
-  CRMDeal,
-  CRMPayment,
-  SalesPerson,
-  CRMCommission
+CRMCommission
+} from "../types/crm";
+
+
+import {
+CRMLead,
+CRMDeal,
+CRMPayment,
+SalesPerson
 } from "../types/crm";
 
 
@@ -16,13 +20,14 @@ import {
 // =====================================================
 
 
-export async function getSalesPeople(): Promise<SalesPerson[]> {
+export async function getSalesPeople():Promise<SalesPerson[]>{
 
 
 const {
 data,
 error
-}= await supabase
+
+}=await supabase
 
 
 .from("users")
@@ -38,9 +43,7 @@ role
 .in(
 "role",
 [
-"teacher",
 "admin",
-"owner",
 "super_admin",
 "internal_sales",
 "external_sales"
@@ -64,10 +67,11 @@ if(error)
 throw error;
 
 
-
 return data || [];
 
 }
+
+
 
 
 
@@ -80,16 +84,13 @@ return data || [];
 // =====================================================
 
 
-export async function getLeads():Promise<CRMLead[]> {
+export async function getLeads(
+currentUser:any
+):Promise<CRMLead[]>{
 
 
-const {
 
-data,
-
-error
-
-}= await supabase
+let query:any = supabase
 
 
 .from("crm_leads")
@@ -105,7 +106,35 @@ full_name,
 role
 )
 
-`)
+`);
+
+
+
+
+
+if(
+currentUser &&
+currentUser.role !== "super_admin"
+){
+
+
+query=query.eq(
+"owner_id",
+currentUser.id
+);
+
+
+}
+
+
+
+
+
+const {
+data,
+error
+
+}=await query
 
 
 .order(
@@ -114,6 +143,8 @@ role
 ascending:false
 }
 );
+
+
 
 
 
@@ -133,6 +164,7 @@ return data || [];
 
 
 
+
 export async function createLead(
 lead:any
 ){
@@ -140,12 +172,10 @@ lead:any
 
 
 const {
-
 data,
-
 error
 
-}= await supabase
+}=await supabase
 
 
 .from("crm_leads")
@@ -211,13 +241,12 @@ updates:any
 ){
 
 
+
 const {
-
 data,
-
 error
 
-}= await supabase
+}=await supabase
 
 
 .from("crm_leads")
@@ -272,11 +301,11 @@ id:string
 ){
 
 
-const {
 
+const {
 error
 
-}= await supabase
+}=await supabase
 
 
 .from("crm_leads")
@@ -310,21 +339,22 @@ return true;
 
 
 
+
+
+
 // =====================================================
 // DEALS
 // =====================================================
 
 
-export async function getDeals():Promise<CRMDeal[]> {
+
+export async function getDeals(
+currentUser:any
+):Promise<CRMDeal[]>{
 
 
-const {
 
-data,
-
-error
-
-}= await supabase
+let query:any = supabase
 
 
 .from("crm_deals")
@@ -332,14 +362,53 @@ error
 
 .select(`
 
+
 *,
+
 
 owner:users(
 id,
-full_name
+full_name,
+role
 )
 
-`)
+
+`);
+
+
+
+
+
+
+
+if(
+
+currentUser &&
+
+currentUser.role !== "super_admin"
+
+){
+
+
+query=query.eq(
+"owner_id",
+currentUser.id
+);
+
+
+}
+
+
+
+
+
+
+
+const {
+data,
+error
+
+}=await query
 
 
 .order(
@@ -348,6 +417,7 @@ full_name
 ascending:false
 }
 );
+
 
 
 
@@ -370,25 +440,27 @@ return data || [];
 
 
 
+
+
+
+
 export async function createDeal(
 deal:any
 ){
 
 
+
 const {
-
 data,
-
 error
 
-}= await supabase
+}=await supabase
 
 
 .from("crm_deals")
 
 
 .insert({
-
 
 customer_name:
 deal.customer_name,
@@ -412,15 +484,15 @@ deal.list_price || 0
 ),
 
 
-final_price:
-Number(
-deal.final_price || 0
-),
-
-
 discount_pct:
 Number(
 deal.discount_pct || 0
+),
+
+
+final_price:
+Number(
+deal.final_price || 0
 ),
 
 
@@ -430,7 +502,6 @@ deal.lead_type || "company",
 
 signed_at:
 deal.signed_at || null
-
 
 })
 
@@ -449,9 +520,34 @@ throw error;
 
 
 
+// save selected commission rules
+
+if(
+data &&
+deal.commission_rule_ids &&
+deal.commission_rule_ids.length > 0
+){
+
+
+await saveDealCommissionRules(
+
+data.id,
+
+deal.commission_rule_ids
+
+);
+
+
+}
+
+
+
 return data;
 
 }
+
+
+
 
 
 
@@ -469,12 +565,10 @@ updates:any
 
 
 const {
-
 data,
-
 error
 
-}= await supabase
+}=await supabase
 
 
 .from("crm_deals")
@@ -515,16 +609,69 @@ return data;
 
 
 
+
+
+
 export async function deleteDeal(
 id:string
 ){
 
 
-const {
 
+// delete selected rules
+
+await supabase
+
+.from("crm_deal_commission_rules")
+
+.delete()
+
+.eq(
+"deal_id",
+id
+);
+
+
+
+
+// delete payments
+
+await supabase
+
+.from("crm_payments")
+
+.delete()
+
+.eq(
+"deal_id",
+id
+);
+
+
+
+
+// delete commissions
+
+await supabase
+
+.from("crm_commissions")
+
+.delete()
+
+.eq(
+"deal_id",
+id
+);
+
+
+
+
+// delete deal
+
+const {
 error
 
-}= await supabase
+}=await supabase
 
 
 .from("crm_deals")
@@ -537,6 +684,8 @@ error
 "id",
 id
 );
+
+
 
 
 
@@ -557,14 +706,171 @@ return true;
 
 
 
+
+
+
+// =====================================================
+// COMMISSION RULE LINKING
+// =====================================================
+
+
+
+export async function getCommissionSettings(){
+
+
+const {
+data,
+error
+
+}=await supabase
+
+
+.from(
+"crm_commission_settings"
+)
+
+
+.select("*")
+
+
+.eq(
+"active",
+true
+);
+
+
+if(error)
+throw error;
+
+
+
+return data || [];
+
+}
+
+
+
+
+
+
+
+
+
+export async function saveDealCommissionRules(
+
+dealId:string,
+
+ruleIds:string[]
+
+){
+
+
+
+const records = ruleIds.map(
+
+(ruleId)=>({
+
+deal_id:dealId,
+
+rule_id:ruleId
+
+})
+
+);
+
+
+
+
+
+const {
+data,
+error
+
+}=await supabase
+
+
+.from(
+"crm_deal_commission_rules"
+)
+
+
+.insert(records);
+
+
+if(error)
+throw error;
+
+
+
+return data;
+
+}
+
+
+
+
+
+
+
+
+
+export async function getDealCommissionRules(
+
+dealId:string
+
+){
+
+
+
+const {
+data,
+error
+
+}=await supabase
+
+
+.from(
+"crm_deal_commission_rules"
+)
+
+
+.select(`
+
+rule:crm_commission_settings(
+*
+)
+
+`)
+
+
+.eq(
+"deal_id",
+dealId
+);
+
+
+
+
+
+if(error)
+throw error;
+
+
+
+return data || [];
+
+}
+
 // =====================================================
 // PAYMENTS
 // =====================================================
 
 
 export async function addPayment(
+
 payment:any
-){
+
+):Promise<CRMPayment>{
 
 
 
@@ -574,7 +880,7 @@ data,
 
 error
 
-}= await supabase
+}=await supabase
 
 
 .from("crm_payments")
@@ -582,26 +888,33 @@ error
 
 .insert({
 
+
 deal_id:
+
 payment.deal_id,
 
 
 amount:
+
 Number(
 payment.amount
 ),
 
 
 payment_date:
+
 payment.payment_date,
 
 
 payment_type:
+
 payment.payment_type || "Full",
 
 
 installment_no:
+
 payment.installment_no || 1
+
 
 })
 
@@ -614,13 +927,211 @@ payment.installment_no || 1
 
 
 
-
 if(error)
 throw error;
 
 
 
-return data as CRMPayment;
+
+
+
+
+// =====================================================
+// GET DEAL
+// =====================================================
+
+
+const {
+
+data:deal,
+
+error:dealError
+
+}=await supabase
+
+
+.from("crm_deals")
+
+
+.select(`
+
+owner_id,
+
+lead_type,
+
+discount_pct,
+
+final_price
+
+`)
+
+
+.eq(
+"id",
+payment.deal_id
+)
+
+
+.single();
+
+
+
+
+
+if(dealError)
+throw dealError;
+
+
+
+if(!deal)
+return data;
+
+
+
+
+
+
+
+
+
+// =====================================================
+// GET SELECTED RULES ONLY
+// =====================================================
+
+
+const rules = await getDealCommissionRules(
+
+payment.deal_id
+
+);
+
+
+
+
+
+
+
+const selectedRules = rules.map(
+
+(item:any)=>
+
+item.rule
+
+);
+
+
+
+
+
+
+
+
+// =====================================================
+// CALCULATE
+// =====================================================
+
+
+const reward = calculateReward({
+
+amount:
+
+Number(
+deal.final_price
+),
+
+
+leadType:
+
+deal.lead_type,
+
+
+discount:
+
+Number(
+deal.discount_pct || 0
+),
+
+
+settings:
+
+selectedRules
+
+
+});
+
+
+
+
+
+
+
+
+
+
+// =====================================================
+// SAVE COMMISSION
+// =====================================================
+
+
+
+await createCommission({
+
+salesperson_id:
+
+deal.owner_id,
+
+
+deal_id:
+
+payment.deal_id,
+
+
+month:
+
+new Date()
+
+.toISOString()
+
+.substring(0,7),
+
+
+
+sales_amount:
+
+Number(
+deal.final_price
+),
+
+
+
+commission_rate:
+
+reward.rate,
+
+
+commission_amount:
+
+reward.commission,
+
+
+bonus_amount:
+
+reward.bonus,
+
+
+total_reward:
+
+reward.total
+
+
+});
+
+
+
+
+
+return data;
+
 
 }
 
@@ -632,8 +1143,19 @@ return data as CRMPayment;
 
 
 
+
+
+
+
+// =====================================================
+// PAYMENT HISTORY
+// =====================================================
+
+
 export async function getDealPayments(
+
 dealId:string
+
 ){
 
 
@@ -643,7 +1165,7 @@ data,
 
 error
 
-}= await supabase
+}=await supabase
 
 
 .from("crm_payments")
@@ -668,7 +1190,6 @@ ascending:true
 
 
 
-
 if(error)
 throw error;
 
@@ -686,32 +1207,75 @@ return data || [];
 
 
 
+
+
+
 // =====================================================
-// COMMISSION
+// COMMISSION CALCULATION
 // =====================================================
 
 
-export function calculateCommission(
+export function calculateReward({
 
-amount:number,
+amount,
 
-leadType:string,
+leadType,
 
-discount:number
+discount,
 
-){
+settings
 
-
-
-let rate = 5;
+}:any){
 
 
+
+let commission = 0;
+
+
+let bonus = 0;
+
+
+let rate = 0;
+
+
+
+
+
+
+
+settings.forEach((rule:any)=>{
+
+
+
+
+
+
+// RATE %
 
 if(
-leadType === "self"
+
+rule.calculation_type==="rate"
+
 ){
 
-rate = 7;
+
+const value =
+Number(rule.value);
+
+
+
+rate += value;
+
+
+
+commission +=
+
+amount *
+
+value /
+
+100;
+
 
 }
 
@@ -720,16 +1284,23 @@ rate = 7;
 
 
 
+
+// FIXED BONUS
+
 if(
-amount > 15000
+
+rule.calculation_type==="fixed"
+
 ){
 
-rate =
-leadType==="self"
-?
-9
-:
-7;
+
+
+bonus +=
+
+Number(
+rule.value
+);
+
 
 }
 
@@ -737,18 +1308,48 @@ leadType==="self"
 
 
 
+
+
+// KPI BONUS
+
 if(
-amount > 30000
+
+rule.calculation_type==="kpi"
+
 ){
 
-rate =
-leadType==="self"
-?
-11
-:
-9;
+
+
+if(
+
+amount >=
+
+Number(
+rule.kpi_target
+)
+
+){
+
+
+bonus +=
+
+Number(
+rule.value
+);
+
 
 }
+
+
+
+}
+
+
+
+});
+
+
+
 
 
 
@@ -757,17 +1358,24 @@ leadType==="self"
 // discount penalty
 
 const penalty =
+
 Math.floor(
+
 discount / 5
+
 );
 
 
 
-rate =
-Math.max(
+rate = Math.max(
+
 rate - penalty,
-1
+
+0
+
 );
+
+
 
 
 
@@ -779,17 +1387,18 @@ return {
 rate,
 
 
-amount:
+commission,
 
-amount *
 
-rate /
+bonus,
 
-100
+
+total:
+
+commission + bonus
 
 
 };
-
 
 
 }
@@ -802,56 +1411,265 @@ rate /
 
 
 
+
+
+
 // =====================================================
-// DASHBOARD
+// CREATE COMMISSION
 // =====================================================
 
 
-export async function getCRMDashboard(){
+export async function createCommission(
 
+commission:any
 
-const [
-
-leads,
-
-deals,
-
-commissions
-
-]= await Promise.all([
-
-
-supabase
-
-.from("crm_leads")
-
-.select(
-"id,status"
-),
+){
 
 
 
-supabase
+const {
 
-.from("crm_deals")
+data,
 
-.select(
-"final_price"
-),
+error
 
+}=await supabase
 
-
-supabase
 
 .from("crm_commissions")
 
-.select(
-"commission_amount"
+
+.insert({
+
+
+
+salesperson_id:
+
+commission.salesperson_id,
+
+
+deal_id:
+
+commission.deal_id,
+
+
+month:
+
+commission.month,
+
+
+sales_amount:
+
+commission.sales_amount,
+
+
+commission_rate:
+
+commission.commission_rate,
+
+
+commission_amount:
+
+commission.commission_amount,
+
+
+bonus_amount:
+
+commission.bonus_amount || 0,
+
+
+total_reward:
+
+commission.total_reward || 0
+
+
+
+})
+
+
+.select()
+
+
+.single();
+
+
+
+
+
+
+if(error)
+throw error;
+
+
+
+return data;
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+// =====================================================
+// TEAM PERFORMANCE
+// =====================================================
+
+
+export async function getTeamPerformance(){
+
+
+
+const {
+
+data:users,
+
+error
+
+}=await supabase
+
+
+.from("users")
+
+
+.select(`
+
+id,
+
+full_name,
+
+role
+
+`)
+
+
+.eq(
+"status",
+"active"
 )
 
 
+.in(
 
-]);
+"role",
+
+[
+
+"admin",
+
+"teacher",
+
+"super_admin",
+
+"internal_sales",
+
+"external_sales"
+
+]
+
+);
+
+
+
+
+
+if(error)
+throw error;
+
+
+
+
+
+const result:any[]=[];
+
+
+
+
+
+for(const user of users || []){
+
+
+
+const {
+
+data:leads
+
+}=await supabase
+
+
+.from("crm_leads")
+
+
+.select(
+"id,status"
+)
+
+
+.eq(
+"owner_id",
+user.id
+);
+
+
+
+
+
+const {
+
+data:deals
+
+}=await supabase
+
+
+.from("crm_deals")
+
+
+.select(
+"id,final_price"
+)
+
+
+.eq(
+"owner_id",
+user.id
+);
+
+
+
+
+
+
+const {
+
+data:rewards
+
+}=await supabase
+
+
+.from("crm_commissions")
+
+
+.select(`
+
+commission_amount,
+
+bonus_amount,
+
+total_reward
+
+`)
+
+
+.eq(
+"salesperson_id",
+user.id
+);
 
 
 
@@ -859,13 +1677,13 @@ supabase
 
 
 
-const totalRevenue =
+const revenue =
 
-(deals.data || [])
+(deals || [])
 
 .reduce(
 
-(sum:any,item:any)=>
+(sum:number,item:any)=>
 
 sum +
 
@@ -882,24 +1700,349 @@ item.final_price || 0
 
 
 
+const totalReward =
 
-const totalCommission =
-
-(commissions.data || [])
+(rewards || [])
 
 .reduce(
 
-(sum:any,item:any)=>
+(sum:number,item:any)=>
 
 sum +
 
 Number(
-item.commission_amount || 0
+item.total_reward || 0
 ),
 
 0
 
 );
+
+
+
+
+
+
+
+result.push({
+
+
+id:user.id,
+
+
+name:user.full_name,
+
+
+role:user.role,
+
+
+leadCount:
+
+leads?.length || 0,
+
+
+converted:
+
+leads?.filter(
+
+(x:any)=>
+
+x.status==="Converted"
+
+).length || 0,
+
+
+
+dealCount:
+
+deals?.length || 0,
+
+
+revenue,
+
+
+totalReward
+
+
+
+});
+
+
+
+}
+
+
+
+return result;
+
+
+}
+
+
+
+
+
+
+
+
+
+
+
+
+// =====================================================
+// DASHBOARD
+// =====================================================
+
+
+export async function getCRMDashboard(
+
+currentUser:any
+
+){
+
+
+
+let leadQuery:any = supabase
+
+
+.from("crm_leads")
+
+
+.select(
+"id,status,owner_id"
+);
+
+
+
+
+let dealQuery:any = supabase
+
+
+.from("crm_deals")
+
+
+.select(
+"final_price,owner_id"
+);
+
+
+
+
+let paymentQuery:any = supabase
+
+
+.from("crm_payments")
+
+
+.select(
+"amount,deal_id"
+);
+
+
+
+
+let commissionQuery:any = supabase
+
+
+.from("crm_commissions")
+
+
+.select(`
+
+commission_amount,
+
+bonus_amount,
+
+total_reward,
+
+salesperson_id
+
+`);
+
+
+
+
+
+
+if(
+currentUser &&
+currentUser.role !== "super_admin"
+){
+
+leadQuery =
+leadQuery.eq(
+"owner_id",
+currentUser.id
+);
+
+
+dealQuery =
+dealQuery.eq(
+"owner_id",
+currentUser.id
+);
+
+
+commissionQuery =
+commissionQuery.eq(
+"salesperson_id",
+currentUser.id
+);
+
+
+// IMPORTANT
+// only payments from own deals
+
+const {
+data:userDeals
+}=await supabase
+
+.from("crm_deals")
+
+.select("id")
+
+.eq(
+"owner_id",
+currentUser.id
+);
+
+
+const dealIds =
+(userDeals || [])
+.map(
+(d:any)=>d.id
+);
+
+
+if(dealIds.length){
+
+paymentQuery =
+paymentQuery.in(
+"deal_id",
+dealIds
+);
+
+}
+
+else{
+
+paymentQuery =
+paymentQuery.eq(
+"deal_id",
+"00000000-0000-0000-0000-000000000000"
+);
+
+}
+
+
+
+
+}
+
+
+
+
+
+
+const [
+
+leads,
+
+deals,
+
+payments,
+
+commissions
+
+]=await Promise.all([
+
+
+leadQuery,
+
+
+dealQuery,
+
+
+paymentQuery,
+
+
+commissionQuery
+
+
+]);
+
+
+
+
+
+
+
+
+const pipelineValue =
+
+(deals.data || [])
+
+.reduce(
+
+(sum:number,item:any)=>
+
+sum +
+
+Number(
+item.final_price || 0
+),
+
+0
+
+);
+
+
+
+
+
+
+const collectedRevenue =
+
+(payments.data || [])
+
+.reduce(
+
+(sum:number,item:any)=>
+
+sum +
+
+Number(
+item.amount || 0
+),
+
+0
+
+);
+
+
+
+
+
+
+
+const totalReward =
+
+(commissions.data || [])
+
+.reduce(
+
+(sum:number,item:any)=>
+
+sum +
+
+Number(
+item.total_reward || 0
+),
+
+0
+
+);
+
 
 
 
@@ -915,14 +2058,13 @@ totalLeads:
 leads.data?.length || 0,
 
 
-
 activeLeads:
 
 leads.data?.filter(
 
-(item:any)=>
+(x:any)=>
 
-item.status !== "Lost"
+x.status!=="Lost"
 
 ).length || 0,
 
@@ -934,15 +2076,20 @@ deals.data?.length || 0,
 
 
 
-totalRevenue,
+pipelineValue,
 
 
 
-totalCommission
+collectedRevenue,
+
+
+
+totalCommission:
+
+totalReward
 
 
 };
-
 
 
 }

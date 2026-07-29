@@ -34,8 +34,6 @@ import ConvertDealModal from "./ConvertDealModal";
 
 
 
-
-
 const STATUS=[
 
 "New",
@@ -51,7 +49,6 @@ const STATUS=[
 "Lost"
 
 ];
-
 
 
 
@@ -82,84 +79,41 @@ leads,
 
 salesPeople,
 
+currentUser,
+
 refresh
 
 }:any){
 
 
 
+const isAdmin =
 
-
-const [
-
-search,
-
-setSearch
-
-]=useState("");
+currentUser?.role === "super_admin";
 
 
 
 
+const [search,setSearch]=useState("");
 
-const [
+const [filter,setFilter]=useState("All");
 
-filter,
-
-setFilter
-
-]=useState("All");
+const [showUnassigned,setShowUnassigned]=useState(false);
 
 
+const [showModal,setShowModal]=useState(false);
 
 
+const [showConvert,setShowConvert]=useState<any>(null);
 
-const [
 
-showModal,
-
-setShowModal
-
-]=useState(false);
+const [editing,setEditing]=useState<any>(null);
 
 
 
 
 
-const [
-
-showConvert,
-
-setShowConvert
-
-]=useState<any>(null);
-
-
-
-
-
-
-const [
-
-editing,
-
-setEditing
-
-]=useState<any>(null);
-
-
-
-
-
-
-
-const [
-
-form,
-
-setForm
-
-]=useState({
+const [form,setForm]=useState({
 
 name:"",
 
@@ -174,8 +128,6 @@ status:"New",
 note:""
 
 });
-
-
 
 
 
@@ -186,9 +138,7 @@ note:""
 function openAdd(){
 
 
-
 setEditing(null);
-
 
 
 setForm({
@@ -199,7 +149,9 @@ phone:"",
 
 source:"Company Lead",
 
-owner_id:"",
+owner_id:
+
+isAdmin ? "" : currentUser.id,
 
 status:"New",
 
@@ -208,9 +160,7 @@ note:""
 });
 
 
-
 setShowModal(true);
-
 
 
 }
@@ -221,14 +171,10 @@ setShowModal(true);
 
 
 
-
-
 function openEdit(lead:any){
 
 
-
 setEditing(lead);
-
 
 
 setForm({
@@ -248,14 +194,10 @@ note:lead.note || ""
 });
 
 
-
 setShowModal(true);
 
 
-
 }
-
-
 
 
 
@@ -266,12 +208,9 @@ setShowModal(true);
 async function save(){
 
 
-
 if(!form.name){
 
-alert(
-"Customer name required"
-);
+alert("Customer name required");
 
 return;
 
@@ -279,10 +218,7 @@ return;
 
 
 
-
-
 if(editing){
-
 
 
 await updateLead(
@@ -294,24 +230,31 @@ form
 );
 
 
-
 }
 
 else{
 
 
+await createLead({
 
-await createLead(
+...form,
 
-form
+owner_id:
 
-);
+isAdmin
 
+?
+
+form.owner_id
+
+:
+
+currentUser.id
+
+});
 
 
 }
-
-
 
 
 
@@ -321,10 +264,7 @@ setShowModal(false);
 refresh();
 
 
-
 }
-
-
 
 
 
@@ -335,31 +275,18 @@ refresh();
 async function remove(id:string){
 
 
-
-if(
-
-!confirm(
-"Delete this lead?"
-)
-
-)
+if(!confirm("Delete this lead?"))
 
 return;
-
-
 
 
 await deleteLead(id);
 
 
-
 refresh();
 
 
-
 }
-
-
 
 
 
@@ -376,7 +303,6 @@ status:string
 ){
 
 
-
 await updateLead(
 
 id,
@@ -390,19 +316,14 @@ status
 );
 
 
-
 refresh();
-
 
 
 }
 
-
-
-
-
-
-
+// =====================================================
+// FILTER
+// =====================================================
 
 
 const filtered = leads.filter(
@@ -433,6 +354,7 @@ lead.phone
 
 
 
+
 const statusMatch =
 
 filter==="All"
@@ -445,6 +367,22 @@ lead.status===filter;
 
 
 
+
+
+const unassignedMatch =
+
+!showUnassigned
+
+||
+
+lead.owner_id===null;
+
+
+
+
+
+
+
 return (
 
 searchMatch
@@ -452,6 +390,10 @@ searchMatch
 &&
 
 statusMatch
+
+&&
+
+unassignedMatch
 
 );
 
@@ -476,6 +418,11 @@ space-y-6
 
 
 
+
+
+
+
+
 <div className="
 flex
 justify-between
@@ -492,6 +439,7 @@ text-[#284342]
 Lead Management
 
 </h2>
+
 
 
 
@@ -521,6 +469,7 @@ Add Lead
 </button>
 
 
+
 </div>
 
 
@@ -538,13 +487,19 @@ rounded-2xl
 p-4
 flex
 gap-4
+items-center
 ">
+
+
+
+
 
 
 <div className="
 flex-1
 relative
 ">
+
 
 
 <Search
@@ -559,6 +514,8 @@ text-gray-400
 "
 
 />
+
+
 
 
 
@@ -589,7 +546,10 @@ e.target.value
 />
 
 
+
 </div>
+
+
 
 
 
@@ -603,6 +563,7 @@ className="
 border
 rounded-xl
 px-4
+py-3
 "
 
 value={filter}
@@ -625,25 +586,80 @@ All
 </option>
 
 
+
 {
 
 STATUS.map(status=>(
 
-<option key={status}>
+<option
+
+key={status}
+
+value={status}
+
+>
 
 {status}
 
 </option>
 
-
 ))
+
+}
+
+
+</select>
+
+
+
+
+
+
+
+
+
+{
+
+isAdmin &&
+
+
+<button
+
+onClick={()=>setShowUnassigned(!showUnassigned)}
+
+className={`
+px-4
+py-3
+rounded-xl
+border
+text-sm
+font-medium
+
+${
+showUnassigned
+
+?
+
+"bg-[#284342] text-[#e9da95]"
+
+:
+
+"hover:bg-gray-100"
+
+}
+
+`}
+
+>
+
+Unassigned
+
+</button>
 
 
 }
 
 
-
-</select>
 
 
 
@@ -671,6 +687,9 @@ hover:bg-gray-100
 
 
 
+
+
+
 </div>
 
 
@@ -689,10 +708,15 @@ overflow-hidden
 ">
 
 
+
 <table className="
 w-full
 table-fixed
 ">
+
+
+
+
 
 
 <thead className="
@@ -703,10 +727,12 @@ bg-gray-50
 <tr>
 
 
+
 <th className="
 w-[20%]
 p-4
 text-left
+text-sm
 ">
 
 Customer
@@ -714,9 +740,12 @@ Customer
 </th>
 
 
+
+
 <th className="
 w-[15%]
 text-left
+text-sm
 ">
 
 Phone
@@ -725,9 +754,11 @@ Phone
 
 
 
+
 <th className="
 w-[15%]
 text-left
+text-sm
 ">
 
 Source
@@ -736,9 +767,11 @@ Source
 
 
 
+
 <th className="
 w-[15%]
 text-left
+text-sm
 ">
 
 Status
@@ -747,9 +780,12 @@ Status
 
 
 
+
+
 <th className="
 w-[15%]
 text-left
+text-sm
 ">
 
 Owner
@@ -758,9 +794,12 @@ Owner
 
 
 
+
+
 <th className="
 w-[20%]
 text-center
+text-sm
 ">
 
 Action
@@ -771,14 +810,25 @@ Action
 
 </tr>
 
+
 </thead>
 
+
+
+
+
+
+
+
+
 <tbody>
+
 
 
 {
 
 filtered.map((lead:any)=>(
+
 
 
 <tr
@@ -790,8 +840,9 @@ border-t
 hover:bg-gray-50
 "
 
-
 >
+
+
 
 
 <td className="
@@ -807,7 +858,9 @@ truncate
 
 
 
-<td>
+<td className="
+truncate
+">
 
 {lead.phone}
 
@@ -859,6 +912,7 @@ text-sm
 >
 
 
+
 {
 
 STATUS.map(status=>(
@@ -867,6 +921,8 @@ STATUS.map(status=>(
 <option
 
 key={status}
+
+value={status}
 
 >
 
@@ -877,26 +933,13 @@ key={status}
 
 ))
 
-
 }
+
 
 
 </select>
 
 
-</td>
-
-
-
-
-
-
-
-
-
-<td>
-
-{lead.owner?.full_name || "-"}
 
 </td>
 
@@ -909,6 +952,44 @@ key={status}
 
 
 <td>
+
+
+
+{
+
+lead.owner?.full_name
+
+?
+
+lead.owner.full_name
+
+:
+
+<span className="
+text-red-500
+text-sm
+">
+
+Unassigned
+
+</span>
+
+}
+
+
+
+</td>
+
+
+
+
+
+
+
+
+
+<td>
+
 
 
 <div className="
@@ -916,6 +997,7 @@ flex
 justify-center
 gap-2
 ">
+
 
 
 
@@ -966,15 +1048,13 @@ rounded-lg
 hover:bg-gray-100
 "
 
-title="
-Edit
-"
-
 >
 
 <Edit size={16}/>
 
 </button>
+
+
 
 
 
@@ -993,15 +1073,12 @@ text-red-500
 hover:bg-red-50
 "
 
-title="
-Delete
-"
-
 >
 
 <Trash2 size={16}/>
 
 </button>
+
 
 
 
@@ -1016,7 +1093,10 @@ Delete
 
 
 
+
+
 </tr>
+
 
 
 ))
@@ -1026,31 +1106,27 @@ Delete
 
 
 
+
 </tbody>
+
 
 
 
 </table>
 
 
+
+
 </div>
 
-
-
-
-
-
-
-
-
-{/* ADD / EDIT LEAD MODAL */}
-
+{/* // =====================================================
+// ADD / EDIT MODAL
+// ===================================================== */}
 
 
 {
 
 showModal &&
-
 
 
 <div className="
@@ -1073,6 +1149,8 @@ max-w-xl
 p-8
 space-y-5
 ">
+
+
 
 
 
@@ -1117,8 +1195,8 @@ onClick={()=>setShowModal(false)}
 
 className="
 p-2
-hover:bg-gray-100
 rounded-lg
+hover:bg-gray-100
 "
 
 >
@@ -1126,6 +1204,7 @@ rounded-lg
 <X size={18}/>
 
 </button>
+
 
 
 </div>
@@ -1141,17 +1220,20 @@ rounded-lg
 <div>
 
 
-<label className="form-label">
+<label className="
+form-label
+">
 
 Customer Name
 
 </label>
 
 
-
 <input
 
-className="input"
+className="
+input
+"
 
 value={form.name}
 
@@ -1179,20 +1261,24 @@ name:e.target.value
 
 
 
+
 <div>
 
 
-<label className="form-label">
+<label className="
+form-label
+">
 
 Phone
 
 </label>
 
 
-
 <input
 
-className="input"
+className="
+input
+"
 
 value={form.phone}
 
@@ -1224,17 +1310,20 @@ phone:e.target.value
 <div>
 
 
-<label className="form-label">
+<label className="
+form-label
+">
 
 Lead Source
 
 </label>
 
 
-
 <select
 
-className="input"
+className="
+input
+"
 
 value={form.source}
 
@@ -1262,6 +1351,8 @@ SOURCES.map(source=>(
 
 key={source}
 
+value={source}
+
 >
 
 {source}
@@ -1271,9 +1362,7 @@ key={source}
 
 ))
 
-
 }
-
 
 
 </select>
@@ -1289,10 +1378,23 @@ key={source}
 
 
 
+
+{/* // ================================
+// ADMIN ONLY ASSIGN SALES
+// ================================ */}
+
+
+{
+
+isAdmin &&
+
+
 <div>
 
 
-<label className="form-label">
+<label className="
+form-label
+">
 
 Salesperson
 
@@ -1302,7 +1404,9 @@ Salesperson
 
 <select
 
-className="input"
+className="
+input
+"
 
 value={form.owner_id}
 
@@ -1323,9 +1427,10 @@ owner_id:e.target.value
 
 <option value="">
 
-Assign Salesperson
+Unassigned
 
 </option>
+
 
 
 
@@ -1361,6 +1466,9 @@ value={person.id}
 </div>
 
 
+}
+
+
 
 
 
@@ -1371,17 +1479,20 @@ value={person.id}
 <div>
 
 
-<label className="form-label">
+<label className="
+form-label
+">
 
 Status
 
 </label>
 
 
-
 <select
 
-className="input"
+className="
+input
+"
 
 value={form.status}
 
@@ -1409,6 +1520,8 @@ STATUS.map(status=>(
 
 key={status}
 
+value={status}
+
 >
 
 {status}
@@ -1420,7 +1533,6 @@ key={status}
 
 
 }
-
 
 
 </select>
@@ -1439,7 +1551,9 @@ key={status}
 <div>
 
 
-<label className="form-label">
+<label className="
+form-label
+">
 
 Notes
 
@@ -1449,7 +1563,9 @@ Notes
 
 <textarea
 
-className="input"
+className="
+input
+"
 
 rows={3}
 
@@ -1468,6 +1584,7 @@ note:e.target.value
 }
 
 />
+
 
 
 </div>
@@ -1503,6 +1620,9 @@ Save Lead
 
 
 
+
+
+
 </div>
 
 
@@ -1519,8 +1639,9 @@ Save Lead
 
 
 
-{/* CONVERT LEAD TO DEAL */}
-
+{/* // =====================================================
+// CONVERT TO DEAL
+// ===================================================== */}
 
 
 {
@@ -1548,9 +1669,11 @@ refresh={refresh}
 
 
 
+
 </div>
 
 );
 
 
 }
+

@@ -1,54 +1,63 @@
 import {
-  useState
+useEffect,
+useState
 } from "react";
 
 
 import {
-  Plus,
-  Edit,
-  Trash2,
-  X,
-  Save,
-  CreditCard,
-  Eye
+Plus,
+Edit,
+Trash2,
+X,
+Save,
+CreditCard,
+Eye
 } from "lucide-react";
 
 
 import {
-  createDeal,
-  updateDeal,
-  deleteDeal,
-  addPayment,
-  getDealPayments
+createDeal,
+updateDeal,
+deleteDeal,
+addPayment,
+getDealPayments,
+getCommissionSettings,
+saveDealCommissionRules,
+getDealCommissionRules
 } from "../../../services/crmService";
+import { supabase } from "../../../lib/supabase";
+
+
 
 
 
 const emptyDeal = {
 
-  customer_name:"",
+customer_name:"",
 
-  owner_id:"",
+owner_id:"",
 
-  course:"",
+course:"",
 
-  course_type:"",
+course_type:"",
 
-  list_price:0,
+list_price:0,
 
-  discount_pct:0,
+discount_pct:0,
 
-  final_price:0,
+final_price:0,
 
-  lead_type:"company",
+lead_type:"company",
 
-  signed_at:
-  new Date()
-  .toISOString()
-  .substring(0,10)
+signed_at:
+new Date()
+.toISOString()
+.substring(0,10),
+
+commission_rule_ids:
+[] as string[]
 
 };
-
 
 
 
@@ -87,10 +96,12 @@ setShowHistoryModal
 
 
 
+
 const [
 editingDeal,
 setEditingDeal
 ]=useState<any>(null);
+
 
 
 
@@ -103,6 +114,7 @@ setSelectedDeal
 
 
 
+
 const [
 payments,
 setPayments
@@ -111,10 +123,33 @@ setPayments
 
 
 
+
+const [
+commissionRules,
+setCommissionRules
+]=useState<any[]>([]);
+
+
+
+
+
 const [
 dealForm,
 setDealForm
-]=useState(emptyDeal);
+]=useState<{
+customer_name:string;
+owner_id:string;
+course:string;
+course_type:string;
+list_price:number;
+discount_pct:number;
+final_price:number;
+lead_type:string;
+signed_at:string;
+commission_rule_ids:string[];
+}>(
+emptyDeal
+);
 
 
 
@@ -144,6 +179,34 @@ new Date()
 
 
 
+useEffect(()=>{
+
+loadCommissionRules();
+
+},[]);
+
+
+
+
+
+async function loadCommissionRules(){
+
+
+const data =
+await getCommissionSettings();
+
+
+setCommissionRules(
+data || []
+);
+
+
+}
+
+
+
+
+
 
 
 function calculateFinalPrice(
@@ -158,6 +221,7 @@ discount:number
 return Number(
 
 price -
+
 (price * discount / 100)
 
 )
@@ -180,66 +244,122 @@ function openAddDeal(){
 setEditingDeal(null);
 
 
-setDealForm(emptyDeal);
-
-
-setShowDealModal(true);
-
-
-}
-
-
-
-
-
-
-
-
-function openEditDeal(deal:any){
-
-
-setEditingDeal(deal);
-
-
 setDealForm({
 
-customer_name:
-deal.customer_name,
+...emptyDeal,
 
-owner_id:
-deal.owner_id,
-
-course:
-deal.course,
-
-course_type:
-deal.course_type,
-
-list_price:
-Number(deal.list_price),
-
-discount_pct:
-Number(deal.discount_pct),
-
-final_price:
-Number(deal.final_price),
-
-lead_type:
-deal.lead_type,
-
-signed_at:
-deal.signed_at
+commission_rule_ids:[]
 
 });
 
 
-
 setShowDealModal(true);
 
 
 }
 
 
+
+
+
+
+
+
+
+async function openEditDeal(deal:any){
+
+  const {
+    data,
+    error
+  } = await supabase
+
+  .from("crm_deal_commission_rules")
+
+  .select(`
+      rule_id
+  `)
+
+  .eq(
+    "deal_id",
+    deal.id
+  );
+
+
+  if(error){
+    console.error(
+      "Load commission rules error",
+      error
+    );
+  }
+
+
+  const selectedRuleIds =
+    data?.map(
+      (item:any)=>item.rule_id
+    )
+    ||
+    [];
+
+
+  console.log(
+    "EDIT DEAL RULE IDS:",
+    selectedRuleIds
+  );
+
+
+
+  setEditingDeal(deal);
+
+
+
+  setDealForm({
+
+    customer_name:
+    deal.customer_name,
+
+
+    owner_id:
+    deal.owner_id,
+
+
+    course:
+    deal.course,
+
+
+    course_type:
+    deal.course_type,
+
+
+    list_price:
+    Number(deal.list_price),
+
+
+    discount_pct:
+    Number(deal.discount_pct),
+
+
+    final_price:
+    Number(deal.final_price),
+
+
+    lead_type:
+    deal.lead_type,
+
+
+    signed_at:
+    deal.signed_at,
+
+
+    commission_rule_ids:
+    selectedRuleIds
+
+  });
+
+
+
+  setShowDealModal(true);
+
+}
 
 
 
@@ -253,7 +373,7 @@ async function saveDeal(){
 if(!dealForm.customer_name){
 
 alert(
-"Customer name is required"
+"Customer name required"
 );
 
 return;
@@ -262,14 +382,27 @@ return;
 
 
 
+
+const {
+commission_rule_ids,
+...dealData
+}=dealForm;
+
+
+
+let savedDeal:any;
+
+
+
 if(editingDeal){
 
 
+savedDeal =
 await updateDeal(
 
 editingDeal.id,
 
-dealForm
+dealData
 
 );
 
@@ -279,14 +412,29 @@ dealForm
 else{
 
 
+savedDeal =
 await createDeal(
 
-dealForm
+dealData
 
 );
 
 
 }
+
+
+
+
+
+await saveDealCommissionRules(
+
+savedDeal.id,
+
+commission_rule_ids
+
+);
+
+
 
 
 
@@ -297,7 +445,6 @@ refresh();
 
 
 }
-
 
 
 
@@ -320,6 +467,7 @@ return;
 
 
 
+
 await deleteDeal(id);
 
 
@@ -327,13 +475,9 @@ refresh();
 
 
 }
-
-
-
-
-
-
-
+// =====================================================
+// PAYMENT FUNCTIONS
+// =====================================================
 
 
 function openPayment(deal:any){
@@ -369,8 +513,6 @@ setShowPaymentModal(true);
 
 
 
-
-
 async function savePayment(){
 
 
@@ -395,14 +537,30 @@ await addPayment({
 deal_id:
 selectedDeal.id,
 
+
 amount:
-Number(paymentForm.amount),
+Number(
+paymentForm.amount
+),
+
 
 payment_type:
 paymentForm.payment_type,
 
+
 installment_no:
-Number(paymentForm.installment_no),
+
+paymentForm.payment_type==="Full"
+
+?
+
+1
+
+:
+
+Number(
+paymentForm.installment_no
+),
 
 payment_date:
 paymentForm.payment_date
@@ -451,6 +609,14 @@ setShowHistoryModal(true);
 
 }
 
+
+
+
+
+
+
+
+
 return (
 
 <div className="
@@ -458,7 +624,6 @@ space-y-6
 ">
 
 
-{/* HEADER */}
 
 <div className="
 flex
@@ -493,8 +658,6 @@ text-[#e9da95]
 px-5
 py-3
 rounded-xl
-text-sm
-font-medium
 "
 
 >
@@ -506,6 +669,7 @@ Add Deal
 </button>
 
 
+
 </div>
 
 
@@ -515,8 +679,6 @@ Add Deal
 
 
 
-
-{/* DEAL TABLE */}
 
 <div className="
 bg-white
@@ -541,11 +703,8 @@ bg-gray-50
 
 
 <th className="
-w-[20%]
 p-4
 text-left
-text-sm
-font-semibold
 ">
 
 Customer
@@ -553,12 +712,8 @@ Customer
 </th>
 
 
-
 <th className="
-w-[15%]
 text-left
-text-sm
-font-semibold
 ">
 
 Course
@@ -566,51 +721,17 @@ Course
 </th>
 
 
-
 <th className="
-w-[12%]
 text-left
-text-sm
-font-semibold
 ">
 
-List Price
+Price
 
 </th>
 
 
-
 <th className="
-w-[10%]
 text-left
-text-sm
-font-semibold
-">
-
-Discount
-
-</th>
-
-
-
-<th className="
-w-[13%]
-text-left
-text-sm
-font-semibold
-">
-
-Final Price
-
-</th>
-
-
-
-<th className="
-w-[15%]
-text-left
-text-sm
-font-semibold
 ">
 
 Owner
@@ -618,12 +739,8 @@ Owner
 </th>
 
 
-
 <th className="
-w-[15%]
 text-center
-text-sm
-font-semibold
 ">
 
 Action
@@ -635,8 +752,6 @@ Action
 
 
 </thead>
-
-
 
 
 
@@ -659,13 +774,11 @@ border-t
 hover:bg-gray-50
 "
 
-
 >
 
 
 <td className="
 p-4
-truncate
 ">
 
 {deal.customer_name}
@@ -675,33 +788,9 @@ truncate
 
 
 
-<td className="
-truncate
-">
+<td>
 
 {deal.course}
-
-</td>
-
-
-
-
-
-<td>
-
-RM {Number(
-deal.list_price
-).toLocaleString()}
-
-</td>
-
-
-
-
-
-<td>
-
-{deal.discount_pct}%
 
 </td>
 
@@ -713,12 +802,16 @@ deal.list_price
 font-semibold
 ">
 
-RM {Number(
-deal.final_price
-).toLocaleString()}
+RM {
+
+Number(
+deal.final_price || 0
+)
+.toLocaleString()
+
+}
 
 </td>
-
 
 
 
@@ -726,11 +819,11 @@ deal.final_price
 
 <td>
 
-{deal.owner?.full_name || "-"}
+{
+deal.owner?.full_name || "-"
+}
 
 </td>
-
-
 
 
 
@@ -745,6 +838,9 @@ flex
 justify-center
 gap-2
 ">
+
+
+
 
 
 <button
@@ -765,6 +861,8 @@ title="Add Payment"
 <CreditCard size={17}/>
 
 </button>
+
+
 
 
 
@@ -793,6 +891,9 @@ title="Payment History"
 
 
 
+
+
+
 <button
 
 onClick={()=>openEditDeal(deal)}
@@ -803,13 +904,12 @@ rounded-lg
 hover:bg-gray-100
 "
 
-title="Edit"
-
 >
 
 <Edit size={17}/>
 
 </button>
+
 
 
 
@@ -827,8 +927,6 @@ text-red-500
 hover:bg-red-50
 "
 
-title="Delete"
-
 >
 
 <Trash2 size={17}/>
@@ -836,12 +934,12 @@ title="Delete"
 </button>
 
 
+
+
 </div>
 
 
 </td>
-
-
 
 
 
@@ -858,7 +956,9 @@ title="Delete"
 </tbody>
 
 
+
 </table>
+
 
 
 </div>
@@ -871,7 +971,8 @@ title="Delete"
 
 
 
-{/* CREATE / EDIT DEAL MODAL */}
+{/* CREATE / EDIT DEAL */}
+
 
 {
 
@@ -893,15 +994,11 @@ close={()=>setShowDealModal(false)}
 >
 
 
+
 <div className="
 space-y-4
 ">
 
-
-
-
-
-<div>
 
 
 <label className="form-label">
@@ -915,15 +1012,19 @@ Customer Name
 
 className="input"
 
-value={dealForm.customer_name}
+value={
+dealForm.customer_name
+}
 
-onChange={e=>
+onChange={
+e=>
 
 setDealForm({
 
 ...dealForm,
 
-customer_name:e.target.value
+customer_name:
+e.target.value
 
 })
 
@@ -932,38 +1033,37 @@ customer_name:e.target.value
 />
 
 
-</div>
 
 
 
 
 
-
-
-<div>
 
 
 <label className="form-label">
 
-Owner
+Salesperson
 
 </label>
-
 
 
 <select
 
 className="input"
 
-value={dealForm.owner_id}
+value={
+dealForm.owner_id
+}
 
-onChange={e=>
+onChange={
+e=>
 
 setDealForm({
 
 ...dealForm,
 
-owner_id:e.target.value
+owner_id:
+e.target.value
 
 })
 
@@ -974,7 +1074,7 @@ owner_id:e.target.value
 
 <option value="">
 
-Select Owner
+Select salesperson
 
 </option>
 
@@ -982,18 +1082,18 @@ Select Owner
 
 {
 
-salesPeople.map((person:any)=>(
+salesPeople.map((p:any)=>(
 
 
 <option
 
-key={person.id}
+key={p.id}
 
-value={person.id}
+value={p.id}
 
 >
 
-{person.full_name}
+{p.full_name}
 
 </option>
 
@@ -1004,19 +1104,14 @@ value={person.id}
 }
 
 
-
 </select>
 
 
-</div>
 
 
 
 
 
-
-
-<div>
 
 
 <label className="form-label">
@@ -1030,15 +1125,19 @@ Course
 
 className="input"
 
-value={dealForm.course}
+value={
+dealForm.course
+}
 
-onChange={e=>
+onChange={
+e=>
 
 setDealForm({
 
 ...dealForm,
 
-course:e.target.value
+course:
+e.target.value
 
 })
 
@@ -1047,46 +1146,7 @@ course:e.target.value
 />
 
 
-</div>
 
-
-
-
-
-
-
-<div>
-
-
-<label className="form-label">
-
-Course Type
-
-</label>
-
-
-<input
-
-className="input"
-
-value={dealForm.course_type}
-
-onChange={e=>
-
-setDealForm({
-
-...dealForm,
-
-course_type:e.target.value
-
-})
-
-}
-
-/>
-
-
-</div>
 
 
 
@@ -1101,16 +1161,14 @@ gap-4
 ">
 
 
-
 <div>
 
 
 <label className="form-label">
 
-List Price (RM)
+List Price
 
 </label>
-
 
 
 <input
@@ -1119,37 +1177,41 @@ className="input"
 
 type="number"
 
-value={dealForm.list_price}
+value={
+dealForm.list_price
+}
 
 onChange={e=>{
 
 
 const price =
-Number(e.target.value);
+Number(
+e.target.value
+);
+
 
 
 setDealForm({
 
 ...dealForm,
 
-list_price:price,
-
-final_price:Number(
-
-calculateFinalPrice(
-
+list_price:
 price,
 
+
+final_price:
+Number(
+calculateFinalPrice(
+price,
 dealForm.discount_pct
-
 )
-
 )
 
 });
 
 
 }}
+
 
 />
 
@@ -1160,17 +1222,14 @@ dealForm.discount_pct
 
 
 
-
-
 <div>
 
 
 <label className="form-label">
 
-Discount (%)
+Discount %
 
 </label>
-
 
 
 <input
@@ -1179,37 +1238,43 @@ className="input"
 
 type="number"
 
-value={dealForm.discount_pct}
+value={
+dealForm.discount_pct
+}
 
 onChange={e=>{
 
 
 const discount =
-Number(e.target.value);
+Number(
+e.target.value
+);
+
 
 
 setDealForm({
 
 ...dealForm,
 
-discount_pct:discount,
 
-final_price:Number(
+discount_pct:
+discount,
 
+
+final_price:
+Number(
 calculateFinalPrice(
-
 dealForm.list_price,
-
 discount
-
+)
 )
 
-)
 
 });
 
 
 }}
+
 
 />
 
@@ -1217,9 +1282,7 @@ discount
 </div>
 
 
-
 </div>
-
 
 
 
@@ -1232,9 +1295,151 @@ discount
 
 <label className="form-label">
 
-Final Price (RM)
+Apply Commission Rules
 
 </label>
+
+
+
+<div className="
+border
+rounded-xl
+p-4
+space-y-2
+">
+
+
+{
+
+commissionRules.length===0 &&
+
+<p className="
+text-sm
+text-gray-500
+">
+
+No commission rules available
+
+</p>
+
+
+}
+
+
+
+
+
+
+{
+
+commissionRules.map((rule:any)=>(
+
+
+<label
+
+key={rule.id}
+
+className="
+flex
+items-center
+gap-3
+"
+
+>
+
+
+<input
+
+type="checkbox"
+
+checked={
+
+dealForm
+.commission_rule_ids
+.includes(
+rule.id
+)
+
+}
+
+
+onChange={()=>{
+
+
+const exists =
+
+dealForm
+.commission_rule_ids
+.includes(
+rule.id
+);
+
+
+
+setDealForm({
+
+...dealForm,
+
+
+commission_rule_ids:
+
+exists
+
+?
+
+dealForm.commission_rule_ids
+.filter(
+(id:string)=>
+id!==rule.id
+)
+
+:
+
+[
+
+...dealForm.commission_rule_ids,
+
+rule.id
+
+]
+
+
+});
+
+
+}}
+
+
+/>
+
+
+
+<span>
+
+{rule.name}
+
+</span>
+
+
+</label>
+
+
+
+))
+
+
+}
+
+
+
+</div>
+
+
+</div>
+
+
+
+
 
 
 <div className="
@@ -1242,60 +1447,21 @@ bg-gray-50
 rounded-xl
 p-3
 font-semibold
-text-[#284342]
 ">
 
-RM {Number(
-dealForm.final_price
-).toLocaleString()}
+Final Price:
 
-</div>
+RM {
 
-
-</div>
-
-
-
-
-
-
-
-
-<div>
-
-
-<label className="form-label">
-
-Signed Date
-
-</label>
-
-
-
-<input
-
-className="input"
-
-type="date"
-
-value={dealForm.signed_at}
-
-onChange={e=>
-
-setDealForm({
-
-...dealForm,
-
-signed_at:e.target.value
-
-})
+Number(
+dealForm.final_price || 0
+)
+.toLocaleString()
 
 }
 
-/>
-
-
 </div>
+
 
 
 
@@ -1311,13 +1477,13 @@ className="btn-primary"
 
 >
 
+
 <Save size={16}/>
 
 Save Deal
 
+
 </button>
-
-
 
 
 
@@ -1326,12 +1492,15 @@ Save Deal
 
 
 
+
 </Modal>
 
 
 }
+{/* // =====================================================
+// PAYMENT MODAL
+// ===================================================== */}
 
-{/* PAYMENT MODAL */}
 
 {
 
@@ -1353,16 +1522,11 @@ space-y-4
 
 
 
-
-
-<div>
-
 <label className="form-label">
 
 Amount (RM)
 
 </label>
-
 
 
 <input
@@ -1371,15 +1535,19 @@ className="input"
 
 type="number"
 
-value={paymentForm.amount}
+value={
+paymentForm.amount
+}
 
-onChange={e=>
+onChange={
+e=>
 
 setPaymentForm({
 
 ...paymentForm,
 
-amount:Number(
+amount:
+Number(
 e.target.value
 )
 
@@ -1390,16 +1558,11 @@ e.target.value
 />
 
 
-</div>
 
 
 
 
 
-
-
-
-<div>
 
 <label className="form-label">
 
@@ -1408,20 +1571,23 @@ Payment Type
 </label>
 
 
-
 <select
 
 className="input"
 
-value={paymentForm.payment_type}
+value={
+paymentForm.payment_type
+}
 
-onChange={e=>
+onChange={
+e=>
 
 setPaymentForm({
 
 ...paymentForm,
 
-payment_type:e.target.value
+payment_type:
+e.target.value
 
 })
 
@@ -1449,23 +1615,23 @@ Installment
 </select>
 
 
-</div>
 
 
 
 
 
 
+{
+paymentForm.payment_type==="Installment"
+&&
 
-
-<div>
+<>
 
 <label className="form-label">
 
 Installment Number
 
 </label>
-
 
 
 <input
@@ -1476,15 +1642,19 @@ type="number"
 
 min="1"
 
-value={paymentForm.installment_no}
+value={
+paymentForm.installment_no
+}
 
-onChange={e=>
+onChange={
+e=>
 
 setPaymentForm({
 
 ...paymentForm,
 
-installment_no:Number(
+installment_no:
+Number(
 e.target.value
 )
 
@@ -1494,16 +1664,17 @@ e.target.value
 
 />
 
+</>
 
-</div>
-
-
-
+}
 
 
 
 
-<div>
+
+
+
+
 
 <label className="form-label">
 
@@ -1512,22 +1683,25 @@ Payment Date
 </label>
 
 
-
 <input
 
 className="input"
 
 type="date"
 
-value={paymentForm.payment_date}
+value={
+paymentForm.payment_date
+}
 
-onChange={e=>
+onChange={
+e=>
 
 setPaymentForm({
 
 ...paymentForm,
 
-payment_date:e.target.value
+payment_date:
+e.target.value
 
 })
 
@@ -1536,7 +1710,7 @@ payment_date:e.target.value
 />
 
 
-</div>
+
 
 
 
@@ -1552,11 +1726,14 @@ className="btn-primary"
 
 >
 
+
 <Save size={16}/>
 
 Save Payment
 
+
 </button>
+
 
 
 
@@ -1577,7 +1754,10 @@ Save Payment
 
 
 
-{/* PAYMENT HISTORY */}
+{/* // =====================================================
+// PAYMENT HISTORY MODAL
+// ===================================================== */}
+
 
 {
 
@@ -1587,7 +1767,9 @@ showHistoryModal &&
 <Modal
 
 title={
+
 `Payment History - ${selectedDeal?.customer_name}`
+
 }
 
 close={()=>setShowHistoryModal(false)}
@@ -1598,7 +1780,6 @@ close={()=>setShowHistoryModal(false)}
 
 <table className="
 w-full
-table-fixed
 ">
 
 
@@ -1620,7 +1801,9 @@ Type
 </th>
 
 
+
 <th className="
+p-3
 text-left
 ">
 
@@ -1629,7 +1812,10 @@ Installment
 </th>
 
 
+
+
 <th className="
+p-3
 text-left
 ">
 
@@ -1638,7 +1824,11 @@ Amount
 </th>
 
 
+
+
+
 <th className="
+p-3
 text-left
 ">
 
@@ -1647,7 +1837,9 @@ Date
 </th>
 
 
+
 </tr>
+
 
 
 </thead>
@@ -1657,21 +1849,25 @@ Date
 
 
 
+
 <tbody>
+
 
 
 {
 
 payments.length===0 &&
 
+
 <tr>
+
 
 <td
 
 colSpan={4}
 
 className="
-p-4
+p-5
 text-center
 text-gray-500
 "
@@ -1681,6 +1877,7 @@ text-gray-500
 No payment record
 
 </td>
+
 
 </tr>
 
@@ -1719,7 +1916,7 @@ border-t
 
 
 
-<td>
+<td className="p-3">
 
 #{payment.installment_no}
 
@@ -1729,11 +1926,16 @@ border-t
 
 
 
-<td>
+<td className="p-3">
 
-RM {Number(
-payment.amount
-).toLocaleString()}
+RM {
+
+Number(
+payment.amount || 0
+)
+.toLocaleString()
+
+}
 
 </td>
 
@@ -1741,13 +1943,11 @@ payment.amount
 
 
 
-<td>
+<td className="p-3">
 
 {payment.payment_date}
 
 </td>
-
-
 
 
 
@@ -1761,8 +1961,8 @@ payment.amount
 
 
 
-</tbody>
 
+</tbody>
 
 
 </table>
@@ -1779,13 +1979,11 @@ payment.amount
 
 
 
-
-
-
-
 </div>
 
+
 );
+
 
 }
 
@@ -1797,9 +1995,9 @@ payment.amount
 
 
 
-// ===============================
+// =====================================================
 // COMMON MODAL
-// ===============================
+// =====================================================
 
 
 function Modal({
@@ -1890,15 +2088,18 @@ hover:bg-gray-100
 
 
 
+
 {children}
 
 
 
-</div>
-
-
 
 </div>
+
+
+
+</div>
+
 
 );
 
