@@ -454,7 +454,11 @@ w-full
 
 ["team","Team"],
 
-...(currentUser?.role==="super_admin"
+...(
+[
+"admin",
+"super_admin"
+].includes(currentUser?.role)
 ?
 [
 ["commission","Commission"]

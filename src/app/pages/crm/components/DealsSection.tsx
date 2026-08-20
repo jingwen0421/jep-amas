@@ -68,6 +68,8 @@ deals,
 
 salesPeople,
 
+currentUser,
+
 refresh
 
 }:any){

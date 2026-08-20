@@ -88,8 +88,10 @@ refresh
 
 
 const isAdmin =
-
-currentUser?.role === "super_admin";
+[
+ "admin",
+ "super_admin"
+].includes(currentUser?.role);
 
 
 

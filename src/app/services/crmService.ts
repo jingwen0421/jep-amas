@@ -44,6 +44,7 @@ role
 "role",
 [
 "admin",
+"teacher",
 "super_admin",
 "internal_sales",
 "external_sales"
@@ -113,16 +114,17 @@ role
 
 
 if(
-currentUser &&
-currentUser.role !== "super_admin"
+ currentUser &&
+ ![
+   "admin",
+   "super_admin"
+ ].includes(currentUser.role)
 ){
 
-
-query=query.eq(
-"owner_id",
-currentUser.id
-);
-
+ query=query.eq(
+   "owner_id",
+   currentUser.id
+ );
 
 }
 
@@ -385,7 +387,10 @@ if(
 
 currentUser &&
 
-currentUser.role !== "super_admin"
+![
+  "admin",
+  "super_admin"
+].includes(currentUser.role)
 
 ){
 
