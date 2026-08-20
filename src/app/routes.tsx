@@ -43,6 +43,8 @@ import ProtectedRoute from './components/ProtectedRoute';
 import AccessDenied from './pages/AccessDenied';
 import StudentRegistration from './pages/students/StudentRegistration';
 import CRMPage from './pages/crm/CRMPage';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 
 export const router = createBrowserRouter([
   {
@@ -52,6 +54,15 @@ export const router = createBrowserRouter([
   {
   path: '/student-registration',
   Component: StudentRegistration,
+},
+{
+  path: '/forgot-password',
+  Component: ForgotPassword,
+},
+
+{
+  path: '/reset-password',
+  Component: ResetPassword,
 },
 
   {

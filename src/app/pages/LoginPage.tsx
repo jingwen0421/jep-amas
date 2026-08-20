@@ -369,6 +369,7 @@ async function handleSignup(e: React.FormEvent) {
               Sign In
             </button>
 
+
             <button
               type="button"
               onClick={() => {
@@ -421,6 +422,32 @@ async function handleSignup(e: React.FormEvent) {
                 required
               />
             </div>
+
+            {mode==="login" && (
+
+            <div className="text-right">
+
+            <button
+
+            type="button"
+
+            onClick={()=>navigate("/forgot-password")}
+
+            className="
+            text-sm
+            text-[#284342]
+            hover:underline
+            "
+
+            >
+
+            Forgot Password?
+
+            </button>
+
+            </div>
+
+            )}
 
             {mode === 'signup' && (
               <div>
