@@ -423,6 +423,8 @@ async function handleSignup(e: React.FormEvent) {
               />
             </div>
 
+            {/* Forgot Password */}
+
             {mode==="login" && (
 
             <div className="text-right">
