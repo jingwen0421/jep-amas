@@ -7,6 +7,7 @@ interface NotificationItem {
   message: string;
   delivery_status: string;
   created_at: string;
+  contact_phone?: string | null;
 }
 
 interface Props {
@@ -21,9 +22,10 @@ export default function WhatsAppQueue({ notifications, onMarkSent }: Props) {
       item.delivery_status === 'pending'
   );
 
-  function openWhatsApp(message: string) {
+  function openWhatsApp(message: string, phone?: string | null) {
+    const digits = phone ? phone.replace(/[^\d+]/g, '').replace('+', '') : '';
     window.open(
-      `https://wa.me/?text=${encodeURIComponent(message)}`,
+      `https://wa.me/${digits}?text=${encodeURIComponent(message)}`,
       '_blank'
     );
   }
@@ -58,6 +60,7 @@ export default function WhatsAppQueue({ notifications, onMarkSent }: Props) {
             <div>
               <p className="text-sm text-[#284342]">{item.title}</p>
               <p className="text-xs text-[#6b6b6b] mt-1">
+                {item.contact_phone ? `${item.contact_phone} • ` : ''}
                 {new Date(item.created_at).toLocaleString()}
               </p>
               <p className="text-sm text-[#6b6b6b] mt-3 whitespace-pre-line">
@@ -67,9 +70,9 @@ export default function WhatsAppQueue({ notifications, onMarkSent }: Props) {
 
             <div className="flex items-center gap-2">
               <button
-                onClick={() => openWhatsApp(item.message)}
+                onClick={() => openWhatsApp(item.message, item.contact_phone)}
                 className="p-2 rounded-lg hover:bg-green-50"
-                title="Open WhatsApp"
+                title={item.contact_phone ? `Open WhatsApp for ${item.contact_phone}` : 'Open WhatsApp'}
               >
                 <MessageCircle size={18} className="text-green-700" />
               </button>

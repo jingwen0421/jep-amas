@@ -23,6 +23,9 @@ interface StudentProgressData {
   assignmentsCompleted: number;
   totalAssignments: number;
   averageScore: number;
+  hasModuleData: boolean;
+  modulesCompleted: number;
+  totalModules: number;
 }
 
 export default function StudentProgress() {
@@ -46,12 +49,17 @@ export default function StudentProgress() {
         progress,
         status,
         enrollments(
+          id,
           enrollment_status,
           class_batches(
             batch_name,
-            courses(course_name),
+            courses(
+              course_name,
+              course_modules(id, is_required)
+            ),
             lessons(id)
-          )
+          ),
+          student_module_progress(module_id, status)
         ),
         attendance(attendance_status),
        portfolio_items(
@@ -117,22 +125,43 @@ export default function StudentProgress() {
           ? Math.round((presentCount / totalLessons) * 100)
           : Number(student.progress || 0);
 
+      // Module-based progress: the authoritative signal once an admin has
+      // defined course_modules for this course and progress has been
+      // tracked per module. Falls back to the attendance/lesson-based
+      // approximation above when no modules are defined yet.
+      const courseModules = course?.course_modules || [];
+      const totalModules = courseModules.length;
+      const moduleProgressRows = activeEnrollment?.student_module_progress || [];
+      const completedModuleIds = new Set(
+        moduleProgressRows
+          .filter((row: any) => row.status === 'completed')
+          .map((row: any) => row.module_id)
+      );
+      const modulesCompleted = courseModules.filter((module: any) =>
+        completedModuleIds.has(module.id)
+      ).length;
+      const hasModuleData = totalModules > 0;
+
+      const overallProgress = hasModuleData
+        ? Math.round((modulesCompleted / totalModules) * 100)
+        : Math.min(100, Number(student.progress || progressFromLessons || 0));
+
       return {
         id: student.student_code || student.id,
         studentId: student.id,
         name: student.full_name || 'Unnamed Student',
         course: course?.course_name || '-',
         batch: batch?.batch_name || '-',
-        overallProgress: Math.min(
-          100,
-          Number(student.progress || progressFromLessons || 0)
-        ),
+        overallProgress: Math.min(100, overallProgress),
         lessonsCompleted: presentCount,
         totalLessons,
         attendanceRate,
         assignmentsCompleted: completedAssignments,
         totalAssignments: portfolioItems.length,
         averageScore,
+        hasModuleData,
+        modulesCompleted,
+        totalModules,
       };
     });
 
@@ -265,7 +294,9 @@ export default function StudentProgress() {
                 <div className="mb-4">
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs text-[#6b6b6b]">
-                      Course Completion
+                      {student.hasModuleData
+                        ? `Course Completion • ${student.modulesCompleted}/${student.totalModules} modules`
+                        : 'Course Completion (attendance-based estimate)'}
                     </span>
                   </div>
 
@@ -281,11 +312,13 @@ export default function StudentProgress() {
                   <MetricCard
                     icon={<CheckCircle2 size={20} className="text-[#284342]" />}
                     value={
-                      student.totalLessons > 0
+                      student.hasModuleData
+                        ? `${student.modulesCompleted}/${student.totalModules}`
+                        : student.totalLessons > 0
                         ? `${student.lessonsCompleted}/${student.totalLessons}`
                         : `${student.lessonsCompleted}`
                     }
-                    label="Lessons"
+                    label={student.hasModuleData ? 'Modules' : 'Lessons'}
                     color="#284342"
                   />
 

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router';
 import {
   Plus,
   Calendar,
@@ -6,27 +7,40 @@ import {
   Users,
   MapPin,
   AlertCircle,
+  X,
+  Search,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
 interface ScheduledClass {
   id: string;
   course: string;
-  batch: string;
+  courseId: string | null;
+  moduleTitle: string;
+  moduleId: string | null;
+  batchId: string | null;
   date: string;
   startTime: string;
   endTime: string;
   teacher: string;
+  teacherId: string | null;
   room: string;
-  students: number;
+  classroomId: string | null;
+  rawTitle: string;
+  participantCount: number;
   status: 'Scheduled' | 'Completed';
+  teacherConfirmed: boolean;
 }
 
-interface BatchOption {
+interface CourseOption {
   id: string;
-  batch_name: string;
-  courses?: { course_name: string }[] | { course_name: string } | null;
-  enrollments?: { id: string }[];
+  course_name: string;
+}
+
+interface ModuleOption {
+  id: string;
+  title: string;
+  sequence: number;
 }
 
 interface TeacherOption {
@@ -40,36 +54,164 @@ interface ClassroomOption {
   room_name: string;
 }
 
+interface SyncConflict {
+  id: string;
+  source_table: string;
+  source_id: string;
+  conflict_message: string;
+  detected_at: string;
+}
+
+interface RosterPoolMember {
+  studentId: string;
+  studentName: string;
+  batchId: string;
+  batchName: string;
+  moduleStatus: string;
+}
+
+interface RosterMember {
+  studentId: string;
+  studentName: string;
+  source: 'batch' | 'individual' | 'auto_eligible';
+}
+
+const emptyFormData = {
+  courseId: '',
+  moduleId: '',
+  teacherId: '',
+  classroomId: '',
+  date: '',
+  startTime: '',
+  endTime: '',
+  lessonTitle: '',
+};
+
 export default function ClassScheduling() {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [selectedWeek, setSelectedWeek] = useState('Current Week');
 
   const [scheduledClasses, setScheduledClasses] = useState<ScheduledClass[]>([]);
-  const [batches, setBatches] = useState<BatchOption[]>([]);
+  const visibleScheduledClasses = useMemo(() => {
+    const range = getScheduleViewRange(selectedWeek);
+    return scheduledClasses.filter(
+      (c) => c.date >= range.start && c.date <= range.end
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scheduledClasses, selectedWeek]);
+  const [courses, setCourses] = useState<CourseOption[]>([]);
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
   const [classrooms, setClassrooms] = useState<ClassroomOption[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const [formData, setFormData] = useState({
-    batchId: '',
-    teacherId: '',
-    classroomId: '',
-    date: '',
-    startTime: '',
-    endTime: '',
-    lessonTitle: '',
-  });
+  const [syncConflicts, setSyncConflicts] = useState<SyncConflict[]>([]);
+  const [loadingConflicts, setLoadingConflicts] = useState(true);
+  const [dismissingId, setDismissingId] = useState<string | null>(null);
+
+  const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
+  const conflictRequestIdRef = useRef(0);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
+  const [checkingConflicts, setCheckingConflicts] = useState(false);
+  const [conflictWarnings, setConflictWarnings] = useState<string[]>([]);
+  const [availabilityWarning, setAvailabilityWarning] = useState<string | null>(
+    null
+  );
+
+  const [modules, setModules] = useState<ModuleOption[]>([]);
+  const [modulesLoading, setModulesLoading] = useState(false);
+
+  const [courseBatches, setCourseBatches] = useState<
+    { id: string; batch_name: string }[]
+  >([]);
+  const [rosterPool, setRosterPool] = useState<RosterPoolMember[]>([]);
+  const [rosterPoolLoading, setRosterPoolLoading] = useState(false);
+  const [roster, setRoster] = useState<Map<string, RosterMember>>(new Map());
+  const [primaryBatchId, setPrimaryBatchId] = useState<string | null>(null);
+  const [studentSearch, setStudentSearch] = useState('');
+
+  const [formData, setFormData] = useState(emptyFormData);
 
   useEffect(() => {
     fetchAll();
   }, []);
 
+  // Deep-link support: the Unified Calendar's "+ Schedule Class" quick
+  // action lands here with ?date=YYYY-MM-DD instead of duplicating the
+  // roster/conflict-check logic in its own modal — open straight into the
+  // create form with that date pre-filled.
+  useEffect(() => {
+    const dateParam = searchParams.get('date');
+    if (!dateParam) return;
+
+    openCreateModal(dateParam);
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('date');
+      return next;
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchParams]);
+
+  useEffect(() => {
+    if (!showScheduleModal || !formData.courseId) {
+      setModules([]);
+      setCourseBatches([]);
+      setRosterPool([]);
+      return;
+    }
+
+    fetchModulesForCourse(formData.courseId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showScheduleModal, formData.courseId]);
+
+  useEffect(() => {
+    if (!showScheduleModal || !formData.courseId) return;
+    fetchRosterPool(formData.courseId, formData.moduleId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showScheduleModal, formData.courseId, formData.moduleId]);
+
+  useEffect(() => {
+    if (!showScheduleModal) return;
+
+    if (
+      !formData.date ||
+      !formData.startTime ||
+      !formData.endTime ||
+      calculateDurationMinutes(formData.startTime, formData.endTime) <= 0
+    ) {
+      setConflictWarnings([]);
+      setAvailabilityWarning(null);
+      return;
+    }
+
+    const handle = setTimeout(() => {
+      if (formData.teacherId || formData.classroomId) checkConflicts();
+      if (formData.teacherId) checkAvailability();
+      if (!formData.teacherId) setAvailabilityWarning(null);
+    }, 350);
+
+    return () => clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    showScheduleModal,
+    editingLessonId,
+    formData.teacherId,
+    formData.classroomId,
+    formData.date,
+    formData.startTime,
+    formData.endTime,
+  ]);
+
   async function fetchAll() {
     await Promise.all([
       fetchScheduledClasses(),
-      fetchBatches(),
+      fetchCourses(),
       fetchTeachers(),
       fetchClassrooms(),
+      fetchSyncConflicts(),
     ]);
   }
 
@@ -84,16 +226,16 @@ export default function ClassScheduling() {
         lesson_datetime,
         duration_minutes,
         status,
-        class_batches(
-          batch_name,
-          courses(course_name),
-          enrollments(id)
-        ),
-        teachers(
-          specialization,
-          users(full_name)
-        ),
-        classrooms(room_name)
+        batch_id,
+        teacher_id,
+        classroom_id,
+        module_id,
+        teacher_confirmed_at,
+        course_modules(title, course_id, courses(course_name)),
+        class_batches(batch_name, courses(course_name)),
+        teachers(specialization, users(full_name)),
+        classrooms(room_name),
+        lesson_participants(id)
       `)
       .order('lesson_datetime', { ascending: true });
 
@@ -108,17 +250,29 @@ export default function ClassScheduling() {
       const duration = lesson.duration_minutes || 180;
       const end = new Date(start.getTime() + duration * 60000);
 
+      const moduleJoin = getSingle(lesson.course_modules);
+      const batchJoin = getSingle(lesson.class_batches);
+      const moduleCourse = moduleJoin ? getSingle(moduleJoin.courses) : null;
+      const batchCourse = batchJoin ? getSingle(batchJoin.courses) : null;
+
       return {
         id: lesson.id,
-        course: getCourseName(lesson.class_batches?.courses),
-        batch: lesson.class_batches?.batch_name || '-',
+        course: moduleCourse?.course_name || batchCourse?.course_name || '-',
+        courseId: moduleJoin?.course_id || null,
+        moduleTitle: moduleJoin?.title || '-',
+        moduleId: lesson.module_id || null,
+        batchId: lesson.batch_id || null,
         date: start.toISOString().slice(0, 10),
         startTime: start.toTimeString().slice(0, 5),
         endTime: end.toTimeString().slice(0, 5),
         teacher: getTeacherNameFromJoin(lesson.teachers),
+        teacherId: lesson.teacher_id || null,
         room: lesson.classrooms?.room_name || '-',
-        students: lesson.class_batches?.enrollments?.length || 0,
+        classroomId: lesson.classroom_id || null,
+        rawTitle: lesson.lesson_title || '',
+        participantCount: (lesson.lesson_participants || []).length,
         status: start < new Date() ? 'Completed' : 'Scheduled',
+        teacherConfirmed: !!lesson.teacher_confirmed_at,
       };
     });
 
@@ -126,23 +280,116 @@ export default function ClassScheduling() {
     setLoading(false);
   }
 
-  async function fetchBatches() {
+  async function fetchCourses() {
     const { data, error } = await supabase
-      .from('class_batches')
-      .select(`
-        id,
-        batch_name,
-        courses(course_name),
-        enrollments(id)
-      `)
-      .order('batch_name', { ascending: true });
+      .from('courses')
+      .select('id, course_name')
+      .eq('status', 'active')
+      .order('course_name', { ascending: true });
 
     if (error) {
-      console.error('Error fetching batches:', error.message);
+      console.error('Error fetching courses:', error.message);
       return;
     }
 
-    setBatches((data || []) as unknown as BatchOption[]);
+    setCourses(data || []);
+  }
+
+  async function fetchModulesForCourse(courseId: string) {
+    setModulesLoading(true);
+
+    const { data, error } = await supabase
+      .from('course_modules')
+      .select('id, title, sequence')
+      .eq('course_id', courseId)
+      .order('sequence', { ascending: true });
+
+    setModulesLoading(false);
+
+    if (error) {
+      console.error('Error fetching modules:', error.message);
+      return;
+    }
+
+    setModules(data || []);
+  }
+
+  async function fetchRosterPool(courseId: string, moduleId: string) {
+    setRosterPoolLoading(true);
+
+    const { data: batchRows, error: batchError } = await supabase
+      .from('class_batches')
+      .select('id, batch_name')
+      .eq('course_id', courseId)
+      .order('batch_name', { ascending: true });
+
+    if (batchError) {
+      console.error('Error fetching batches for course:', batchError.message);
+      setRosterPoolLoading(false);
+      return;
+    }
+
+    setCourseBatches(batchRows || []);
+
+    const batchIds = (batchRows || []).map((b) => b.id);
+
+    if (batchIds.length === 0) {
+      setRosterPool([]);
+      setRosterPoolLoading(false);
+      return;
+    }
+
+    const { data: enrollRows, error: enrollError } = await supabase
+      .from('enrollments')
+      .select(
+        `
+        id,
+        student_id,
+        batch_id,
+        enrollment_status,
+        students(full_name),
+        class_batches(batch_name)
+      `
+      )
+      .in('batch_id', batchIds)
+      .eq('enrollment_status', 'active');
+
+    if (enrollError) {
+      console.error('Error fetching course roster pool:', enrollError.message);
+      setRosterPoolLoading(false);
+      return;
+    }
+
+    let progressByEnrollment: Record<string, string> = {};
+
+    if (moduleId && enrollRows && enrollRows.length > 0) {
+      const { data: progressRows, error: progressError } = await supabase
+        .from('student_module_progress')
+        .select('enrollment_id, status')
+        .eq('module_id', moduleId)
+        .in(
+          'enrollment_id',
+          enrollRows.map((row) => row.id)
+        );
+
+      if (!progressError) {
+        (progressRows || []).forEach((row: any) => {
+          progressByEnrollment[row.enrollment_id] = row.status;
+        });
+      }
+    }
+
+    setRosterPool(
+      (enrollRows || []).map((row: any) => ({
+        studentId: row.student_id,
+        studentName: getSingle(row.students)?.full_name || 'Student',
+        batchId: row.batch_id,
+        batchName: getSingle(row.class_batches)?.batch_name || '-',
+        moduleStatus: progressByEnrollment[row.id] || 'eligible',
+      }))
+    );
+
+    setRosterPoolLoading(false);
   }
 
   async function fetchTeachers() {
@@ -176,6 +423,77 @@ export default function ClassScheduling() {
     setClassrooms(data || []);
   }
 
+  async function fetchSyncConflicts() {
+    setLoadingConflicts(true);
+
+    const { data, error } = await supabase
+      .from('calendar_sync_conflicts')
+      .select('id, source_table, source_id, conflict_message, detected_at')
+      .order('detected_at', { ascending: false });
+
+    if (error) {
+      console.error('Error fetching sync conflicts:', error.message);
+      setLoadingConflicts(false);
+      return;
+    }
+
+    setSyncConflicts(data || []);
+    setLoadingConflicts(false);
+  }
+
+  async function dismissConflict(id: string) {
+    setDismissingId(id);
+
+    const { error } = await supabase
+      .from('calendar_sync_conflicts')
+      .delete()
+      .eq('id', id);
+
+    setDismissingId(null);
+
+    if (error) {
+      console.error('Error dismissing conflict:', error.message);
+      return;
+    }
+
+    setSyncConflicts((prev) => prev.filter((conflict) => conflict.id !== id));
+  }
+
+  function toDateStr(d: Date) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(
+      d.getDate()
+    ).padStart(2, '0')}`;
+  }
+
+  // "View Schedule" dropdown previously only changed its own label — the
+  // list below always rendered every scheduled class regardless of which
+  // option was picked. This computes the actual [start, end] date window
+  // for each option so the list can be filtered against it.
+  function getScheduleViewRange(view: string): { start: string; end: string } {
+    const today = new Date();
+    const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+
+    if (view === 'Current Week' || view === 'Next Week') {
+      const day = startOfToday.getDay(); // 0 = Sun .. 6 = Sat
+      const diffToMonday = day === 0 ? -6 : 1 - day;
+      const monday = new Date(startOfToday);
+      monday.setDate(startOfToday.getDate() + diffToMonday);
+
+      if (view === 'Next Week') monday.setDate(monday.getDate() + 7);
+
+      const sunday = new Date(monday);
+      sunday.setDate(monday.getDate() + 6);
+
+      return { start: toDateStr(monday), end: toDateStr(sunday) };
+    }
+
+    const monthOffset = view === 'Next Month' ? 1 : 0;
+    const firstOfMonth = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
+    const lastOfMonth = new Date(today.getFullYear(), today.getMonth() + monthOffset + 1, 0);
+
+    return { start: toDateStr(firstOfMonth), end: toDateStr(lastOfMonth) };
+  }
+
   function calculateDurationMinutes(startTime: string, endTime: string) {
     const [sh, sm] = startTime.split(':').map(Number);
     const [eh, em] = endTime.split(':').map(Number);
@@ -183,14 +501,266 @@ export default function ClassScheduling() {
     return eh * 60 + em - (sh * 60 + sm);
   }
 
+  async function checkConflicts() {
+    setCheckingConflicts(true);
+
+    // Snapshot state at call time and stamp this call with a request id.
+    // checkConflicts is debounced (350ms) and can overlap with itself (e.g.
+    // switching from "Schedule New" straight into "Edit" on an existing
+    // class before the previous check has resolved) — without this guard a
+    // stale, in-flight response for the OLD editingLessonId/formData could
+    // land after the fresh one and overwrite it with wrong warnings,
+    // including a class appearing to conflict with itself.
+    const requestId = ++conflictRequestIdRef.current;
+    const currentEditingLessonId = editingLessonId;
+
+    const startsAt = `${formData.date}T${formData.startTime}:00+08:00`;
+    const endsAt = `${formData.date}T${formData.endTime}:00+08:00`;
+    const warnings: string[] = [];
+
+    // Exclude the lesson being edited at the query level (not just by
+    // filtering the result client-side) so its own calendar_events row can
+    // never be reported as a conflict with itself.
+    if (formData.teacherId) {
+      let query = supabase
+        .from('calendar_events')
+        .select('title, starts_at, ends_at, source_table, source_id')
+        .eq('teacher_id', formData.teacherId)
+        .neq('status', 'cancelled')
+        .lt('starts_at', endsAt)
+        .gt('ends_at', startsAt);
+
+      if (currentEditingLessonId) {
+        // source_id is a uuid, effectively globally unique across every
+        // table calendar_events pulls from, so excluding by source_id alone
+        // (without also matching source_table) is safe and avoids relying
+        // on PostgREST's less-common not(and(...)) compound-filter syntax.
+        query = query.neq('source_id', currentEditingLessonId);
+      }
+
+      const { data, error } = await query;
+
+      if (!error && data && data.length > 0) {
+        const clash = data[0];
+        const teacherOption = teachers.find((t) => t.id === formData.teacherId);
+        const teacherName = teacherOption ? getTeacherName(teacherOption) : 'Selected teacher';
+        warnings.push(
+          `${teacherName} already has "${clash.title}" booked ${formatRange(clash.starts_at, clash.ends_at)}.`
+        );
+      }
+    }
+
+    if (formData.classroomId) {
+      let query = supabase
+        .from('calendar_events')
+        .select('title, starts_at, ends_at, source_table, source_id')
+        .eq('venue_id', formData.classroomId)
+        .neq('status', 'cancelled')
+        .lt('starts_at', endsAt)
+        .gt('ends_at', startsAt);
+
+      if (currentEditingLessonId) {
+        // source_id is a uuid, effectively globally unique across every
+        // table calendar_events pulls from, so excluding by source_id alone
+        // (without also matching source_table) is safe and avoids relying
+        // on PostgREST's less-common not(and(...)) compound-filter syntax.
+        query = query.neq('source_id', currentEditingLessonId);
+      }
+
+      const { data, error } = await query;
+
+      if (!error && data && data.length > 0) {
+        const clash = data[0];
+        const roomName =
+          classrooms.find((c) => c.id === formData.classroomId)?.room_name || 'Selected room';
+        warnings.push(
+          `${roomName} is already booked for "${clash.title}" ${formatRange(clash.starts_at, clash.ends_at)}.`
+        );
+      }
+    }
+
+    if (requestId === conflictRequestIdRef.current) {
+      setConflictWarnings(warnings);
+      setCheckingConflicts(false);
+    }
+  }
+
+  async function checkAvailability() {
+    if (!formData.teacherId || !formData.date) {
+      setAvailabilityWarning(null);
+      return;
+    }
+
+    // teacher_availability rows now mean "this teacher marked themselves
+    // UNAVAILABLE for this window" (outstation on another job, a personal
+    // appointment, etc) rather than the old opt-in "these are my free
+    // hours" model — a teacher with no rows at all for this date is simply
+    // assumed open, so absence of data is no longer itself a warning.
+    const { data, error } = await supabase
+      .from('teacher_availability')
+      .select('start_time, end_time, reason')
+      .eq('teacher_id', formData.teacherId)
+      .eq('available_date', formData.date);
+
+    if (error) {
+      setAvailabilityWarning(null);
+      return;
+    }
+
+    const teacherOption = teachers.find((t) => t.id === formData.teacherId);
+    const teacherName = teacherOption ? getTeacherName(teacherOption) : 'This teacher';
+
+    const blockingSlot = (data || []).find(
+      (slot) =>
+        (slot.start_time || '').slice(0, 5) < formData.endTime &&
+        (slot.end_time || '').slice(0, 5) > formData.startTime
+    );
+
+    setAvailabilityWarning(
+      blockingSlot
+        ? `${teacherName} marked themselves unavailable for this time${
+            blockingSlot.reason ? ` (${blockingSlot.reason})` : ''
+          }.`
+        : null
+    );
+  }
+
+  function addBatchToRoster(batchId: string) {
+    setRoster((prev) => {
+      const next = new Map(prev);
+      rosterPool
+        .filter((member) => member.batchId === batchId)
+        .forEach((member) =>
+          next.set(member.studentId, {
+            studentId: member.studentId,
+            studentName: member.studentName,
+            source: 'batch',
+          })
+        );
+      return next;
+    });
+    setPrimaryBatchId(batchId);
+  }
+
+  function addAutoEligible() {
+    setRoster((prev) => {
+      const next = new Map(prev);
+      rosterPool
+        .filter((member) => member.moduleStatus !== 'completed')
+        .forEach((member) =>
+          next.set(member.studentId, {
+            studentId: member.studentId,
+            studentName: member.studentName,
+            source: 'auto_eligible',
+          })
+        );
+      return next;
+    });
+    setPrimaryBatchId(null);
+  }
+
+  function addIndividualToRoster(member: RosterPoolMember) {
+    setRoster((prev) => {
+      const next = new Map(prev);
+      next.set(member.studentId, {
+        studentId: member.studentId,
+        studentName: member.studentName,
+        source: 'individual',
+      });
+      return next;
+    });
+    setPrimaryBatchId(null);
+    setStudentSearch('');
+  }
+
+  function removeFromRoster(studentId: string) {
+    setRoster((prev) => {
+      const next = new Map(prev);
+      next.delete(studentId);
+      return next;
+    });
+  }
+
+  function openCreateModal(prefillDate?: string) {
+    setEditingLessonId(null);
+    setFormError(null);
+    setConflictWarnings([]);
+    setAvailabilityWarning(null);
+    setRoster(new Map());
+    setPrimaryBatchId(null);
+    setStudentSearch('');
+    setFormData(
+      prefillDate ? { ...emptyFormData, date: prefillDate } : emptyFormData
+    );
+    setShowScheduleModal(true);
+  }
+
+  async function openEditModal(classItem: ScheduledClass) {
+    setEditingLessonId(classItem.id);
+    setFormError(null);
+    setConflictWarnings([]);
+    setAvailabilityWarning(null);
+    setStudentSearch('');
+    setPrimaryBatchId(classItem.batchId);
+
+    setFormData({
+      courseId: classItem.courseId || '',
+      moduleId: classItem.moduleId || '',
+      teacherId: classItem.teacherId || '',
+      classroomId: classItem.classroomId || '',
+      date: classItem.date,
+      startTime: classItem.startTime,
+      endTime: classItem.endTime,
+      lessonTitle: classItem.rawTitle,
+    });
+
+    const { data, error } = await supabase
+      .from('lesson_participants')
+      .select('student_id, source, students(full_name)')
+      .eq('lesson_id', classItem.id);
+
+    if (!error) {
+      const next = new Map<string, RosterMember>();
+      (data || []).forEach((row: any) => {
+        next.set(row.student_id, {
+          studentId: row.student_id,
+          studentName: getSingle(row.students)?.full_name || 'Student',
+          source: row.source,
+        });
+      });
+      setRoster(next);
+    }
+
+    setShowScheduleModal(true);
+  }
+
+  function closeModal() {
+    setShowScheduleModal(false);
+    setEditingLessonId(null);
+    setFormError(null);
+    setConflictWarnings([]);
+    setAvailabilityWarning(null);
+    setRoster(new Map());
+    setPrimaryBatchId(null);
+    setStudentSearch('');
+    setFormData(emptyFormData);
+  }
+
   async function scheduleClass() {
-    if (
-      !formData.batchId ||
-      !formData.date ||
-      !formData.startTime ||
-      !formData.endTime
-    ) {
-      alert('Please select batch, date, start time, and end time.');
+    setFormError(null);
+
+    if (!formData.moduleId) {
+      setFormError('Select a course module.');
+      return;
+    }
+
+    if (roster.size === 0) {
+      setFormError('Add at least one student to the roster.');
+      return;
+    }
+
+    if (!formData.date || !formData.startTime || !formData.endTime) {
+      setFormError('Please select a date, start time, and end time.');
       return;
     }
 
@@ -200,43 +770,101 @@ export default function ClassScheduling() {
     );
 
     if (durationMinutes <= 0) {
-      alert('End time must be later than start time.');
+      setFormError('End time must be later than start time.');
       return;
     }
 
     const lessonDateTime = `${formData.date}T${formData.startTime}:00+08:00`;
+    const selectedModule = modules.find((m) => m.id === formData.moduleId);
+    const lessonTitle = formData.lessonTitle.trim() || selectedModule?.title || 'Scheduled Class';
 
-    const { error } = await supabase.from('lessons').insert({
-      batch_id: formData.batchId,
-      teacher_id: formData.teacherId || null,
-      classroom_id: formData.classroomId || null,
-      lesson_title: formData.lessonTitle || 'Scheduled Class',
-      lesson_objective: 'Scheduled class session',
-      lesson_datetime: lessonDateTime,
-      duration_minutes: durationMinutes,
-      status: 'active',
-    });
+    setSaving(true);
 
-    if (error) {
-      alert(`Failed to schedule class: ${error.message}`);
+    let lessonId = editingLessonId;
+
+    if (editingLessonId) {
+      const { error } = await supabase
+        .from('lessons')
+        .update({
+          teacher_id: formData.teacherId || null,
+          classroom_id: formData.classroomId || null,
+          lesson_title: lessonTitle,
+          lesson_datetime: lessonDateTime,
+          duration_minutes: durationMinutes,
+          module_id: formData.moduleId,
+          batch_id: primaryBatchId,
+          // Any edit to a scheduled class re-opens teacher confirmation —
+          // whatever was changed, the teacher should acknowledge the
+          // current version rather than an implicitly-carried-over one.
+          teacher_confirmed_at: null,
+        })
+        .eq('id', editingLessonId);
+
+      if (error) {
+        setFormError(error.message);
+        setSaving(false);
+        return;
+      }
+    } else {
+      const { data: inserted, error } = await supabase
+        .from('lessons')
+        .insert({
+          batch_id: primaryBatchId,
+          module_id: formData.moduleId,
+          teacher_id: formData.teacherId || null,
+          classroom_id: formData.classroomId || null,
+          lesson_title: lessonTitle,
+          lesson_objective: selectedModule ? `Module: ${selectedModule.title}` : 'Scheduled class session',
+          lesson_datetime: lessonDateTime,
+          duration_minutes: durationMinutes,
+          status: 'active',
+        })
+        .select('id')
+        .single();
+
+      if (error) {
+        setFormError(error.message);
+        setSaving(false);
+        return;
+      }
+
+      lessonId = inserted.id;
+    }
+
+    await supabase.from('lesson_participants').delete().eq('lesson_id', lessonId);
+
+    const rosterRows = Array.from(roster.values()).map((member) => ({
+      lesson_id: lessonId,
+      student_id: member.studentId,
+      source: member.source,
+    }));
+
+    const { error: rosterError } = await supabase
+      .from('lesson_participants')
+      .insert(rosterRows);
+
+    setSaving(false);
+
+    if (rosterError) {
+      setFormError(`Session saved, but the roster failed to save: ${rosterError.message}`);
+      fetchScheduledClasses();
       return;
     }
 
-    setFormData({
-      batchId: '',
-      teacherId: '',
-      classroomId: '',
-      date: '',
-      startTime: '',
-      endTime: '',
-      lessonTitle: '',
-    });
-
-    setShowScheduleModal(false);
+    closeModal();
     fetchScheduledClasses();
+    fetchSyncConflicts();
   }
 
-  const conflicts: { type: string; message: string }[] = [];
+  const filteredRosterCandidates = studentSearch.trim()
+    ? rosterPool
+        .filter(
+          (member) =>
+            !roster.has(member.studentId) &&
+            member.studentName.toLowerCase().includes(studentSearch.trim().toLowerCase())
+        )
+        .slice(0, 6)
+    : [];
 
   return (
     <div className="space-y-6">
@@ -244,12 +872,12 @@ export default function ClassScheduling() {
         <div>
           <h1 className="text-3xl text-[#284342]">Class Scheduling</h1>
           <p className="text-[#6b6b6b] mt-1">
-            Schedule and manage class sessions
+            Schedule a course module and its student roster together
           </p>
         </div>
 
         <button
-          onClick={() => setShowScheduleModal(true)}
+          onClick={() => openCreateModal()}
           className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
         >
           <Plus size={20} />
@@ -257,19 +885,43 @@ export default function ClassScheduling() {
         </button>
       </div>
 
-      {conflicts.length > 0 && (
+      {!loadingConflicts && syncConflicts.length > 0 && (
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-4">
           <div className="flex items-start gap-3">
             <AlertCircle size={20} className="text-yellow-700 mt-0.5" />
             <div className="flex-1">
-              <h3 className="text-sm text-yellow-900 mb-2">
-                Scheduling Conflicts Detected
+              <h3 className="text-sm text-yellow-900 mb-3">
+                Scheduling Conflicts Detected ({syncConflicts.length})
               </h3>
-              {conflicts.map((conflict, idx) => (
-                <p key={idx} className="text-sm text-yellow-800 mb-1">
-                  <strong>{conflict.type}:</strong> {conflict.message}
-                </p>
-              ))}
+
+              <div className="space-y-2">
+                {syncConflicts.map((conflict) => (
+                  <div
+                    key={conflict.id}
+                    className="flex items-start justify-between gap-3 bg-white/60 rounded-lg p-3"
+                  >
+                    <div>
+                      <p className="text-sm text-yellow-900">
+                        <strong className="capitalize">
+                          {conflict.source_table.replace(/_/g, ' ')}
+                        </strong>
+                        : {conflict.conflict_message}
+                      </p>
+                      <p className="text-xs text-yellow-700 mt-1">
+                        Detected {new Date(conflict.detected_at).toLocaleString()}
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => dismissConflict(conflict.id)}
+                      disabled={dismissingId === conflict.id}
+                      className="shrink-0 px-3 py-1.5 rounded-lg border border-yellow-300 text-yellow-900 hover:bg-yellow-100 transition-colors text-xs disabled:opacity-50"
+                    >
+                      {dismissingId === conflict.id ? 'Dismissing...' : 'Dismiss'}
+                    </button>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -306,14 +958,16 @@ export default function ClassScheduling() {
             </div>
           )}
 
-          {!loading && scheduledClasses.length === 0 && (
+          {!loading && visibleScheduledClasses.length === 0 && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              No scheduled classes found.
+              {scheduledClasses.length === 0
+                ? 'No scheduled classes found.'
+                : `No scheduled classes in ${selectedWeek.toLowerCase()}.`}
             </div>
           )}
 
           {!loading &&
-            scheduledClasses.map((classItem) => (
+            visibleScheduledClasses.map((classItem) => (
               <div
                 key={classItem.id}
                 className="p-6 hover:bg-[#f8f8f6] transition-colors"
@@ -326,7 +980,7 @@ export default function ClassScheduling() {
                       </h3>
 
                       <span className="text-xs px-3 py-1 rounded-full bg-[#e9da95]/20 text-[#284342]">
-                        {classItem.batch}
+                        {classItem.moduleTitle}
                       </span>
 
                       <span
@@ -338,6 +992,20 @@ export default function ClassScheduling() {
                       >
                         {classItem.status}
                       </span>
+
+                      {classItem.teacherId && (
+                        <span
+                          className={`text-xs px-3 py-1 rounded-full ${
+                            classItem.teacherConfirmed
+                              ? 'bg-green-100 text-green-700'
+                              : 'bg-amber-100 text-amber-700'
+                          }`}
+                        >
+                          {classItem.teacherConfirmed
+                            ? 'Confirmed by teacher'
+                            : 'Awaiting teacher confirmation'}
+                        </span>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
@@ -363,8 +1031,8 @@ export default function ClassScheduling() {
                       />
                       <Info
                         icon={<Users size={14} />}
-                        label="Students"
-                        value={classItem.students.toString()}
+                        label="Roster"
+                        value={classItem.participantCount.toString()}
                       />
                     </div>
                   </div>
@@ -375,7 +1043,10 @@ export default function ClassScheduling() {
                     View Details
                   </button>
 
-                  <button className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm">
+                  <button
+                    onClick={() => openEditModal(classItem)}
+                    className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm"
+                  >
                     Edit Schedule
                   </button>
 
@@ -390,15 +1061,161 @@ export default function ClassScheduling() {
 
       {showScheduleModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-2xl w-full p-6">
+          <div className="bg-white rounded-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl text-[#284342] mb-6">
-              Schedule New Class
+              {editingLessonId ? 'Edit Class Schedule' : 'Schedule New Class'}
             </h2>
 
             <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm text-[#284342] mb-2">
+                    Course
+                  </label>
+                  <select
+                    value={formData.courseId}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        courseId: e.target.value,
+                        moduleId: '',
+                      }))
+                    }
+                    className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+                  >
+                    <option value="">Select Course</option>
+                    {courses.map((course) => (
+                      <option key={course.id} value={course.id}>
+                        {course.course_name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-sm text-[#284342] mb-2">
+                    Module
+                  </label>
+                  <select
+                    value={formData.moduleId}
+                    onChange={(e) =>
+                      setFormData((prev) => ({ ...prev, moduleId: e.target.value }))
+                    }
+                    disabled={!formData.courseId || modulesLoading}
+                    className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342] disabled:opacity-50"
+                  >
+                    <option value="">
+                      {modulesLoading ? 'Loading...' : 'Select Module'}
+                    </option>
+                    {modules.map((module) => (
+                      <option key={module.id} value={module.id}>
+                        {module.sequence}. {module.title}
+                      </option>
+                    ))}
+                  </select>
+                  {formData.courseId && !modulesLoading && modules.length === 0 && (
+                    <p className="text-xs text-[#6b6b6b] mt-1">
+                      No modules defined for this course yet — add one under
+                      Course Modules.
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {formData.courseId && (
+                <div className="p-4 bg-[#f8f8f6] rounded-lg border border-[rgba(40,67,66,0.1)] space-y-3">
+                  <div className="flex items-center justify-between">
+                    <p className="text-sm text-[#284342]">Student Roster</p>
+                    <span className="text-xs text-[#6b6b6b]">
+                      {roster.size} selected
+                    </span>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    {courseBatches.map((batch) => (
+                      <button
+                        key={batch.id}
+                        onClick={() => addBatchToRoster(batch.id)}
+                        className="text-xs px-3 py-1.5 rounded-full border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-white transition-colors"
+                      >
+                        + Add batch: {batch.batch_name}
+                      </button>
+                    ))}
+
+                    {formData.moduleId && (
+                      <button
+                        onClick={addAutoEligible}
+                        className="text-xs px-3 py-1.5 rounded-full border border-[#284342]/30 bg-[#284342]/5 text-[#284342] hover:bg-[#284342]/10 transition-colors"
+                      >
+                        + Auto-fill still-eligible students
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="relative">
+                    <Search
+                      size={14}
+                      className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6b6b6b]"
+                    />
+                    <input
+                      value={studentSearch}
+                      onChange={(e) => setStudentSearch(e.target.value)}
+                      placeholder="Add an individual student by name..."
+                      className="w-full pl-8 pr-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342] text-sm"
+                    />
+
+                    {filteredRosterCandidates.length > 0 && (
+                      <div className="mt-1 bg-white border border-[rgba(40,67,66,0.15)] rounded-lg overflow-hidden">
+                        {filteredRosterCandidates.map((member) => (
+                          <button
+                            key={member.studentId}
+                            onClick={() => addIndividualToRoster(member)}
+                            className="w-full text-left px-3 py-2 text-sm text-[#284342] hover:bg-[#f8f8f6] transition-colors flex items-center justify-between"
+                          >
+                            <span>{member.studentName}</span>
+                            <span className="text-xs text-[#6b6b6b]">
+                              {member.batchName}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {rosterPoolLoading && (
+                    <p className="text-xs text-[#6b6b6b]">
+                      Loading course roster...
+                    </p>
+                  )}
+
+                  <div className="flex flex-wrap gap-2">
+                    {roster.size === 0 && (
+                      <p className="text-xs text-[#6b6b6b]">
+                        No students added yet.
+                      </p>
+                    )}
+
+                    {Array.from(roster.values()).map((member) => (
+                      <span
+                        key={member.studentId}
+                        className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-white border border-[rgba(40,67,66,0.15)] text-[#284342]"
+                      >
+                        {member.studentName}
+                        <button
+                          onClick={() => removeFromRoster(member.studentId)}
+                          className="text-[#6b6b6b] hover:text-red-700"
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Lesson Title
+                  Session Title (optional)
                 </label>
 
                 <input
@@ -409,33 +1226,9 @@ export default function ClassScheduling() {
                       lessonTitle: e.target.value,
                     }))
                   }
-                  placeholder="e.g., Bridal Makeup Essentials"
+                  placeholder="Defaults to the module title"
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm text-[#284342] mb-2">
-                  Batch
-                </label>
-
-                <select
-                  value={formData.batchId}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      batchId: e.target.value,
-                    }))
-                  }
-                  className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
-                >
-                  <option value="">Select Batch</option>
-                  {batches.map((batch) => (
-                    <option key={batch.id} value={batch.id}>
-                      {batch.batch_name} - {getCourseName(batch.courses)}
-                    </option>
-                  ))}
-                </select>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
@@ -517,16 +1310,56 @@ export default function ClassScheduling() {
                 </div>
               </div>
 
-              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
-                <p className="text-sm text-blue-900">
-                  <strong>Conflict Check:</strong> No conflicts detected for this schedule
-                </p>
-              </div>
+              {checkingConflicts && (
+                <div className="p-4 bg-[#f8f8f6] border border-[rgba(40,67,66,0.15)] rounded-lg">
+                  <p className="text-sm text-[#6b6b6b]">
+                    Checking for scheduling conflicts...
+                  </p>
+                </div>
+              )}
+
+              {!checkingConflicts && conflictWarnings.length > 0 && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg space-y-1">
+                  {conflictWarnings.map((warning, idx) => (
+                    <p key={idx} className="text-sm text-red-800">
+                      <strong>Conflict:</strong> {warning}
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              {availabilityWarning && (
+                <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-sm text-amber-900">
+                    <strong>Heads up:</strong> {availabilityWarning}
+                  </p>
+                </div>
+              )}
+
+              {!checkingConflicts &&
+                conflictWarnings.length === 0 &&
+                !availabilityWarning &&
+                (formData.teacherId || formData.classroomId) &&
+                formData.date &&
+                formData.startTime &&
+                formData.endTime && (
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                    <p className="text-sm text-blue-900">
+                      <strong>Conflict Check:</strong> No conflicts detected for this schedule
+                    </p>
+                  </div>
+                )}
+
+              {formError && (
+                <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-800">{formError}</p>
+                </div>
+              )}
             </div>
 
             <div className="flex items-center gap-3 mt-6">
               <button
-                onClick={() => setShowScheduleModal(false)}
+                onClick={closeModal}
                 className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
               >
                 Cancel
@@ -534,9 +1367,14 @@ export default function ClassScheduling() {
 
               <button
                 onClick={scheduleClass}
-                className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors"
+                disabled={saving}
+                className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors disabled:opacity-50"
               >
-                Schedule Class
+                {saving
+                  ? 'Saving...'
+                  : editingLessonId
+                    ? 'Save Changes'
+                    : 'Schedule Class'}
               </button>
             </div>
           </div>
@@ -590,14 +1428,6 @@ function Input({
   );
 }
 
-function getCourseName(
-  courses?: { course_name: string }[] | { course_name: string } | null
-) {
-  if (!courses) return '-';
-  if (Array.isArray(courses)) return courses[0]?.course_name || '-';
-  return courses.course_name || '-';
-}
-
 function getTeacherName(teacher: TeacherOption) {
   const users = teacher.users;
 
@@ -618,4 +1448,30 @@ function getTeacherNameFromJoin(
   if (!actualTeacher) return '-';
 
   return getTeacherName(actualTeacher);
+}
+
+function formatRange(startsAt: string, endsAt: string) {
+  const start = new Date(startsAt);
+  const end = new Date(endsAt);
+
+  const dateStr = start.toLocaleDateString(undefined, {
+    month: 'short',
+    day: 'numeric',
+  });
+  const startStr = start.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  const endStr = end.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+
+  return `${dateStr}, ${startStr}–${endStr}`;
+}
+
+function getSingle(value: any) {
+  if (!value) return null;
+  if (Array.isArray(value)) return value[0] || null;
+  return value;
 }

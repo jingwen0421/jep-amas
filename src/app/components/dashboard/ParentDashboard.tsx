@@ -1,88 +1,222 @@
-import { ClipboardCheck, CreditCard, Award, Bell, Calendar } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router';
+import { Calendar, CheckCircle2, CreditCard, Award, GraduationCap } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
 import { getCurrentUser } from '../../utils/session';
 
+interface ChildSummary {
+  id: string;
+  name: string;
+  course: string;
+  attendanceRate: number;
+  outstanding: number;
+  upcomingClasses: number;
+  certificates: number;
+}
+
 export default function ParentDashboard() {
-  const user = getCurrentUser();
+  const currentUser = getCurrentUser();
+  const [loading, setLoading] = useState(true);
+  const [children, setChildren] = useState<ChildSummary[]>([]);
+
+  useEffect(() => {
+    load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  async function load() {
+    setLoading(true);
+
+    if (!currentUser.id) {
+      setLoading(false);
+      return;
+    }
+
+    const { data: kids, error } = await supabase
+      .from('students')
+      .select('id, full_name, course')
+      .eq('parent_user_id', currentUser.id);
+
+    if (error || !kids || kids.length === 0) {
+      setLoading(false);
+      return;
+    }
+
+    const now = new Date().toISOString();
+
+    const summaries = await Promise.all(
+      kids.map(async (child: any) => {
+        const [attendanceRes, plansRes, participantsRes, certsRes] = await Promise.all([
+          supabase.from('attendance').select('attendance_status').eq('student_id', child.id),
+          supabase
+            .from('payment_plans')
+            .select(`final_amount, installments(amount, status)`)
+            .eq('student_id', child.id),
+          supabase
+            .from('lesson_participants')
+            .select('id, lessons(lesson_datetime)')
+            .eq('student_id', child.id),
+          supabase
+            .from('certificates')
+            .select('id', { count: 'exact', head: true })
+            .eq('student_id', child.id),
+        ]);
+
+        const attendanceRows = attendanceRes.data || [];
+        const present = attendanceRows.filter((a: any) =>
+          ['present', 'late'].includes(String(a.attendance_status).toLowerCase())
+        ).length;
+        const attendanceRate =
+          attendanceRows.length > 0
+            ? Math.round((present / attendanceRows.length) * 100)
+            : 0;
+
+        const plans = plansRes.data || [];
+        const expected = plans.reduce(
+          (sum: number, p: any) => sum + Number(p.final_amount || 0),
+          0
+        );
+        const paid = plans.reduce((sum: number, p: any) => {
+          return (
+            sum +
+            (p.installments || [])
+              .filter((i: any) => String(i.status).toLowerCase() === 'paid')
+              .reduce((acc: number, i: any) => acc + Number(i.amount || 0), 0)
+          );
+        }, 0);
+
+        const upcomingClasses = (participantsRes.data || []).filter((p: any) => {
+          const lesson = getSingle(p.lessons);
+          return lesson?.lesson_datetime && lesson.lesson_datetime >= now;
+        }).length;
+
+        return {
+          id: child.id,
+          name: child.full_name || 'Student',
+          course: child.course || '-',
+          attendanceRate,
+          outstanding: Math.max(expected - paid, 0),
+          upcomingClasses,
+          certificates: certsRes.count || 0,
+        };
+      })
+    );
+
+    setChildren(summaries);
+    setLoading(false);
+  }
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl text-[#284342]">
-          Parent / Guardian Dashboard
-        </h1>
-        <p className="text-[#6b6b6b] mt-1">
-          Welcome, {user.name}. View your child’s progress, attendance, payment status and certificates.
-        </p>
+        <h1 className="text-3xl text-[#284342]">Parent Dashboard</h1>
+        <p className="text-[#6b6b6b] mt-1">Welcome back, {currentUser.name}</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <ParentCard icon={<ClipboardCheck size={24} />} label="Attendance" value="-" />
-        <ParentCard icon={<CreditCard size={24} />} label="Payment Status" value="-" />
-        <ParentCard icon={<Award size={24} />} label="Certificates" value="-" />
-        <ParentCard icon={<Calendar size={24} />} label="Upcoming Class" value="-" />
-      </div>
-
-      <Panel title="Parent Access">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <QuickLink to="/app/certificates/completion" icon={<Award size={22} />} label="View Completion Certificate" />
-          <QuickLink to="/app/certificates/attendance" icon={<Award size={22} />} label="View Attendance Certificate" />
-          <QuickLink to="/app/notifications" icon={<Bell size={22} />} label="View Notifications" />
+      {loading && (
+        <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
+          Loading your children's progress...
         </div>
+      )}
 
-        <p className="text-sm text-[#6b6b6b] mt-5">
-          Parent account is read-only and should only display linked child information.
-        </p>
-      </Panel>
+      {!loading && children.length === 0 && (
+        <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
+          No student profiles are linked to your account yet. Please contact the
+          academy if this looks wrong.
+        </div>
+      )}
+
+      {!loading &&
+        children.map((child) => (
+          <div
+            key={child.id}
+            className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden"
+          >
+            <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)] flex items-center gap-3">
+              <GraduationCap size={20} className="text-[#284342]" />
+              <div>
+                <h2 className="text-lg text-[#284342]">{child.name}</h2>
+                <p className="text-xs text-[#6b6b6b]">{child.course}</p>
+              </div>
+            </div>
+
+            <div className="p-6 grid grid-cols-2 lg:grid-cols-4 gap-4">
+              <MiniStat
+                icon={<CheckCircle2 size={18} />}
+                color="#2d8659"
+                label="Attendance"
+                value={`${child.attendanceRate}%`}
+              />
+              <MiniStat
+                icon={<Calendar size={18} />}
+                color="#284342"
+                label="Upcoming Classes"
+                value={child.upcomingClasses}
+              />
+              <MiniStat
+                icon={<CreditCard size={18} />}
+                color="#d4183d"
+                label="Outstanding"
+                value={`RM ${child.outstanding.toLocaleString()}`}
+              />
+              <MiniStat
+                icon={<Award size={18} />}
+                color="#6b8e8d"
+                label="Certificates"
+                value={child.certificates}
+              />
+            </div>
+          </div>
+        ))}
+
+      {!loading && children.length > 0 && (
+        <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
+          <h2 className="text-xl text-[#284342] mb-4">Quick Links</h2>
+          <div className="grid grid-cols-2 gap-4">
+            <QuickAction to="/app/certificates/completion" icon={<Award size={22} />} label="Completion Certificates" />
+            <QuickAction to="/app/certificates/attendance" icon={<Award size={22} />} label="Attendance Certificates" />
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function ParentCard({
+function MiniStat({
   icon,
+  color,
   label,
   value,
 }: {
   icon: React.ReactNode;
+  color: string;
   label: string;
-  value: string;
+  value: string | number;
 }) {
   return (
-    <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-      <div className="p-3 rounded-lg bg-[#e9da95]/20 text-[#284342] inline-block mb-4">
+    <div className="p-3 rounded-lg bg-[#f8f8f6]">
+      <div className="flex items-center gap-2 mb-1" style={{ color }}>
         {icon}
       </div>
-      <p className="text-sm text-[#6b6b6b]">{label}</p>
-      <p className="text-2xl text-[#284342] mt-1">{value}</p>
+      <p className="text-xs text-[#6b6b6b]">{label}</p>
+      <p className="text-lg text-[#284342]">{value}</p>
     </div>
   );
 }
 
-function Panel({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-      <h2 className="text-xl text-[#284342] mb-4">{title}</h2>
-      {children}
-    </div>
-  );
-}
-
-function QuickLink({
-  to,
-  icon,
-  label,
-}: {
-  to: string;
-  icon: React.ReactNode;
-  label: string;
-}) {
+function QuickAction({ to, icon, label }: { to: string; icon: React.ReactNode; label: string }) {
   return (
     <Link
       to={to}
-      className="p-4 rounded-lg bg-[#f8f8f6] hover:bg-[#e9da95]/20 transition-colors flex items-center gap-3"
+      className="p-4 rounded-lg border border-[rgba(40,67,66,0.1)] hover:border-[#e9da95] hover:bg-[#e9da95]/10 transition-colors text-center"
     >
-      <div className="text-[#284342]">{icon}</div>
+      <div className="mx-auto mb-2 text-[#284342] flex justify-center">{icon}</div>
       <span className="text-sm text-[#284342]">{label}</span>
     </Link>
   );
+}
+
+function getSingle(value: any) {
+  if (!value) return null;
+  return Array.isArray(value) ? value[0] || null : value;
 }

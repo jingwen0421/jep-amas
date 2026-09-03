@@ -1,138 +1,424 @@
-import { Mail, Send, Inbox } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Mail, Send, RefreshCw, Search, X } from 'lucide-react';
+import { supabase } from '../../lib/supabase';
+import { getCurrentUser } from '../../utils/session';
+import {
+  MessageTemplate,
+  fetchTemplates,
+  sendEmail,
+} from '../../services/communicationService';
 
-interface EmailMessage {
+interface EmailRow {
   id: string;
-  recipient: string;
-  email: string;
+  recipientName: string;
+  recipientUserId: string | null;
   subject: string;
+  body: string;
   sentDate: string;
-  status: 'Sent' | 'Delivered' | 'Opened' | 'Bounced';
+  status: string;
+}
+
+interface RecipientOption {
+  userId: string | null;
+  name: string;
+  email: string;
 }
 
 export default function EmailComms() {
-  const emails: EmailMessage[] = [
-    {
-      id: 'EM001',
-      recipient: 'Jessica Lim Mei Ling',
-      email: 'jessica.lim@email.com',
-      subject: 'Welcome to JEP Image Makeup Academy',
-      sentDate: '2026-01-15 09:00',
-      status: 'Opened',
-    },
-    {
-      id: 'EM002',
-      recipient: 'Amanda Ng Siew May',
-      email: 'amanda.ng@email.com',
-      subject: 'Payment Reminder - RM 2,000 Due',
-      sentDate: '2026-06-01 08:00',
-      status: 'Delivered',
-    },
-    {
-      id: 'EM003',
-      recipient: 'Rachel Tan Li Ying',
-      email: 'rachel.tan@email.com',
-      subject: 'Congratulations on Course Completion!',
-      sentDate: '2026-05-30 14:00',
-      status: 'Opened',
-    },
-    {
-      id: 'EM004',
-      recipient: 'Melissa Chong',
-      email: 'melissa.chong@email.com',
-      subject: 'Appointment Confirmation with Juju Lim',
-      sentDate: '2026-06-01 16:00',
-      status: 'Sent',
-    },
-  ];
+  const currentUser = getCurrentUser();
+  const canSend = ['super_admin', 'admin', 'owner', 'finance', 'internal_sales', 'external_sales'].includes(
+    currentUser.role
+  );
+
+  const [emails, setEmails] = useState<EmailRow[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [templates, setTemplates] = useState<MessageTemplate[]>([]);
+
+  const [showComposer, setShowComposer] = useState(false);
+  const [recipientSearch, setRecipientSearch] = useState('');
+  const [recipientResults, setRecipientResults] = useState<RecipientOption[]>([]);
+  const [selectedRecipient, setSelectedRecipient] = useState<RecipientOption | null>(null);
+  const [manualEmail, setManualEmail] = useState('');
+  const [templateId, setTemplateId] = useState('');
+  const [subject, setSubject] = useState('');
+  const [body, setBody] = useState('');
+  const [sending, setSending] = useState(false);
+  const [sendError, setSendError] = useState<string | null>(null);
+
+  useEffect(() => {
+    load();
+    fetchTemplates('email').then(setTemplates);
+  }, []);
+
+  async function load() {
+    setLoading(true);
+
+    const { data, error } = await supabase
+      .from('notifications')
+      .select('id, user_id, title, message, delivery_status, sent_at, created_at')
+      .eq('channel', 'email')
+      .order('created_at', { ascending: false })
+      .limit(100);
+
+    if (error) {
+      console.error('Failed to fetch emails:', error.message);
+      setLoading(false);
+      return;
+    }
+
+    const userIds = Array.from(new Set((data || []).map((r: any) => r.user_id).filter(Boolean)));
+    const namesByUserId: Record<string, string> = {};
+
+    if (userIds.length > 0) {
+      const { data: users } = await supabase.from('users').select('id, full_name').in('id', userIds);
+      (users || []).forEach((u: any) => {
+        namesByUserId[u.id] = u.full_name;
+      });
+    }
+
+    setEmails(
+      (data || []).map((row: any) => ({
+        id: row.id,
+        recipientName: row.user_id ? namesByUserId[row.user_id] || 'Recipient' : 'Recipient',
+        recipientUserId: row.user_id,
+        subject: row.title || '(no subject)',
+        body: row.message,
+        sentDate: row.sent_at || row.created_at,
+        status: row.delivery_status,
+      }))
+    );
+
+    setLoading(false);
+  }
+
+  async function searchRecipients(query: string) {
+    setRecipientSearch(query);
+    setSelectedRecipient(null);
+
+    if (!query.trim()) {
+      setRecipientResults([]);
+      return;
+    }
+
+    const [studentsRes, usersRes] = await Promise.all([
+      supabase
+        .from('students')
+        .select('user_id, full_name, email')
+        .ilike('full_name', `%${query.trim()}%`)
+        .not('email', 'is', null)
+        .limit(5),
+      supabase
+        .from('users')
+        .select('id, full_name, email')
+        .ilike('full_name', `%${query.trim()}%`)
+        .neq('role', 'student')
+        .limit(5),
+    ]);
+
+    const results: RecipientOption[] = [
+      ...(studentsRes.data || [])
+        .filter((s: any) => s.email)
+        .map((s: any) => ({ userId: s.user_id, name: s.full_name, email: s.email })),
+      ...(usersRes.data || [])
+        .filter((u: any) => u.email)
+        .map((u: any) => ({ userId: u.id, name: u.full_name, email: u.email })),
+    ];
+
+    setRecipientResults(results);
+  }
+
+  function applyTemplate(id: string) {
+    setTemplateId(id);
+    const template = templates.find((t) => t.id === id);
+    if (template) setBody(template.body);
+  }
+
+  function openComposer() {
+    setRecipientSearch('');
+    setRecipientResults([]);
+    setSelectedRecipient(null);
+    setManualEmail('');
+    setTemplateId('');
+    setSubject('');
+    setBody('');
+    setSendError(null);
+    setShowComposer(true);
+  }
+
+  async function handleSend() {
+    setSendError(null);
+
+    const toEmail = selectedRecipient?.email || manualEmail.trim();
+
+    if (!toEmail) {
+      setSendError('Choose a recipient or enter an email address.');
+      return;
+    }
+
+    if (!subject.trim()) {
+      setSendError('Add a subject line.');
+      return;
+    }
+
+    if (!body.trim()) {
+      setSendError('Message body cannot be empty.');
+      return;
+    }
+
+    setSending(true);
+
+    const result = await sendEmail({
+      to: toEmail,
+      toName: selectedRecipient?.name,
+      subject: subject.trim(),
+      body: body.trim(),
+      userId: selectedRecipient?.userId || null,
+      templateId: templateId || null,
+      relatedModule: 'Communications',
+    });
+
+    setSending(false);
+
+    if (!result.success) {
+      setSendError(result.error || 'Failed to send email.');
+      return;
+    }
+
+    setShowComposer(false);
+    load();
+  }
+
+  const sentCount = emails.filter((e) => e.status === 'sent').length;
+  const pendingCount = emails.filter((e) => e.status === 'pending').length;
+  const failedCount = emails.filter((e) => e.status === 'failed').length;
 
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl text-[#284342]">Email Communications</h1>
-          <p className="text-[#6b6b6b] mt-1">Send and track email messages</p>
+          <p className="text-[#6b6b6b] mt-1">Send and track emails sent through the academy's Gmail</p>
         </div>
-        <button className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2">
-          <Send size={20} />
-          Compose Email
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={load}
+            className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
+          >
+            <RefreshCw size={18} />
+          </button>
+          {canSend && (
+            <button
+              onClick={openComposer}
+              className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
+            >
+              <Send size={20} />
+              Compose Email
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <p className="text-sm text-[#6b6b6b] mb-2">Total Sent</p>
+          <p className="text-sm text-[#6b6b6b] mb-2">Total</p>
           <p className="text-3xl text-[#284342]">{emails.length}</p>
         </div>
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <p className="text-sm text-[#6b6b6b] mb-2">Delivered</p>
-          <p className="text-3xl text-green-700">
-            {emails.filter((e) => e.status === 'Delivered' || e.status === 'Opened').length}
-          </p>
+          <p className="text-sm text-[#6b6b6b] mb-2">Sent</p>
+          <p className="text-3xl text-green-700">{sentCount}</p>
         </div>
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <p className="text-sm text-[#6b6b6b] mb-2">Opened</p>
-          <p className="text-3xl text-blue-700">
-            {emails.filter((e) => e.status === 'Opened').length}
-          </p>
+          <p className="text-sm text-[#6b6b6b] mb-2">Pending</p>
+          <p className="text-3xl text-yellow-700">{pendingCount}</p>
         </div>
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <p className="text-sm text-[#6b6b6b] mb-2">Open Rate</p>
-          <p className="text-3xl text-[#284342]">
-            {Math.round((emails.filter((e) => e.status === 'Opened').length / emails.length) * 100)}%
-          </p>
+          <p className="text-sm text-[#6b6b6b] mb-2">Failed</p>
+          <p className="text-3xl text-red-700">{failedCount}</p>
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-lg text-[#284342]">Sent Emails</h2>
+          <h2 className="text-lg text-[#284342]">Email History</h2>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead className="bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
-              <tr>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Recipient</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Email</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Subject</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Sent Date</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Status</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-[rgba(40,67,66,0.1)]">
-              {emails.map((email) => (
-                <tr key={email.id} className="hover:bg-[#f8f8f6] transition-colors">
-                  <td className="px-6 py-4 text-sm text-[#284342]">{email.recipient}</td>
-                  <td className="px-6 py-4 text-sm text-[#6b6b6b]">{email.email}</td>
-                  <td className="px-6 py-4 text-sm text-[#284342]">{email.subject}</td>
-                  <td className="px-6 py-4 text-sm text-[#6b6b6b]">{email.sentDate}</td>
-                  <td className="px-6 py-4">
-                    <span
-                      className={`text-xs px-3 py-1 rounded-full ${
-                        email.status === 'Opened'
-                          ? 'bg-blue-100 text-blue-700'
-                          : email.status === 'Delivered'
-                          ? 'bg-green-100 text-green-700'
-                          : email.status === 'Bounced'
-                          ? 'bg-red-100 text-red-700'
-                          : 'bg-yellow-100 text-yellow-700'
-                      }`}
-                    >
-                      {email.status}
-                    </span>
-                  </td>
-                  <td className="px-6 py-4">
-                    <button className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors">
-                      <Inbox size={16} className="text-[#284342]" />
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="divide-y divide-[rgba(40,67,66,0.1)]">
+          {loading && <div className="p-6 text-center text-[#6b6b6b]">Loading emails...</div>}
+
+          {!loading && emails.length === 0 && (
+            <div className="p-6 text-center text-[#6b6b6b]">
+              No emails sent yet. {canSend ? 'Compose one to get started.' : ''}
+            </div>
+          )}
+
+          {!loading &&
+            emails.map((email) => (
+              <div key={email.id} className="p-6 hover:bg-[#f8f8f6] transition-colors">
+                <div className="flex items-start gap-4">
+                  <div className="p-3 rounded-full bg-blue-50">
+                    <Mail size={20} className="text-blue-700" />
+                  </div>
+                  <div className="flex-1">
+                    <div className="flex items-center justify-between gap-3 mb-1">
+                      <h3 className="text-[#284342]">{email.subject}</h3>
+                      <span
+                        className={`text-xs px-3 py-1 rounded-full shrink-0 ${
+                          email.status === 'sent'
+                            ? 'bg-green-100 text-green-700'
+                            : email.status === 'failed'
+                            ? 'bg-red-100 text-red-700'
+                            : 'bg-yellow-100 text-yellow-700'
+                        }`}
+                      >
+                        {email.status}
+                      </span>
+                    </div>
+                    <p className="text-sm text-[#6b6b6b] mb-2">To: {email.recipientName}</p>
+                    <p className="text-xs text-[#6b6b6b]">
+                      {new Date(email.sentDate).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ))}
         </div>
       </div>
+
+      {showComposer && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-[rgba(40,67,66,0.1)] flex items-center justify-between">
+              <h2 className="text-xl text-[#284342]">Compose Email</h2>
+              <button onClick={() => setShowComposer(false)} className="text-[#6b6b6b] hover:text-[#284342]">
+                <X size={20} />
+              </button>
+            </div>
+
+            <div className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm text-[#284342] mb-2">Recipient</label>
+                {selectedRecipient ? (
+                  <div className="flex items-center justify-between px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-[#f8f8f6]">
+                    <span className="text-sm text-[#284342]">
+                      {selectedRecipient.name} — {selectedRecipient.email}
+                    </span>
+                    <button
+                      onClick={() => setSelectedRecipient(null)}
+                      className="text-[#6b6b6b] hover:text-red-700"
+                    >
+                      <X size={16} />
+                    </button>
+                  </div>
+                ) : (
+                  <>
+                    <div className="relative">
+                      <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#6b6b6b]" />
+                      <input
+                        value={recipientSearch}
+                        onChange={(e) => searchRecipients(e.target.value)}
+                        placeholder="Search a student or staff member by name..."
+                        className="w-full pl-8 pr-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+                      />
+                      {recipientResults.length > 0 && (
+                        <div className="mt-1 bg-white border border-[rgba(40,67,66,0.15)] rounded-lg overflow-hidden">
+                          {recipientResults.map((r) => (
+                            <button
+                              key={`${r.userId}-${r.email}`}
+                              onClick={() => {
+                                setSelectedRecipient(r);
+                                setRecipientResults([]);
+                              }}
+                              className="w-full text-left px-3 py-2 text-sm text-[#284342] hover:bg-[#f8f8f6] transition-colors flex items-center justify-between"
+                            >
+                              <span>{r.name}</span>
+                              <span className="text-xs text-[#6b6b6b]">{r.email}</span>
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <p className="text-xs text-[#6b6b6b] mt-2">Or type an email address directly:</p>
+                    <input
+                      value={manualEmail}
+                      onChange={(e) => setManualEmail(e.target.value)}
+                      placeholder="someone@email.com"
+                      className="w-full mt-1 px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+                    />
+                  </>
+                )}
+              </div>
+
+              {templates.length > 0 && (
+                <div>
+                  <label className="block text-sm text-[#284342] mb-2">Start from a template (optional)</label>
+                  <select
+                    value={templateId}
+                    onChange={(e) => applyTemplate(e.target.value)}
+                    className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+                  >
+                    <option value="">No template</option>
+                    {templates.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div>
+                <label className="block text-sm text-[#284342] mb-2">Subject</label>
+                <input
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="e.g., Payment Reminder"
+                  className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm text-[#284342] mb-2">Message</label>
+                <textarea
+                  value={body}
+                  onChange={(e) => setBody(e.target.value)}
+                  rows={8}
+                  placeholder="Type your message here..."
+                  className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+                />
+                {templateId && body.includes('{') && (
+                  <p className="text-xs text-[#6b6b6b] mt-1">
+                    Tip: replace any remaining {'{placeholders}'} with real values before sending —
+                    templates aren't auto-filled yet.
+                  </p>
+                )}
+              </div>
+
+              {sendError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-sm text-red-800">{sendError}</p>
+                </div>
+              )}
+            </div>
+
+            <div className="p-6 border-t border-[rgba(40,67,66,0.1)] flex items-center gap-3">
+              <button
+                onClick={() => setShowComposer(false)}
+                className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSend}
+                disabled={sending}
+                className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2 disabled:opacity-50"
+              >
+                <Send size={18} />
+                {sending ? 'Sending...' : 'Send Email'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

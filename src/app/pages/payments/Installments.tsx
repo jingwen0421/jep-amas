@@ -1,24 +1,20 @@
 import { useEffect, useState } from 'react';
-import { DollarSign, Calendar, CheckCircle2, X } from 'lucide-react';
+import { Calendar, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { getCurrentUser } from '../../utils/session';
 import { getCurrentStudentId } from '../../utils/studentAccess';
-
-
-interface InstallmentSchedule {
-  id: string;
-  paymentPlanId: string;
-  studentId: string;
-  student: string;
-  course: string;
-  totalFee: number;
-  installmentNumber: number;
-  totalInstallments: number;
-  amount: number;
-  dueDate: string;
-  paidDate?: string;
-  status: 'Paid' | 'Pending' | 'Overdue';
-}
+import { generateReceiptHtml } from '../../lib/receiptTemplate';
+import { notify } from '../../services/unifiedNotificationService';
+import {
+  type InstallmentSchedule,
+  fetchInstallmentsWithDetails,
+  updatePaymentPlanStatus,
+  formatPaymentMethod,
+  formatCurrency,
+} from '../../services/paymentsService';
+import { SummaryCard } from '../../components/payments/SummaryCard';
+import { InstallmentStatusBadge } from '../../components/payments/StatusBadges';
+import { Modal, ModalHeader } from '../../components/payments/Modal';
 
 export default function Installments() {
   const [installments, setInstallments] = useState<InstallmentSchedule[]>([]);
@@ -31,96 +27,38 @@ export default function Installments() {
   const [recording, setRecording] = useState(false);
 
   const currentUser = getCurrentUser();
-const isStudentView = currentUser.role === 'student';
+  const isStudentView = currentUser.role === 'student';
 
-const canRecordPayment =
-  currentUser.role === 'super_admin' ||
-  currentUser.role === 'admin' ||
-  currentUser.role === 'finance';
+  const canRecordPayment =
+    currentUser.role === 'super_admin' ||
+    currentUser.role === 'admin' ||
+    currentUser.role === 'finance';
 
   useEffect(() => {
     fetchInstallments();
   }, []);
 
   async function fetchInstallments() {
-  setLoading(true);
+    setLoading(true);
 
-  let query = supabase
-    .from('installments')
-    .select(`
-      id,
-      payment_plan_id,
-      amount,
-      due_date,
-      paid_date,
-      status,
-      payment_plans!inner(
-        id,
-        student_id,
-        final_amount,
-        status,
-        students(full_name),
-        enrollments(
-          class_batches(
-            courses(course_name)
-          )
-        ),
-        installments(id, due_date)
-      )
-    `)
-    .order('due_date', { ascending: true });
+    let studentIdFilter: string | undefined;
 
-  if (isStudentView) {
-    const studentId = await getCurrentStudentId();
+    if (isStudentView) {
+      const studentId = await getCurrentStudentId();
 
-    if (!studentId) {
-      setInstallments([]);
-      setLoading(false);
-      return;
+      if (!studentId) {
+        setInstallments([]);
+        setLoading(false);
+        return;
+      }
+
+      studentIdFilter = studentId;
     }
 
-    query = query.eq('payment_plans.student_id', studentId);
-  }
-
-  const { data, error } = await query;
-
-  if (error) {
-    console.error('Error fetching installments:', error.message);
+    const { data } = await fetchInstallmentsWithDetails(studentIdFilter);
+    setInstallments(data);
     setLoading(false);
-    return;
   }
-
-  const mapped: InstallmentSchedule[] = (data || []).map((item: any) => {
-    const plan = getSingle(item.payment_plans);
-    const allInstallments = plan?.installments || [];
-
-    const sortedInstallments = [...allInstallments].sort((a: any, b: any) =>
-      String(a.due_date).localeCompare(String(b.due_date))
-    );
-
-    const installmentIndex = sortedInstallments.findIndex(
-      (inst: any) => inst.id === item.id
-    );
-
-    return {
-      id: item.id,
-      paymentPlanId: item.payment_plan_id,
-      studentId: plan?.student_id || '',
-      student: getStudentName(plan?.students),
-      course: getCourseNameFromPlan(plan),
-      totalFee: Number(plan?.final_amount || 0),
-      installmentNumber: installmentIndex >= 0 ? installmentIndex + 1 : 1,
-      totalInstallments: sortedInstallments.length || 1,
-      amount: Number(item.amount || 0),
-      dueDate: item.due_date || '-',
-      paidDate: item.paid_date ? item.paid_date.slice(0, 10) : undefined,
-      status: mapInstallmentStatus(item.status, item.due_date),
-    };
-  });
-
-  setInstallments(mapped);
-  setLoading(false);
-}
 
   async function recordPayment() {
     if (!selectedInstallment) return;
@@ -146,17 +84,17 @@ const canRecordPayment =
 
     const { data: payment, error: paymentError } = await supabase
       // insert payment
-        .from('payments')
-        .insert({
-          installment_id: selectedInstallment.id,
-          student_id: selectedInstallment.studentId,
-          amount_paid: selectedInstallment.amount,
-          payment_method: paymentMethod,
-          payment_reference: referenceNo || null,
-          proof_url: null,
-          paid_at: paidAt,
-          recorded_by: null,
-        })
+      .from('payments')
+      .insert({
+        installment_id: selectedInstallment.id,
+        student_id: selectedInstallment.studentId,
+        amount_paid: selectedInstallment.amount,
+        payment_method: paymentMethod,
+        payment_reference: referenceNo || null,
+        proof_url: null,
+        paid_at: paidAt,
+        recorded_by: currentUser.id || null,
+      })
       .select('id')
       .single();
 
@@ -171,23 +109,25 @@ const canRecordPayment =
       .slice(-6)}`;
 
     const { error: receiptError } = await supabase
-    // receipt insert
-    .from('receipts')
-    .insert({
-      payment_id: payment.id,
-      receipt_number: receiptNumber,
-      receipt_url: null,
-      issued_at: paidAt,
-    });
+      // receipt insert
+      .from('receipts')
+      .insert({
+        payment_id: payment.id,
+        receipt_number: receiptNumber,
+        receipt_url: null,
+        issued_at: paidAt,
+      });
 
     if (receiptError) {
-      console.warn('Receipt creation failed:', receiptError.message);
+      setRecording(false);
+      alert(`Payment recorded, but receipt could not be created: ${receiptError.message}`);
+      return;
     }
 
     await updatePaymentPlanStatus(selectedInstallment.paymentPlanId);
 
     await supabase.from('audit_logs').insert({
-      user_id: null,
+      user_id: currentUser.id || null,
       action: 'Payment Recorded',
       module: 'Payments',
       target_id: selectedInstallment.id,
@@ -202,37 +142,44 @@ const canRecordPayment =
       created_at: paidAt,
     });
 
+    const receiptHtml = generateReceiptHtml({
+      id: '',
+      paymentId: payment.id,
+      receiptNumber,
+      receiptUrl: '',
+      student: selectedInstallment.student,
+      course: selectedInstallment.course,
+      amount: selectedInstallment.amount,
+      paymentMethod: formatPaymentMethod(paymentMethod),
+      paymentReference: referenceNo || '-',
+      paidAt: paidAt.slice(0, 10),
+      date: paidAt.slice(0, 10),
+      issuedBy: 'Finance Staff',
+      status: 'Issued',
+    });
+
+    notify({
+      target: {
+        userId: selectedInstallment.studentUserId,
+        name: selectedInstallment.student,
+        email: selectedInstallment.studentEmail,
+        phone: selectedInstallment.studentPhone,
+      },
+      channels: ['in_app', 'email'],
+      title: 'Payment Received',
+      message: `We received your payment of ${formatCurrency(selectedInstallment.amount)} for ${selectedInstallment.course}. Receipt No: ${receiptNumber}.`,
+      emailHtml: receiptHtml,
+      type: 'receipt',
+      priority: 'normal',
+      relatedModule: 'Payments',
+      relatedId: payment.id,
+    }).catch((e) => console.error('Notification failed:', e));
+
     setRecording(false);
     setSelectedInstallment(null);
     setPaymentMethod('cash');
     setReferenceNo('');
     fetchInstallments();
-  }
-
-  async function updatePaymentPlanStatus(paymentPlanId: string) {
-    const { data } = await supabase
-      .from('installments')
-      .select('status, due_date')
-      .eq('payment_plan_id', paymentPlanId);
-
-    const rows = data || [];
-    const allPaid = rows.length > 0 && rows.every((item: any) => item.status === 'paid');
-
-    const hasOverdue = rows.some((item: any) => {
-      if (item.status === 'paid') return false;
-      if (!item.due_date) return false;
-      return new Date(item.due_date) < startOfToday();
-    });
-
-    const newStatus = allPaid ? 'paid' : hasOverdue ? 'overdue' : 'partial';
-
-    await supabase
-      .from('payment_plans')
-      .update({
-        status: newStatus,
-        updated_at: new Date().toISOString(),
-      })
-      .eq('id', paymentPlanId);
   }
 
   const totalDue = installments
@@ -258,10 +205,10 @@ const canRecordPayment =
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <SummaryCard label="Total Due" value={`RM ${totalDue.toLocaleString()}`} color="text-[#284342]" />
-        <SummaryCard label="Pending" value={pendingCount.toString()} color="text-yellow-700" />
-        <SummaryCard label="Overdue" value={overdueCount.toString()} color="text-red-700" />
-        <SummaryCard label="Paid" value={paidCount.toString()} color="text-green-700" />
+        <SummaryCard label="Total Due" value={formatCurrency(totalDue)} valueColor="text-[#284342]" />
+        <SummaryCard label="Pending" value={pendingCount.toString()} valueColor="text-yellow-700" />
+        <SummaryCard label="Overdue" value={overdueCount.toString()} valueColor="text-red-700" />
+        <SummaryCard label="Paid" value={paidCount.toString()} valueColor="text-green-700" />
       </div>
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
@@ -318,7 +265,7 @@ const canRecordPayment =
                       {inst.installmentNumber}/{inst.totalInstallments}
                     </td>
                     <td className="px-6 py-4 text-sm text-[#284342]">
-                      RM {inst.amount.toLocaleString()}
+                      {formatCurrency(inst.amount)}
                     </td>
                     <td className="px-6 py-4 text-sm text-[#6b6b6b]">
                       <div className="flex items-center gap-2">
@@ -337,9 +284,9 @@ const canRecordPayment =
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <StatusBadge status={inst.status} />
+                      <InstallmentStatusBadge status={inst.status} />
                     </td>
-                 <td className="px-6 py-4">
+                    <td className="px-6 py-4">
                       {canRecordPayment && inst.status !== 'Paid' ? (
                         <button
                           onClick={() => setSelectedInstallment(inst)}
@@ -361,25 +308,16 @@ const canRecordPayment =
       </div>
 
       {selectedInstallment && canRecordPayment && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-xl max-w-lg w-full p-6">
-            <div className="flex items-center justify-between mb-6">
-              
-   <h2 className="text-xl text-[#284342]">Record Payment</h2>
-
-             
-              <button onClick={() => setSelectedInstallment(null)}>
-                <X size={20} className="text-[#284342]" />
-              </button>
+        <Modal maxWidth="max-w-lg">
+          <div className="p-6">
+            <div className="mb-6">
+              <ModalHeader title="Record Payment" onClose={() => setSelectedInstallment(null)} />
             </div>
 
             <div className="space-y-4">
               <Info label="Student" value={selectedInstallment.student} />
               <Info label="Course" value={selectedInstallment.course} />
-              <Info
-                label="Amount"
-                value={`RM ${selectedInstallment.amount.toLocaleString()}`}
-              />
+              <Info label="Amount" value={formatCurrency(selectedInstallment.amount)} />
               <Info label="Due Date" value={selectedInstallment.dueDate} />
 
               <div>
@@ -429,41 +367,9 @@ const canRecordPayment =
               </button>
             </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
-  );
-}
-
-function SummaryCard({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color: string;
-}) {
-  return (
-    <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-      <p className="text-sm text-[#6b6b6b] mb-2">{label}</p>
-      <p className={`text-2xl ${color}`}>{value}</p>
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: InstallmentSchedule['status'] }) {
-  const className =
-    status === 'Paid'
-      ? 'bg-green-100 text-green-700'
-      : status === 'Overdue'
-      ? 'bg-red-100 text-red-700'
-      : 'bg-yellow-100 text-yellow-700';
-
-  return (
-    <span className={`text-xs px-3 py-1 rounded-full ${className}`}>
-      {status}
-    </span>
   );
 }
 
@@ -474,39 +380,4 @@ function Info({ label, value }: { label: string; value: string }) {
       <p className="text-sm text-[#284342]">{value}</p>
     </div>
   );
-}
-
-function mapInstallmentStatus(status: string, dueDate: string): InstallmentSchedule['status'] {
-  if (String(status).toLowerCase() === 'paid') return 'Paid';
-
-  if (dueDate && new Date(dueDate) < startOfToday()) {
-    return 'Overdue';
-  }
-
-  return 'Pending';
-}
-
-function startOfToday() {
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return today;
-}
-
-function getSingle(value: any) {
-  if (!value) return null;
-  if (Array.isArray(value)) return value[0] || null;
-  return value;
-}
-
-function getStudentName(student: any) {
-  if (!student) return 'Unnamed Student';
-  if (Array.isArray(student)) return student[0]?.full_name || 'Unnamed Student';
-  return student.full_name || 'Unnamed Student';
-}
-
-function getCourseNameFromPlan(plan: any) {
-  const enrollment = getSingle(plan?.enrollments);
-  const batch = getSingle(enrollment?.class_batches);
-  const course = getSingle(batch?.courses);
-  return course?.course_name || '-';
 }

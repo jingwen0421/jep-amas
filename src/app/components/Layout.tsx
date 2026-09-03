@@ -7,8 +7,10 @@ import {
   Users,
   BookOpen,
   Calendar,
+  CalendarDays,
   ClipboardCheck,
-  CalendarClock,
+  PartyPopper,
+  RefreshCw,
   CreditCard,
   Briefcase,
   Award,
@@ -112,6 +114,16 @@ export default function Layout() {
       title: 'Academic',
       items: [
         {
+          label: 'Calendar',
+          path: '/app/calendar',
+          icon: <CalendarDays size={20} />,
+        },
+        {
+          label: 'Reschedule Requests',
+          path: '/app/reschedule-requests',
+          icon: <RefreshCw size={20} />,
+        },
+        {
           label: 'Students',
           icon: <Users size={20} />,
           children: [
@@ -128,16 +140,21 @@ export default function Layout() {
             { label: 'Categories', path: '/app/courses/categories', icon: null },
             { label: 'Courses', path: '/app/courses/list', icon: null },
             { label: 'Class Batches', path: '/app/courses/batches', icon: null },
-            { label: 'Lessons', path: '/app/courses/lessons', icon: null },
+            { label: 'Course Modules', path: '/app/courses/lessons', icon: null },
           ],
+        },
+        {
+          label: 'Events',
+          path: '/app/events',
+          icon: <PartyPopper size={20} />,
         },
         {
           label: 'Classes',
           icon: <Calendar size={20} />,
           children: [
-            { label: 'Calendar', path: '/app/classes/calendar', icon: null },
             { label: 'Scheduling', path: '/app/classes/scheduling', icon: null },
             { label: 'Classroom Allocation', path: '/app/classes/allocation', icon: null },
+            { label: 'Teacher Availability', path: '/app/appointments/availability', icon: null },
           ],
         },
         {
@@ -147,15 +164,6 @@ export default function Layout() {
             { label: 'Daily Attendance', path: '/app/attendance/daily', icon: null },
             { label: 'Makeup Classes', path: '/app/attendance/makeup', icon: null },
             { label: 'Reports', path: '/app/attendance/reports', icon: null },
-          ],
-        },
-        {
-          label: 'Appointments',
-          icon: <CalendarClock size={20} />,
-          children: [
-            { label: 'Booking', path: '/app/appointments/booking', icon: null },
-            { label: 'Teacher Availability', path: '/app/appointments/availability', icon: null },
-            { label: 'Calendar', path: '/app/appointments/calendar', icon: null },
           ],
         },
         {

@@ -50,10 +50,11 @@ export { default as AssignmentSubmission } from './portfolio/AssignmentSubmissio
 export { default as TeacherFeedback } from './portfolio/TeacherFeedback';
 export { default as StudentGallery } from './portfolio/StudentGallery';
 
-// ==================== APPOINTMENTS MODULE ====================
-export { default as TeacherBooking } from './appointments/TeacherBooking';
+// ==================== TEACHER AVAILABILITY ====================
 export { default as TeacherAvailability } from './appointments/TeacherAvailability';
-export { default as AppointmentCalendar } from './appointments/AppointmentCalendar';
+
+// ==================== EVENTS MODULE ====================
+export { default as EventManagement } from './events/EventManagement';
 
 // ==================== COMMUNICATIONS MODULE ====================
 export { default as WhatsAppComms } from './communications/WhatsAppComms';

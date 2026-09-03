@@ -10,15 +10,15 @@ import CourseCategories from './pages/courses/CourseCategories';
 import Courses from './pages/courses/Courses';
 import ClassBatches from './pages/courses/ClassBatches';
 import Lessons from './pages/courses/Lessons';
-import ClassCalendar from './pages/classes/ClassCalendar';
+import UnifiedCalendar from './pages/calendar/UnifiedCalendar';
+import RescheduleRequests from './pages/RescheduleRequests';
 import ClassScheduling from './pages/classes/ClassScheduling';
 import ClassroomAllocation from './pages/classes/ClassroomAllocation';
 import DailyAttendance from './pages/attendance/DailyAttendance';
 import MakeupClasses from './pages/attendance/MakeupClasses';
 import AttendanceReports from './pages/attendance/AttendanceReports';
-import TeacherBooking from './pages/appointments/TeacherBooking';
 import TeacherAvailability from './pages/appointments/TeacherAvailability';
-import AppointmentCalendar from './pages/appointments/AppointmentCalendar';
+import EventManagement from './pages/events/EventManagement';
 import PaymentPlans from './pages/payments/PaymentPlans';
 import Installments from './pages/payments/Installments';
 import Receipts from './pages/payments/Receipts';
@@ -45,6 +45,7 @@ import StudentRegistration from './pages/students/StudentRegistration';
 import CRMPage from './pages/crm/CRMPage';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
+import EventSignup from './pages/public/EventSignup';
 
 export const router = createBrowserRouter([
   {
@@ -65,6 +66,13 @@ export const router = createBrowserRouter([
   Component: ResetPassword,
 },
 
+{
+  // Public, unauthenticated — anyone with the link can sign up for an
+  // event, no login required.
+  path: '/register/:occurrenceId',
+  Component: EventSignup,
+},
+
   {
   path: '/app',
   element: (
@@ -74,7 +82,7 @@ export const router = createBrowserRouter([
   ),
   children: [
     // your existing app routes
-  
+
       { path: 'dashboard', Component: Dashboard },
       {
   path: 'access-denied',
@@ -94,8 +102,11 @@ export const router = createBrowserRouter([
       { path: 'courses/batches', Component: ClassBatches },
       { path: 'courses/lessons', Component: Lessons },
 
+      // Unified Calendar
+      { path: 'calendar', Component: UnifiedCalendar },
+      { path: 'reschedule-requests', Component: RescheduleRequests },
+
       // Class Management
-      { path: 'classes/calendar', Component: ClassCalendar },
       { path: 'classes/scheduling', Component: ClassScheduling },
       { path: 'classes/allocation', Component: ClassroomAllocation },
 
@@ -104,10 +115,13 @@ export const router = createBrowserRouter([
       { path: 'attendance/makeup', Component: MakeupClasses },
       { path: 'attendance/reports', Component: AttendanceReports },
 
-      // Appointments
-      { path: 'appointments/booking', Component: TeacherBooking },
+      // Teacher Availability (folded under Classes in nav)
       { path: 'appointments/availability', Component: TeacherAvailability },
-      { path: 'appointments/calendar', Component: AppointmentCalendar },
+
+      // Events (organizing/participating, staff-involved availability locks,
+      // 1-on-1 trial classes/consultations — replaces the old appointments
+      // booking module)
+      { path: 'events', Component: EventManagement },
 
       // Payments
       { path: 'payments/plans', Component: PaymentPlans },

@@ -1,31 +1,16 @@
 import { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router';
-import {
-  AlertTriangle,
-  DollarSign,
-  Send,
-  User,
-  CreditCard,
-} from 'lucide-react';
-import { supabase } from '../../lib/supabase';
-import { notifyPaymentOverdue } from '../../services/systemNotificationService';
+import { AlertTriangle, DollarSign, Send, User, CreditCard } from 'lucide-react';
+import { sendPaymentReminder } from '../../services/unifiedNotificationService';
 import { getCurrentUser } from '../../utils/session';
 import { getCurrentStudentId } from '../../utils/studentAccess';
-
-interface OutstandingBalance {
-  id: string;
-  studentId: string;
-  student: string;
-  phone: string;
-  course: string;
-  totalFee: number;
-  paidAmount: number;
-  outstandingAmount: number;
-  lastPaymentDate: string;
-  nextDueDate: string;
-  daysOverdue: number;
-  status: 'Pending' | 'Overdue' | 'Critical';
-}
+import {
+  type OutstandingBalance,
+  fetchOutstandingBalances,
+  formatCurrency,
+} from '../../services/paymentsService';
+import { SummaryCard } from '../../components/payments/SummaryCard';
+import { BalanceStatusBadge } from '../../components/payments/StatusBadges';
 
 export default function OutstandingBalances() {
   const navigate = useNavigate();
@@ -45,33 +30,13 @@ export default function OutstandingBalances() {
   const [studentProfileFound, setStudentProfileFound] = useState(true);
 
   useEffect(() => {
-    fetchOutstandingBalances();
+    fetchBalances();
   }, []);
 
-  async function fetchOutstandingBalances() {
+  async function fetchBalances() {
     setLoading(true);
 
-    let query = supabase
-      .from('payment_plans')
-      .select(`
-        id,
-        student_id,
-        final_amount,
-        original_fee,
-        students!payment_plans_student_id_fkey(full_name, phone, email),
-        enrollments!payment_plans_enrollment_id_fkey(
-          class_batches(
-            courses(course_name)
-          )
-        ),
-        installments(
-          amount,
-          due_date,
-          paid_date,
-          status
-        )
-      `)
-      .order('created_at', { ascending: false });
+    let studentIdFilter: string | undefined;
 
     if (isStudentView) {
       const studentId = await getCurrentStudentId();
@@ -83,128 +48,35 @@ export default function OutstandingBalances() {
         return;
       }
 
-      query = query.eq('student_id', studentId);
+      studentIdFilter = studentId;
     }
 
-    const { data, error } = await query;
-
-    if (error) {
-      console.error('Error fetching outstanding balances:', error.message);
-      setLoading(false);
-      return;
-    }
-
-    const mapped: OutstandingBalance[] = (data || [])
-      .map((plan: any) => {
-        const installments = plan.installments || [];
-        const totalFee = Number(plan.final_amount || plan.original_fee || 0);
-
-        const paidAmount = installments
-          .filter((item: any) => String(item.status).toLowerCase() === 'paid')
-          .reduce((sum: number, item: any) => sum + Number(item.amount || 0), 0);
-
-        const outstandingAmount = Math.max(totalFee - paidAmount, 0);
-
-        const paidInstallments = installments
-          .filter((item: any) => item.paid_date)
-          .sort((a: any, b: any) =>
-            String(b.paid_date).localeCompare(String(a.paid_date))
-          );
-
-        const lastPaymentDate = paidInstallments[0]?.paid_date
-          ? String(paidInstallments[0].paid_date).slice(0, 10)
-          : '-';
-
-        const unpaidInstallments = installments
-          .filter((item: any) => String(item.status).toLowerCase() !== 'paid')
-          .sort((a: any, b: any) =>
-            String(a.due_date).localeCompare(String(b.due_date))
-          );
-
-        const nextDueDate = unpaidInstallments[0]?.due_date || '-';
-
-        const overdueDays = unpaidInstallments.map((item: any) =>
-          calculateDaysOverdue(item.due_date)
-        );
-
-        const daysOverdue = Math.max(0, ...overdueDays);
-
-        let status: OutstandingBalance['status'] = 'Pending';
-
-        if (daysOverdue > 30) status = 'Critical';
-        else if (daysOverdue > 0) status = 'Overdue';
-
-        return {
-          id: plan.id,
-          studentId: plan.student_id,
-          student: getStudentName(plan.students),
-          phone: getStudentPhone(plan.students),
-          course: getCourseNameFromEnrollment(plan.enrollments),
-          totalFee,
-          paidAmount,
-          outstandingAmount,
-          lastPaymentDate,
-          nextDueDate,
-          daysOverdue,
-          status,
-        };
-      })
-      .filter((item: OutstandingBalance) =>
-        isStudentView ? item.totalFee > 0 : item.outstandingAmount > 0
-      );
-
-    setBalances(mapped);
+    const { data } = await fetchOutstandingBalances(studentIdFilter, isStudentView);
+    setBalances(data);
     setLoading(false);
   }
 
   async function sendReminder(balance: OutstandingBalance) {
     if (!canManagePayments) return;
 
-    await notifyPaymentOverdue(
-      balance.student,
-      balance.outstandingAmount,
-      balance.nextDueDate
-    );
-
-    await supabase.from('audit_logs').insert({
-      user_id: currentUser.id || null,
-      action: 'Payment Reminder Sent',
-      module: 'Payments',
-      target_id: balance.id,
-      old_data: null,
-      new_data: {
-        student: balance.student,
+    const result = await sendPaymentReminder({
+      studentName: balance.student,
+      target: {
+        userId: balance.studentUserId,
+        email: balance.studentEmail,
         phone: balance.phone,
-        outstanding_amount: balance.outstandingAmount,
-        next_due_date: balance.nextDueDate,
-        days_overdue: balance.daysOverdue,
-        sent_by: currentUser.email,
-        role: currentUser.role,
+        name: balance.student,
       },
-      created_at: new Date().toISOString(),
+      outstandingAmount: balance.outstandingAmount,
+      nextDueDate: balance.nextDueDate,
+      relatedId: balance.id,
     });
 
-    const phone = balance.phone?.replace(/\D/g, '').replace(/^0/, '60');
-
-    const message = encodeURIComponent(
-      `Hi ${balance.student},
-
-This is a friendly reminder from JEP Image Makeup Academy.
-
-Our records show an outstanding balance of RM ${balance.outstandingAmount.toLocaleString()}.
-
-Due Date: ${balance.nextDueDate}
-
-If you have already made the payment, please ignore this message.
-
-Thank you.`
-    );
-
-    if (phone) {
-      window.open(`https://wa.me/${phone}?text=${message}`, '_blank');
+    if (result.whatsapp?.waLink) {
+      window.open(result.whatsapp.waLink, '_blank');
     }
 
-    alert(`Notification created.\nWhatsApp reminder opened for ${balance.student}.`);
+    alert(`Reminder sent to ${balance.student}.`);
   }
 
   const totalOutstanding = balances.reduce(
@@ -212,28 +84,18 @@ Thank you.`
     0
   );
 
-  const totalPaid = balances.reduce(
-    (acc, balance) => acc + balance.paidAmount,
-    0
-  );
+  const totalPaid = balances.reduce((acc, balance) => acc + balance.paidAmount, 0);
 
-  const totalFee = balances.reduce(
-    (acc, balance) => acc + balance.totalFee,
-    0
-  );
+  const totalFee = balances.reduce((acc, balance) => acc + balance.totalFee, 0);
 
   const collectionRate =
     totalPaid + totalOutstanding > 0
       ? Math.round((totalPaid / (totalPaid + totalOutstanding)) * 100)
       : 0;
 
-  const criticalCount = balances.filter(
-    (balance) => balance.status === 'Critical'
-  ).length;
+  const criticalCount = balances.filter((balance) => balance.status === 'Critical').length;
 
-  const overdueCount = balances.filter(
-    (balance) => balance.status === 'Overdue'
-  ).length;
+  const overdueCount = balances.filter((balance) => balance.status === 'Overdue').length;
 
   if (isStudentView && !studentProfileFound) {
     return (
@@ -266,36 +128,32 @@ Thank you.`
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <div className="flex items-center gap-3 mb-2">
-            <DollarSign size={24} className="text-red-700" />
-            <div>
-              <p className="text-sm text-[#6b6b6b]">
-                {isStudentView ? 'My Outstanding' : 'Total Outstanding'}
-              </p>
-              <p className="text-2xl text-red-700">
-                RM {totalOutstanding.toLocaleString()}
-              </p>
-            </div>
-          </div>
-        </div>
+        <SummaryCard
+          icon={<DollarSign size={24} className="text-red-700" />}
+          label={isStudentView ? 'My Outstanding' : 'Total Outstanding'}
+          value={formatCurrency(totalOutstanding)}
+          valueColor="text-red-700"
+        />
 
         <SummaryCard
           label={isStudentView ? 'Total Fee' : 'Students Owing'}
-          value={isStudentView ? `RM ${totalFee.toLocaleString()}` : balances.length.toString()}
-          color="text-[#284342]"
+          value={isStudentView ? formatCurrency(totalFee) : balances.length.toString()}
+          valueColor="text-[#284342]"
+          valueSize="text-3xl"
         />
 
         <SummaryCard
           label={isStudentView ? 'Paid Amount' : 'Critical'}
-          value={isStudentView ? `RM ${totalPaid.toLocaleString()}` : criticalCount.toString()}
-          color={isStudentView ? 'text-green-700' : 'text-red-700'}
+          value={isStudentView ? formatCurrency(totalPaid) : criticalCount.toString()}
+          valueColor={isStudentView ? 'text-green-700' : 'text-red-700'}
+          valueSize="text-3xl"
         />
 
         <SummaryCard
           label="Payment Progress"
           value={`${collectionRate}%`}
-          color="text-green-700"
+          valueColor="text-green-700"
+          valueSize="text-3xl"
         />
       </div>
 
@@ -306,9 +164,7 @@ Thank you.`
           </h2>
 
           {!isStudentView && (
-            <p className="text-sm text-[#6b6b6b]">
-              {overdueCount} overdue account(s)
-            </p>
+            <p className="text-sm text-[#6b6b6b]">{overdueCount} overdue account(s)</p>
           )}
         </div>
 
@@ -393,12 +249,9 @@ Thank you.`
                         <div className="min-w-40">
                           <div className="flex items-center justify-between mb-1">
                             <span className="text-xs text-[#6b6b6b]">
-                              RM {balance.paidAmount.toLocaleString()} / RM{' '}
-                              {balance.totalFee.toLocaleString()}
+                              {formatCurrency(balance.paidAmount)} / {formatCurrency(balance.totalFee)}
                             </span>
-                            <span className="text-xs text-[#284342]">
-                              {progress}%
-                            </span>
+                            <span className="text-xs text-[#284342]">{progress}%</span>
                           </div>
                           <div className="w-full h-2 bg-[#e8e7e2] rounded-full overflow-hidden">
                             <div
@@ -410,7 +263,7 @@ Thank you.`
                       </td>
 
                       <td className="px-6 py-4 text-sm text-red-700">
-                        RM {balance.outstandingAmount.toLocaleString()}
+                        {formatCurrency(balance.outstandingAmount)}
                       </td>
 
                       <td className="px-6 py-4 text-sm text-[#6b6b6b]">
@@ -418,13 +271,11 @@ Thank you.`
                       </td>
 
                       <td className="px-6 py-4 text-sm text-[#6b6b6b]">
-                        {balance.daysOverdue > 0
-                          ? `${balance.daysOverdue} day(s)`
-                          : '-'}
+                        {balance.daysOverdue > 0 ? `${balance.daysOverdue} day(s)` : '-'}
                       </td>
 
                       <td className="px-6 py-4">
-                        <StatusBadge status={balance.status} />
+                        <BalanceStatusBadge status={balance.status} />
                       </td>
 
                       {!isStudentView && (
@@ -472,73 +323,5 @@ Thank you.`
         </div>
       </div>
     </div>
-  );
-}
-
-function calculateDaysOverdue(dueDate: string) {
-  if (!dueDate) return 0;
-
-  const today = new Date();
-  const due = new Date(dueDate);
-  const diff = today.getTime() - due.getTime();
-
-  if (diff <= 0) return 0;
-
-  return Math.floor(diff / (1000 * 60 * 60 * 24));
-}
-
-function getStudentName(student: any) {
-  if (!student) return 'Unnamed Student';
-  if (Array.isArray(student)) return student[0]?.full_name || 'Unnamed Student';
-  return student.full_name || 'Unnamed Student';
-}
-
-function getStudentPhone(student: any) {
-  if (!student) return '';
-  if (Array.isArray(student)) return student[0]?.phone || '';
-  return student.phone || '';
-}
-
-function getCourseNameFromEnrollment(enrollment: any) {
-  if (!enrollment) return '-';
-
-  const actualEnrollment = Array.isArray(enrollment) ? enrollment[0] : enrollment;
-  const batch = actualEnrollment?.class_batches;
-  const actualBatch = Array.isArray(batch) ? batch[0] : batch;
-  const course = actualBatch?.courses;
-  const actualCourse = Array.isArray(course) ? course[0] : course;
-
-  return actualCourse?.course_name || '-';
-}
-
-function SummaryCard({
-  label,
-  value,
-  color,
-}: {
-  label: string;
-  value: string;
-  color: string;
-}) {
-  return (
-    <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-      <p className="text-sm text-[#6b6b6b] mb-2">{label}</p>
-      <p className={`text-3xl ${color}`}>{value}</p>
-    </div>
-  );
-}
-
-function StatusBadge({ status }: { status: OutstandingBalance['status'] }) {
-  const className =
-    status === 'Critical'
-      ? 'bg-red-100 text-red-700'
-      : status === 'Overdue'
-      ? 'bg-yellow-100 text-yellow-700'
-      : 'bg-blue-100 text-blue-700';
-
-  return (
-    <span className={`text-xs px-3 py-1 rounded-full ${className}`}>
-      {status}
-    </span>
   );
 }

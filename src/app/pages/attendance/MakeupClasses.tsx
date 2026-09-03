@@ -12,6 +12,8 @@ interface MakeupClass {
   makeupTime: string;
   teacher: string;
   status: 'Scheduled' | 'Completed' | 'Pending';
+  isExternal: boolean;
+  externalProvider: string;
 }
 
 interface TeacherOption {
@@ -31,6 +33,8 @@ export default function MakeupClasses() {
     makeupDate: '',
     makeupTime: '',
     teacherId: '',
+    isExternal: false,
+    externalProvider: '',
   });
 
   useEffect(() => {
@@ -48,6 +52,8 @@ export default function MakeupClasses() {
         makeup_datetime,
         status,
         reason,
+        is_external,
+        external_provider,
         students(full_name),
         lessons(lesson_title, lesson_datetime),
         teachers(
@@ -91,6 +97,8 @@ export default function MakeupClasses() {
             : item.status === 'scheduled'
             ? 'Scheduled'
             : 'Pending',
+        isExternal: !!item.is_external,
+        externalProvider: item.external_provider || '',
       };
     });
 
@@ -116,6 +124,14 @@ export default function MakeupClasses() {
   }
 
   function openScheduleModal(makeupId: string) {
+    const existing = makeupClasses.find((m) => m.id === makeupId);
+    setFormData({
+      makeupDate: existing?.makeupDate || '',
+      makeupTime: existing?.makeupTime || '',
+      teacherId: '',
+      isExternal: existing?.isExternal || false,
+      externalProvider: existing?.externalProvider || '',
+    });
     setSelectedMakeupId(makeupId);
     setShowScheduleModal(true);
   }
@@ -123,6 +139,11 @@ export default function MakeupClasses() {
   async function scheduleMakeupClass() {
     if (!selectedMakeupId || !formData.makeupDate || !formData.makeupTime) {
       alert('Please select makeup date and time.');
+      return;
+    }
+
+    if (formData.isExternal && !formData.externalProvider.trim()) {
+      alert('Please enter the external makeup service / location.');
       return;
     }
 
@@ -134,6 +155,8 @@ export default function MakeupClasses() {
         makeup_datetime: makeupDateTime,
         teacher_id: formData.teacherId || null,
         status: 'scheduled',
+        is_external: formData.isExternal,
+        external_provider: formData.isExternal ? formData.externalProvider.trim() : null,
       })
       .eq('id', selectedMakeupId);
 
@@ -146,6 +169,8 @@ export default function MakeupClasses() {
       makeupDate: '',
       makeupTime: '',
       teacherId: '',
+      isExternal: false,
+      externalProvider: '',
     });
 
     setSelectedMakeupId('');
@@ -262,6 +287,11 @@ export default function MakeupClasses() {
                       >
                         {makeup.status}
                       </span>
+                      {makeup.isExternal && (
+                        <span className="text-xs px-3 py-1 rounded-full bg-orange-100 text-orange-700">
+                          External Service
+                        </span>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
@@ -280,8 +310,12 @@ export default function MakeupClasses() {
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                           <Info label="Date" value={makeup.makeupDate} />
                           <Info label="Time" value={makeup.makeupTime} />
-                          <Info label="Teacher" value={makeup.teacher} />
-                          <Info label="Room" value="-" />
+                          {makeup.isExternal ? (
+                            <Info label="External Provider" value={makeup.externalProvider} />
+                          ) : (
+                            <Info label="Teacher" value={makeup.teacher} />
+                          )}
+                          <Info label="Room" value={makeup.isExternal ? 'Off-site' : '-'} />
                         </div>
                       </div>
                     )}
@@ -383,27 +417,66 @@ export default function MakeupClasses() {
               </div>
 
               <div>
-                <label className="block text-sm text-[#284342] mb-2">
-                  Teacher
+                <label className="flex items-center gap-2.5 cursor-pointer mb-3">
+                  <input
+                    type="checkbox"
+                    checked={formData.isExternal}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        isExternal: e.target.checked,
+                        teacherId: e.target.checked ? '' : prev.teacherId,
+                      }))
+                    }
+                    className="w-4 h-4 accent-[#284342]"
+                  />
+                  <span className="text-sm text-[#284342]">
+                    External makeup service (student goes to a third-party / outsourced provider)
+                  </span>
                 </label>
 
-                <select
-                  value={formData.teacherId}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      teacherId: e.target.value,
-                    }))
-                  }
-                  className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
-                >
-                  <option value="">Select Teacher</option>
-                  {teachers.map((teacher) => (
-                    <option key={teacher.id} value={teacher.id}>
-                      {getTeacherName(teacher)}
-                    </option>
-                  ))}
-                </select>
+                {formData.isExternal ? (
+                  <div>
+                    <label className="block text-sm text-[#284342] mb-2">
+                      External Provider / Location
+                    </label>
+                    <input
+                      value={formData.externalProvider}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          externalProvider: e.target.value,
+                        }))
+                      }
+                      placeholder="e.g., Sunshine Studio KL"
+                      className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+                    />
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-sm text-[#284342] mb-2">
+                      Teacher
+                    </label>
+
+                    <select
+                      value={formData.teacherId}
+                      onChange={(e) =>
+                        setFormData((prev) => ({
+                          ...prev,
+                          teacherId: e.target.value,
+                        }))
+                      }
+                      className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+                    >
+                      <option value="">Select Teacher</option>
+                      {teachers.map((teacher) => (
+                        <option key={teacher.id} value={teacher.id}>
+                          {getTeacherName(teacher)}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
               </div>
             </div>
 

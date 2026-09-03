@@ -1,14 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import WhatsAppQueue from './WhatsAppQueue';
 import { getCurrentUser } from '../../utils/session';
 import {
   Bell,
   CheckCircle2,
   MessageCircle,
+  Mail,
   AlertCircle,
   Clock,
   Trash2,
   RefreshCw,
+  ChevronDown,
+  ChevronUp,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -24,19 +27,28 @@ interface NotificationItem {
   type?: string | null;
   priority?: string | null;
   related_module?: string | null;
+  contact_phone?: string | null;
 }
 
 export default function NotificationCenter() {
   const currentUser = getCurrentUser();
 
-  const isPersonalView =
-    currentUser.role === 'student' || currentUser.role === 'parent';
-
-  const canManageNotifications =
+  // Only academy leadership manages the shared "all notifications" console
+  // (matches notifications_select_leadership in RLS). Everyone else —
+  // including teacher/finance/sales, who previously fell through to seeing
+  // every user's notifications by accident — gets their own inbox only.
+  const isLeadership =
     currentUser.role === 'super_admin' ||
     currentUser.role === 'admin' ||
-    currentUser.role === 'finance' ||
-    currentUser.role === 'teacher';
+    currentUser.role === 'owner';
+
+  const isPersonalView = !isLeadership;
+
+  // Marking as sent / deleting is further restricted to admins (matches
+  // notifications_update_admin / notifications_delete_admin in RLS) — owner
+  // can see the console but doesn't manage delivery/cleanup.
+  const canManageNotifications =
+    currentUser.role === 'super_admin' || currentUser.role === 'admin';
 
   const [notifications, setNotifications] = useState<NotificationItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,7 +77,8 @@ export default function NotificationCenter() {
         created_at,
         type,
         priority,
-        related_module
+        related_module,
+        contact_phone
       `)
       .order('created_at', { ascending: false });
 
@@ -85,8 +98,8 @@ export default function NotificationCenter() {
     setLoading(false);
   }
 
-  async function markAsSent(id: string) {
-    if (!canManageNotifications) return;
+  async function markAsSent(ids: string[]) {
+    if (!canManageNotifications || ids.length === 0) return;
 
     const { error } = await supabase
       .from('notifications')
@@ -94,7 +107,7 @@ export default function NotificationCenter() {
         delivery_status: 'sent',
         sent_at: new Date().toISOString(),
       })
-      .eq('id', id);
+      .in('id', ids);
 
     if (error) {
       alert(`Failed to update notification: ${error.message}`);
@@ -104,16 +117,18 @@ export default function NotificationCenter() {
     fetchNotifications();
   }
 
-  async function deleteNotification(id: string) {
-    if (!canManageNotifications) return;
+  async function deleteNotification(ids: string[]) {
+    if (!canManageNotifications || ids.length === 0) return;
 
-    const confirmed = confirm('Delete this notification?');
+    const confirmed = confirm(
+      ids.length > 1 ? `Delete this notification (${ids.length} channels)?` : 'Delete this notification?'
+    );
     if (!confirmed) return;
 
     const { error } = await supabase
       .from('notifications')
       .delete()
-      .eq('id', id);
+      .in('id', ids);
 
     if (error) {
       alert(`Failed to delete notification: ${error.message}`);
@@ -125,7 +140,10 @@ export default function NotificationCenter() {
 
   function openWhatsApp(notification: NotificationItem) {
     const text = encodeURIComponent(notification.message);
-    window.open(`https://wa.me/?text=${text}`, '_blank');
+    const digits = notification.contact_phone
+      ? notification.contact_phone.replace(/[^\d+]/g, '').replace('+', '')
+      : '';
+    window.open(`https://wa.me/${digits}?text=${text}`, '_blank');
   }
 
   const pendingCount = notifications.filter(
@@ -159,6 +177,17 @@ export default function NotificationCenter() {
 
     return matchesSearch && matchesChannel && matchesStatus;
   });
+
+  // The same business event (a payment reminder, a receipt, ...) fires one
+  // notifications row per channel via notify()/sendEmail() — in_app, email,
+  // and whatsapp for the same title/module land within the same second.
+  // Grouping them back into one card (with a chip per channel) is what
+  // actually declutters the feed, rather than showing 2-3 near-identical
+  // full cards for a single event.
+  const groupedNotifications = useMemo(
+    () => groupNotifications(filteredNotifications),
+    [filteredNotifications]
+  );
 
   return (
     <div className="space-y-6">
@@ -282,7 +311,7 @@ export default function NotificationCenter() {
         {!isPersonalView && canManageNotifications && (
           <WhatsAppQueue
             notifications={notifications}
-            onMarkSent={markAsSent}
+            onMarkSent={(id) => markAsSent([id])}
           />
         )}
 
@@ -293,83 +322,22 @@ export default function NotificationCenter() {
             </div>
           )}
 
-          {!loading && filteredNotifications.length === 0 && (
+          {!loading && groupedNotifications.length === 0 && (
             <div className="p-6 text-center text-[#6b6b6b]">
               No notifications found.
             </div>
           )}
 
           {!loading &&
-            filteredNotifications.map((item) => (
-              <div
-                key={item.id}
-                className={`p-6 hover:bg-[#f8f8f6] transition-colors ${
-                  item.delivery_status === 'pending' ? 'bg-[#e9da95]/10' : ''
-                }`}
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-start gap-4">
-                    <div
-                      className={`p-3 rounded-lg ${getIconBg(
-                        item.type || item.channel
-                      )}`}
-                    >
-                      {getNotificationIcon(item.type || item.channel)}
-                    </div>
-
-                    <div>
-                      <div className="flex items-center gap-2 mb-1 flex-wrap">
-                        <h3 className="text-[#284342]">{item.title}</h3>
-                        <StatusBadge status={item.delivery_status} />
-                        <PriorityBadge priority={item.priority || 'normal'} />
-                        <ChannelBadge channel={item.channel} />
-                      </div>
-
-                      <p className="text-sm text-[#6b6b6b] mb-2">
-                        {item.message}
-                      </p>
-
-                      <p className="text-xs text-[#6b6b6b]">
-                        {item.related_module || 'System'} •{' '}
-                        {new Date(item.created_at).toLocaleString()}
-                      </p>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                    {item.channel === 'whatsapp' && canManageNotifications && (
-                      <button
-                        onClick={() => openWhatsApp(item)}
-                        className="p-2 hover:bg-green-50 rounded-lg"
-                        title="Open WhatsApp"
-                      >
-                        <MessageCircle size={18} className="text-green-700" />
-                      </button>
-                    )}
-
-                    {item.delivery_status === 'pending' &&
-                      canManageNotifications && (
-                        <button
-                          onClick={() => markAsSent(item.id)}
-                          className="p-2 hover:bg-[#e9da95]/20 rounded-lg"
-                          title="Mark as Sent"
-                        >
-                          <CheckCircle2 size={18} className="text-[#284342]" />
-                        </button>
-                      )}
-
-                    {canManageNotifications && (
-                      <button
-                        onClick={() => deleteNotification(item.id)}
-                        className="p-2 hover:bg-red-50 rounded-lg"
-                        title="Delete"
-                      >
-                        <Trash2 size={18} className="text-red-600" />
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
+            groupedNotifications.map((group) => (
+              <NotificationGroupRow
+                key={group.key}
+                group={group}
+                canManageNotifications={canManageNotifications}
+                onMarkSent={markAsSent}
+                onDelete={deleteNotification}
+                onOpenWhatsApp={openWhatsApp}
+              />
             ))}
         </div>
       </div>
@@ -404,21 +372,6 @@ function SummaryCard({
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
-  return (
-    <span
-      className={`text-xs px-2 py-1 rounded-full ${
-        status === 'sent'
-          ? 'bg-green-100 text-green-700'
-          : status === 'failed'
-          ? 'bg-red-100 text-red-700'
-          : 'bg-yellow-100 text-yellow-700'
-      }`}
-    >
-      {formatText(status)}
-    </span>
-  );
-}
 
 function PriorityBadge({ priority }: { priority: string }) {
   return (
@@ -430,20 +383,6 @@ function PriorityBadge({ priority }: { priority: string }) {
       }`}
     >
       {formatText(priority)}
-    </span>
-  );
-}
-
-function ChannelBadge({ channel }: { channel: string }) {
-  return (
-    <span
-      className={`text-xs px-2 py-1 rounded-full ${
-        channel === 'whatsapp'
-          ? 'bg-green-100 text-green-700'
-          : 'bg-blue-100 text-blue-700'
-      }`}
-    >
-      {formatText(channel)}
     </span>
   );
 }
@@ -469,6 +408,10 @@ function getNotificationIcon(type: string) {
     return <MessageCircle size={20} className="text-green-700" />;
   }
 
+  if (type === 'email') {
+    return <Bell size={20} className="text-blue-700" />;
+  }
+
   return <Bell size={20} className="text-[#284342]" />;
 }
 
@@ -478,6 +421,7 @@ function getIconBg(type: string) {
   if (type === 'attendance') return 'bg-yellow-100';
   if (type === 'appointment') return 'bg-blue-100';
   if (type === 'whatsapp') return 'bg-green-100';
+  if (type === 'email') return 'bg-blue-100';
   return 'bg-[#e9da95]/20';
 }
 
@@ -487,4 +431,226 @@ function formatText(value: string) {
   return value
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+// Email-channel notifications store the full HTML email body (receipt
+// templates, etc.) in `message` — rendering that raw dumps hundreds of
+// characters of markup into the card. Strip tags down to plain text for
+// the preview; the full content is still available via "Show full message".
+function stripHtmlPreview(message: string) {
+  if (!/<[a-z][\s\S]*>/i.test(message)) return message;
+
+  const parsed = new DOMParser().parseFromString(message, 'text/html');
+  return (parsed.body.textContent || '').replace(/\s+/g, ' ').trim();
+}
+
+const PRIORITY_RANK: Record<string, number> = { high: 2, normal: 1, low: 0 };
+
+interface NotificationGroup {
+  key: string;
+  title: string;
+  message: string;
+  priority: string;
+  relatedModule: string | null;
+  createdAt: string;
+  items: NotificationItem[];
+}
+
+// Groups rows fired together by the same business event (same title +
+// module, within the same minute) into one card — this is what actually
+// removes the "3 duplicate cards for one event" clutter, since notify()
+// fans one logical event out to one row per channel.
+function groupNotifications(items: NotificationItem[]): NotificationGroup[] {
+  const groups = new Map<string, NotificationGroup>();
+
+  items.forEach((item) => {
+    const minuteBucket = Math.floor(new Date(item.created_at).getTime() / 60000);
+    const key = `${item.related_module || 'system'}|${item.title}|${minuteBucket}`;
+
+    const existing = groups.get(key);
+
+    if (!existing) {
+      groups.set(key, {
+        key,
+        title: item.title,
+        message: item.message,
+        priority: item.priority || 'normal',
+        relatedModule: item.related_module || null,
+        createdAt: item.created_at,
+        items: [item],
+      });
+      return;
+    }
+
+    existing.items.push(item);
+
+    // Prefer the plain-text (in_app/whatsapp) message over an HTML email
+    // body for the card preview, and surface the highest priority seen.
+    if (/<[a-z][\s\S]*>/i.test(existing.message) && !/<[a-z][\s\S]*>/i.test(item.message)) {
+      existing.message = item.message;
+    }
+    if ((PRIORITY_RANK[item.priority || 'normal'] || 0) > (PRIORITY_RANK[existing.priority] || 0)) {
+      existing.priority = item.priority || 'normal';
+    }
+    if (new Date(item.created_at) < new Date(existing.createdAt)) {
+      existing.createdAt = item.created_at;
+    }
+  });
+
+  return Array.from(groups.values()).sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  );
+}
+
+function NotificationGroupRow({
+  group,
+  canManageNotifications,
+  onMarkSent,
+  onDelete,
+  onOpenWhatsApp,
+}: {
+  group: NotificationGroup;
+  canManageNotifications: boolean;
+  onMarkSent: (ids: string[]) => void;
+  onDelete: (ids: string[]) => void;
+  onOpenWhatsApp: (item: NotificationItem) => void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+
+  const preview = stripHtmlPreview(group.message);
+  const isLong = preview.length > 160;
+
+  const pendingIds = group.items.filter((i) => i.delivery_status === 'pending').map((i) => i.id);
+  const allIds = group.items.map((i) => i.id);
+  const whatsappItem = group.items.find((i) => i.channel === 'whatsapp');
+  const overallStatus = aggregateStatus(group.items);
+
+  return (
+    <div
+      className={`p-6 hover:bg-[#f8f8f6] transition-colors ${
+        overallStatus === 'pending' ? 'bg-[#e9da95]/10' : ''
+      }`}
+    >
+      <div className="flex items-start gap-4">
+        <div className={`p-3 rounded-lg shrink-0 ${getIconBg(group.items[0].type || group.items[0].channel)}`}>
+          {getNotificationIcon(group.items[0].type || group.items[0].channel)}
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
+            <h3 className="text-[#284342]">{group.title}</h3>
+            {group.priority === 'high' && <PriorityBadge priority="high" />}
+            {/* One notification, sent through one or more channels — shown
+                as small icons (not a repeated card per channel) so the
+                same message never appears more than once in the list. */}
+            <span className="flex items-center gap-1" title={channelSummary(group.items)}>
+              {group.items.map((item) => (
+                <ChannelIcon key={item.id} channel={item.channel} />
+              ))}
+            </span>
+            <OverallStatusBadge status={overallStatus} />
+          </div>
+
+          <p className="text-sm text-[#6b6b6b] mb-2">
+            {expanded || !isLong ? preview : `${preview.slice(0, 160)}…`}
+            {isLong && (
+              <button
+                onClick={() => setExpanded((prev) => !prev)}
+                className="ml-2 inline-flex items-center gap-0.5 text-xs text-[#284342] hover:underline"
+              >
+                {expanded ? (
+                  <>
+                    Show less <ChevronUp size={12} />
+                  </>
+                ) : (
+                  <>
+                    Show more <ChevronDown size={12} />
+                  </>
+                )}
+              </button>
+            )}
+          </p>
+
+          <div className="flex items-center justify-between gap-3 flex-wrap">
+            <p className="text-xs text-[#6b6b6b]">
+              {group.relatedModule || 'System'} •{' '}
+              {new Date(group.createdAt).toLocaleString()}
+            </p>
+
+            {canManageNotifications && (
+              <div className="flex items-center gap-1">
+                {whatsappItem && (
+                  <button
+                    onClick={() => onOpenWhatsApp(whatsappItem)}
+                    className="p-2 hover:bg-green-50 rounded-lg"
+                    title="Open WhatsApp"
+                  >
+                    <MessageCircle size={16} className="text-green-700" />
+                  </button>
+                )}
+
+                {pendingIds.length > 0 && (
+                  <button
+                    onClick={() => onMarkSent(pendingIds)}
+                    className="p-2 hover:bg-[#e9da95]/20 rounded-lg"
+                    title="Mark as Sent"
+                  >
+                    <CheckCircle2 size={16} className="text-[#284342]" />
+                  </button>
+                )}
+
+                <button
+                  onClick={() => onDelete(allIds)}
+                  className="p-2 hover:bg-red-50 rounded-lg"
+                  title="Delete"
+                >
+                  <Trash2 size={16} className="text-red-600" />
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// One notification can be "sent" via several channels — the group's
+// overall status is only "sent" once every channel got through, "failed"
+// if any channel failed, otherwise "pending".
+function aggregateStatus(items: NotificationItem[]): 'sent' | 'failed' | 'pending' {
+  if (items.some((i) => i.delivery_status === 'failed')) return 'failed';
+  if (items.every((i) => i.delivery_status === 'sent')) return 'sent';
+  return 'pending';
+}
+
+function channelSummary(items: NotificationItem[]) {
+  return items.map((i) => `${channelLabel(i.channel)}: ${formatText(i.delivery_status)}`).join(' • ');
+}
+
+function OverallStatusBadge({ status }: { status: 'sent' | 'failed' | 'pending' }) {
+  return (
+    <span
+      className={`text-xs px-2 py-1 rounded-full ${
+        status === 'sent'
+          ? 'bg-green-100 text-green-700'
+          : status === 'failed'
+          ? 'bg-red-100 text-red-700'
+          : 'bg-yellow-100 text-yellow-700'
+      }`}
+    >
+      {formatText(status)}
+    </span>
+  );
+}
+
+function ChannelIcon({ channel }: { channel: string }) {
+  if (channel === 'whatsapp') return <MessageCircle size={12} className="text-green-700" />;
+  if (channel === 'email') return <Mail size={12} className="text-blue-700" />;
+  return <Bell size={12} className="text-[#284342]" />;
+}
+
+function channelLabel(channel: string) {
+  if (channel === 'in_app') return 'In App';
+  return formatText(channel);
 }

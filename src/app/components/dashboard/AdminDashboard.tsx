@@ -11,6 +11,7 @@ import {
   MessageSquare,
   CreditCard,
   UserPlus,
+  PartyPopper,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 
@@ -91,7 +92,7 @@ export default function AdminDashboard() {
       paymentPlansRes,
       applicationsRes,
       portfolioRes,
-      appointmentsRes,
+      eventsRes,
       auditRes,
     ] = await Promise.all([
       supabase
@@ -164,10 +165,11 @@ export default function AdminDashboard() {
         .limit(3),
 
       supabase
-        .from('appointments')
-        .select('id, appointment_datetime, appointment_status, students(full_name)')
-        .eq('appointment_status', 'pending')
-        .order('appointment_datetime', { ascending: true })
+        .from('event_occurrences')
+        .select('id, starts_at, status, events(title, event_kind)')
+        .eq('status', 'scheduled')
+        .gte('starts_at', new Date().toISOString())
+        .order('starts_at', { ascending: true })
         .limit(3),
 
       supabase
@@ -280,14 +282,18 @@ export default function AdminDashboard() {
       });
     });
 
-    (appointmentsRes.data || []).forEach((appt: any) => {
+    (eventsRes.data || []).forEach((occurrence: any) => {
+      const eventInfo = Array.isArray(occurrence.events)
+        ? occurrence.events[0]
+        : occurrence.events;
+
       actions.push({
-        id: `appt-${appt.id}`,
-        title: 'Appointment Pending',
-        description: `${getStudentName(appt.students)} • ${formatDateTime(appt.appointment_datetime)}`,
-        link: '/app/appointments/calendar',
-        icon: <Calendar size={18} />,
-        color: 'text-yellow-700',
+        id: `event-${occurrence.id}`,
+        title: 'Upcoming Event',
+        description: `${eventInfo?.title || 'Academy Event'} • ${formatDateTime(occurrence.starts_at)}`,
+        link: '/app/events',
+        icon: <PartyPopper size={18} />,
+        color: 'text-purple-700',
       });
     });
 
@@ -456,7 +462,7 @@ export default function AdminDashboard() {
             <DashboardPanel
               title="Today's Classes"
               actionLabel="View Calendar"
-              actionLink="/app/classes/calendar"
+              actionLink="/app/calendar"
             >
               <div className="space-y-4">
                 {todaysClasses.length === 0 && (
@@ -555,6 +561,7 @@ export default function AdminDashboard() {
                 <QuickAction to="/app/payments/installments" icon={<DollarSign size={24} />} label="Record Payment" />
                 <QuickAction to="/app/attendance/daily" icon={<CheckCircle2 size={24} />} label="Take Attendance" />
                 <QuickAction to="/app/portfolio/feedback" icon={<MessageSquare size={24} />} label="Review Portfolio" />
+                <QuickAction to="/app/events" icon={<PartyPopper size={24} />} label="Manage Events" />
                 <QuickAction to="/app/reports" icon={<FileText size={24} />} label="Reports" />
               </div>
             </div>

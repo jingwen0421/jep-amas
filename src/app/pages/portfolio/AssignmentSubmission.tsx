@@ -11,6 +11,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { getCurrentUser } from '../../utils/session';
 import { getCurrentStudentId } from '../../utils/studentAccess';
+import { syncPortfolioItem } from '../../services/driveSyncService';
 
 interface Assignment {
   id: string;
@@ -265,21 +266,29 @@ export default function AssignmentSubmission() {
       .from('portfolio-submissions')
       .getPublicUrl(filePath);
 
-    const { error: insertError } = await supabase.from('portfolio_items').insert({
-      student_id: finalStudentId,
-      lesson_id: formData.lessonId,
-      title: formData.title,
-      description: formData.description,
-      file_url: urlData.publicUrl,
-      portfolio_status: 'submitted',
-      submitted_at: new Date().toISOString(),
-      updated_at: new Date().toISOString(),
-    });
+    const { data: insertedItem, error: insertError } = await supabase
+      .from('portfolio_items')
+      .insert({
+        student_id: finalStudentId,
+        lesson_id: formData.lessonId,
+        title: formData.title,
+        description: formData.description,
+        file_url: urlData.publicUrl,
+        portfolio_status: 'submitted',
+        submitted_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      })
+      .select('id')
+      .single();
 
     if (insertError) {
       setUploading(false);
       alert(`Failed to save submission: ${insertError.message}`);
       return;
+    }
+
+    if (insertedItem) {
+      syncPortfolioItem(insertedItem.id).catch((e) => console.error('Drive sync failed:', e));
     }
 
     await supabase.from('audit_logs').insert({
