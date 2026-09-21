@@ -11,10 +11,12 @@ import {
 } from '../../services/paymentsService';
 import { SummaryCard } from '../../components/payments/SummaryCard';
 import { BalanceStatusBadge } from '../../components/payments/StatusBadges';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function OutstandingBalances() {
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
+  const { t } = useLanguage();
 
   const isStudentView = currentUser.role === 'student';
 
@@ -76,7 +78,7 @@ export default function OutstandingBalances() {
       window.open(result.whatsapp.waLink, '_blank');
     }
 
-    alert(`Reminder sent to ${balance.student}.`);
+    alert(t('payments.outstanding.reminderSent', { name: balance.student }));
   }
 
   const totalOutstanding = balances.reduce(
@@ -101,14 +103,14 @@ export default function OutstandingBalances() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl text-[#284342]">My Payments</h1>
+          <h1 className="text-3xl text-[#284342]">{t('payments.outstanding.titleStudent')}</h1>
           <p className="text-[#6b6b6b] mt-1">
-            View your own tuition fee and outstanding balance.
+            {t('payments.outstanding.subtitleStudentSimple')}
           </p>
         </div>
 
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-yellow-800">
-          Your student profile was not found. Please complete student registration first or wait for admin approval.
+          {t('payments.outstanding.profileNotFound')}
         </div>
       </div>
     );
@@ -118,39 +120,39 @@ export default function OutstandingBalances() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl text-[#284342]">
-          {isStudentView ? 'My Payments' : 'Outstanding Balances'}
+          {isStudentView ? t('payments.outstanding.titleStudent') : t('payments.outstanding.title')}
         </h1>
         <p className="text-[#6b6b6b] mt-1">
           {isStudentView
-            ? 'View your payment progress, next due date and outstanding amount.'
-            : 'Follow up unpaid balances and overdue student payments.'}
+            ? t('payments.outstanding.subtitleStudent')
+            : t('payments.outstanding.subtitle')}
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <SummaryCard
           icon={<DollarSign size={24} className="text-red-700" />}
-          label={isStudentView ? 'My Outstanding' : 'Total Outstanding'}
+          label={isStudentView ? t('payments.outstanding.myOutstanding') : t('payments.outstanding.totalOutstanding')}
           value={formatCurrency(totalOutstanding)}
           valueColor="text-red-700"
         />
 
         <SummaryCard
-          label={isStudentView ? 'Total Fee' : 'Students Owing'}
+          label={isStudentView ? t('payments.outstanding.totalFee') : t('payments.outstanding.studentsOwing')}
           value={isStudentView ? formatCurrency(totalFee) : balances.length.toString()}
           valueColor="text-[#284342]"
           valueSize="text-3xl"
         />
 
         <SummaryCard
-          label={isStudentView ? 'Paid Amount' : 'Critical'}
+          label={isStudentView ? t('payments.outstanding.paidAmount') : t('payments.outstanding.critical')}
           value={isStudentView ? formatCurrency(totalPaid) : criticalCount.toString()}
           valueColor={isStudentView ? 'text-green-700' : 'text-red-700'}
           valueSize="text-3xl"
         />
 
         <SummaryCard
-          label="Payment Progress"
+          label={t('payments.outstanding.paymentProgress')}
           value={`${collectionRate}%`}
           valueColor="text-green-700"
           valueSize="text-3xl"
@@ -160,11 +162,11 @@ export default function OutstandingBalances() {
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)] flex items-center justify-between">
           <h2 className="text-lg text-[#284342]">
-            {isStudentView ? 'My Payment Plan' : 'Collection Follow-Up List'}
+            {isStudentView ? t('payments.outstanding.myPaymentPlan') : t('payments.outstanding.collectionFollowUp')}
           </h2>
 
           {!isStudentView && (
-            <p className="text-sm text-[#6b6b6b]">{overdueCount} overdue account(s)</p>
+            <p className="text-sm text-[#6b6b6b]">{t('payments.outstanding.overdueAccounts', { count: overdueCount })}</p>
           )}
         </div>
 
@@ -174,18 +176,18 @@ export default function OutstandingBalances() {
               <tr>
                 {!isStudentView && (
                   <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                    Student
+                    {t('payments.installments.colStudent')}
                   </th>
                 )}
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Course</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Payment Progress</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Outstanding</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Next Due</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Overdue</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Status</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colCourse')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.outstanding.paymentProgress')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.outstanding.colOutstanding')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.outstanding.colNextDue')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.outstanding.colOverdue')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colStatus')}</th>
                 {!isStudentView && (
                   <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                    Actions
+                    {t('payments.installments.colActions')}
                   </th>
                 )}
               </tr>
@@ -198,7 +200,7 @@ export default function OutstandingBalances() {
                     colSpan={isStudentView ? 6 : 8}
                     className="px-6 py-8 text-center text-[#6b6b6b]"
                   >
-                    Loading payment information...
+                    {t('payments.outstanding.loading')}
                   </td>
                 </tr>
               )}
@@ -210,8 +212,8 @@ export default function OutstandingBalances() {
                     className="px-6 py-8 text-center text-[#6b6b6b]"
                   >
                     {isStudentView
-                      ? 'No payment plan found.'
-                      : 'No outstanding balances found.'}
+                      ? t('payments.outstanding.noPlanFound')
+                      : t('payments.outstanding.noBalancesFound')}
                   </td>
                 </tr>
               )}
@@ -236,7 +238,7 @@ export default function OutstandingBalances() {
                         <td className="px-6 py-4">
                           <p className="text-sm text-[#284342]">{balance.student}</p>
                           <p className="text-xs text-[#6b6b6b] mt-1">
-                            {balance.phone || 'No phone'}
+                            {balance.phone || t('payments.outstanding.noPhone')}
                           </p>
                         </td>
                       )}
@@ -271,7 +273,7 @@ export default function OutstandingBalances() {
                       </td>
 
                       <td className="px-6 py-4 text-sm text-[#6b6b6b]">
-                        {balance.daysOverdue > 0 ? `${balance.daysOverdue} day(s)` : '-'}
+                        {balance.daysOverdue > 0 ? t('payments.outstanding.daysCount', { count: balance.daysOverdue }) : '-'}
                       </td>
 
                       <td className="px-6 py-4">
@@ -286,7 +288,7 @@ export default function OutstandingBalances() {
                                 navigate(`/app/students/profile/${balance.studentId}`)
                               }
                               className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                              title="View Student"
+                              title={t('payments.outstanding.viewStudent')}
                             >
                               <User size={16} className="text-[#284342]" />
                             </button>
@@ -294,7 +296,7 @@ export default function OutstandingBalances() {
                             <button
                               onClick={() => navigate('/app/payments/installments')}
                               className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                              title="Record Payment"
+                              title={t('payments.installments.recordPayment')}
                             >
                               <CreditCard size={16} className="text-[#284342]" />
                             </button>
@@ -303,7 +305,7 @@ export default function OutstandingBalances() {
                               <button
                                 onClick={() => sendReminder(balance)}
                                 className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                                title="Send Reminder"
+                                title={t('payments.outstanding.sendReminder')}
                               >
                                 <Send size={16} className="text-[#284342]" />
                               </button>

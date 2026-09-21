@@ -1,6 +1,7 @@
 import type { PaymentPlan } from '../../../services/paymentsService';
 import { Modal } from '../../../components/payments/Modal';
 import { FeeFields, PaymentPlanFields } from './PlanFormFields';
+import { useLanguage } from '../../../context/LanguageContext';
 
 export interface EditFormData {
   originalFee: string;
@@ -24,6 +25,8 @@ export function EditPlanModal({
   onClose: () => void;
   onUpdate: () => void;
 }) {
+  const { t } = useLanguage();
+
   function updateFee(originalFeeValue: string, discountValue: string) {
     const originalFee = Number(originalFeeValue || 0);
     const discount = Number(discountValue || 0);
@@ -44,7 +47,7 @@ export function EditPlanModal({
   return (
     <Modal>
       <div className="p-6">
-        <h2 className="text-xl text-[#284342] mb-2">Edit Payment Plan</h2>
+        <h2 className="text-xl text-[#284342] mb-2">{t('payments.plans.editTitle')}</h2>
 
         <p className="text-sm text-[#6b6b6b] mb-6">
           {plan.student} - {plan.course}
@@ -52,8 +55,7 @@ export function EditPlanModal({
 
         {paidInstallments > 0 && (
           <div className="mb-4 p-4 rounded-lg bg-yellow-50 border border-yellow-200 text-sm text-yellow-800">
-            This plan has {paidInstallments} paid installment(s). Only unpaid
-            installments will be regenerated.
+            {t('payments.plans.paidInstallmentsWarning', { count: paidInstallments })}
           </div>
         )}
 
@@ -91,14 +93,14 @@ export function EditPlanModal({
             onClick={onClose}
             className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
 
           <button
             onClick={onUpdate}
             className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors"
           >
-            Update Plan
+            {t('payments.plans.updatePlanButton')}
           </button>
         </div>
       </div>

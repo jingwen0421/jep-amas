@@ -1,15 +1,18 @@
 import { Download } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function ReportHistory({
   reports,
 }: {
   reports: any[];
 }) {
+  const { t } = useLanguage();
+
   return (
     <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
 
       <h2 className="text-xl text-[#284342] mb-6">
-        Recent Reports
+        {t('reports.history.title')}
       </h2>
 
       <div className="space-y-4">
@@ -17,7 +20,7 @@ export default function ReportHistory({
         {reports.length===0 &&
 
         <p className="text-[#6b6b6b]">
-          No reports generated yet.
+          {t('reports.history.empty')}
         </p>
 
         }

@@ -1,31 +1,33 @@
 import { Bell } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 
-const notificationTypes = [
-  'Payment Reminders',
-  'Class Reminders',
-  'Registration Notifications',
-  'Certificate Ready',
-  'Attendance Alerts',
-  'Portfolio Submitted',
+const notificationTypeKeys = [
+  'settings.notifType.paymentReminders',
+  'settings.notifType.classReminders',
+  'settings.notifType.registrationNotifications',
+  'settings.notifType.certificateReady',
+  'settings.notifType.attendanceAlerts',
+  'settings.notifType.portfolioSubmitted',
 ];
 
 export default function NotificationSettings() {
+  const { t } = useLanguage();
   return (
     <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-      <SectionTitle icon={<Bell size={22} />} title="Notification Settings" />
+      <SectionTitle icon={<Bell size={22} />} title={t('settings.notificationSettings')} />
 
       <div className="space-y-3">
-        {notificationTypes.map((item) => (
+        {notificationTypeKeys.map((key) => (
           <div
-            key={item}
+            key={key}
             className="p-4 rounded-lg border border-[rgba(40,67,66,0.1)]"
           >
-            <p className="text-sm text-[#284342] mb-3">{item}</p>
+            <p className="text-sm text-[#284342] mb-3">{t(key)}</p>
 
             <div className="grid grid-cols-3 gap-3">
-              <Toggle label="In App" />
-              <Toggle label="WhatsApp" />
-              <Toggle label="Email" />
+              <Toggle label={t('settings.channel.inApp')} />
+              <Toggle label={t('settings.channel.whatsapp')} />
+              <Toggle label={t('settings.channel.email')} />
             </div>
           </div>
         ))}

@@ -13,13 +13,14 @@ export interface DashboardAnalytics {
 }
 
 export interface ChartPoint {
-  label: string;
+  monthIndex: number;
   value: number;
 }
 
 export interface BusinessInsight {
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
+  descriptionParams?: Record<string, string | number>;
 }
 
 export async function getDashboardAnalytics(): Promise<{
@@ -182,7 +183,7 @@ function buildMonthlyRevenue(payments: any[]): ChartPoint[] {
   const months = getLastSixMonths();
 
   return months.map((month) => ({
-    label: month.label,
+    monthIndex: month.monthIndex,
     value: payments
       .filter(
         (payment) =>
@@ -199,7 +200,7 @@ function buildStudentGrowth(students: any[]): ChartPoint[] {
   const months = getLastSixMonths();
 
   return months.map((month) => ({
-    label: month.label,
+    monthIndex: month.monthIndex,
     value: students.filter(
       (student) =>
         student.created_at && String(student.created_at).slice(0, 7) <= month.key
@@ -218,7 +219,7 @@ function buildAttendanceTrend(attendance: any[]): ChartPoint[] {
 
     if (records.length === 0) {
       return {
-        label: month.label,
+        monthIndex: month.monthIndex,
         value: 0,
       };
     }
@@ -230,7 +231,7 @@ function buildAttendanceTrend(attendance: any[]): ChartPoint[] {
     ).length;
 
     return {
-      label: month.label,
+      monthIndex: month.monthIndex,
       value: Math.round((attended / records.length) * 100),
     };
   });
@@ -240,23 +241,27 @@ function buildBusinessInsights(stats: DashboardAnalytics): BusinessInsight[] {
   const insights: BusinessInsight[] = [];
 
   insights.push({
-    title: 'Revenue This Month',
-    description: `The academy collected RM ${stats.revenueThisMonth.toLocaleString()} this month.`,
+    titleKey: 'reports.insights.revenueTitle',
+    descriptionKey: 'reports.insights.revenueDesc',
+    descriptionParams: { amount: stats.revenueThisMonth.toLocaleString() },
   });
 
   insights.push({
-    title: 'Attendance Performance',
-    description: `The current attendance rate is ${stats.attendanceRate}%.`,
+    titleKey: 'reports.insights.attendanceTitle',
+    descriptionKey: 'reports.insights.attendanceDesc',
+    descriptionParams: { rate: stats.attendanceRate },
   });
 
   insights.push({
-    title: 'Outstanding Fees',
-    description: `There are RM ${stats.outstandingFees.toLocaleString()} in outstanding payments.`,
+    titleKey: 'reports.insights.outstandingTitle',
+    descriptionKey: 'reports.insights.outstandingDesc',
+    descriptionParams: { amount: stats.outstandingFees.toLocaleString() },
   });
 
   insights.push({
-    title: 'Portfolio Progress',
-    description: `Portfolio completion currently stands at ${stats.portfolioCompleted}%.`,
+    titleKey: 'reports.insights.portfolioTitle',
+    descriptionKey: 'reports.insights.portfolioDesc',
+    descriptionParams: { rate: stats.portfolioCompleted },
   });
 
   return insights;
@@ -271,7 +276,7 @@ function getLastSixMonths() {
 
     result.push({
       key: date.toISOString().slice(0, 7),
-      label: date.toLocaleString('en-US', { month: 'short' }),
+      monthIndex: date.getMonth(),
     });
   }
 

@@ -7,7 +7,8 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { SystemUser } from '../../types/user';
-import { getInitials } from '../../utils/userHelpers';
+import { getInitials, translateRole } from '../../utils/userHelpers';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface Props {
   users: SystemUser[];
@@ -26,6 +27,7 @@ export default function UserTable({
   onEdit,
   onToggleStatus,
 }: Props) {
+  const { t } = useLanguage();
   const [page, setPage] = useState(1);
   const pageSize = 8;
 
@@ -48,14 +50,14 @@ export default function UserTable({
     <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
       <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)] flex items-center justify-between">
         <div>
-          <h2 className="text-lg text-[#284342]">System Users</h2>
+          <h2 className="text-lg text-[#284342]">{t('userManagement.table.title')}</h2>
           <p className="text-xs text-[#6b6b6b] mt-1">
-            Manage account access and user status
+            {t('userManagement.table.subtitle')}
           </p>
         </div>
 
         <p className="text-sm text-[#6b6b6b]">
-          Showing {users.length} of {totalUsers}
+          {t('userManagement.table.showing', { shown: users.length, total: totalUsers })}
         </p>
       </div>
 
@@ -64,22 +66,22 @@ export default function UserTable({
           <thead className="bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
             <tr>
               <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                User
+                {t('userManagement.table.col.user')}
               </th>
               <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                Role
+                {t('userManagement.table.col.role')}
               </th>
               <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                Created
+                {t('userManagement.table.col.created')}
               </th>
               <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                Last Updated
+                {t('userManagement.table.col.lastUpdated')}
               </th>
               <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                Status
+                {t('userManagement.table.col.status')}
               </th>
               <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                Actions
+                {t('userManagement.table.col.actions')}
               </th>
             </tr>
           </thead>
@@ -91,7 +93,7 @@ export default function UserTable({
                   colSpan={6}
                   className="px-6 py-10 text-center text-[#6b6b6b]"
                 >
-                  Loading users...
+                  {t('userManagement.table.loading')}
                 </td>
               </tr>
             )}
@@ -102,7 +104,7 @@ export default function UserTable({
                   colSpan={6}
                   className="px-6 py-10 text-center text-[#6b6b6b]"
                 >
-                  No users found.
+                  {t('userManagement.table.empty')}
                 </td>
               </tr>
             )}
@@ -130,7 +132,7 @@ export default function UserTable({
 
                   <td className="px-6 py-4">
                     <span className="text-xs px-3 py-1 rounded-full bg-[#e9da95]/20 text-[#284342]">
-                      {user.role}
+                      {translateRole(user.rawRole, t)}
                     </span>
                   </td>
 
@@ -150,7 +152,7 @@ export default function UserTable({
                           : 'bg-red-100 text-red-700'
                       }`}
                     >
-                      {user.status}
+                      {user.status === 'Active' ? t('common.active') : t('common.inactive')}
                     </span>
                   </td>
 
@@ -159,7 +161,7 @@ export default function UserTable({
                       <button
                         onClick={() => onView(user)}
                         className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                        title="View"
+                        title={t('common.view')}
                       >
                         <Eye size={16} className="text-[#284342]" />
                       </button>
@@ -167,7 +169,7 @@ export default function UserTable({
                       <button
                         onClick={() => onEdit(user)}
                         className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                        title="Edit"
+                        title={t('common.edit')}
                       >
                         <Edit size={16} className="text-[#284342]" />
                       </button>
@@ -175,7 +177,7 @@ export default function UserTable({
                       <button
                         onClick={() => onToggleStatus(user)}
                         className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                        title="Activate / Deactivate"
+                        title={t('userManagement.table.toggleStatus')}
                       >
                         <Lock size={16} className="text-[#284342]" />
                       </button>
@@ -190,7 +192,7 @@ export default function UserTable({
       {!loading && users.length > pageSize && (
         <div className="p-4 border-t border-[rgba(40,67,66,0.1)] flex items-center justify-between">
           <p className="text-sm text-[#6b6b6b]">
-            Page {page} of {totalPages}
+            {t('userManagement.table.page', { page, totalPages })}
           </p>
 
           <div className="flex items-center gap-2">

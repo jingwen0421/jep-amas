@@ -1,6 +1,7 @@
 import type { EnrollmentOption } from '../../../services/paymentsService';
 import { Modal } from '../../../components/payments/Modal';
 import { FeeFields, PaymentPlanFields } from './PlanFormFields';
+import { useLanguage } from '../../../context/LanguageContext';
 
 export interface CreateFormData {
   enrollmentId: string;
@@ -26,6 +27,8 @@ export function CreatePlanModal({
   onClose: () => void;
   onCreate: () => void;
 }) {
+  const { t } = useLanguage();
+
   function updateFee(originalFeeValue: string, discountValue: string) {
     const originalFee = Number(originalFeeValue || 0);
     const discount = Number(discountValue || 0);
@@ -42,11 +45,11 @@ export function CreatePlanModal({
   return (
     <Modal>
       <div className="p-6">
-        <h2 className="text-xl text-[#284342] mb-6">Create Payment Plan</h2>
+        <h2 className="text-xl text-[#284342] mb-6">{t('payments.plans.createTitle')}</h2>
 
         <div className="space-y-4">
           <div>
-            <label className="block text-sm text-[#284342] mb-2">Student</label>
+            <label className="block text-sm text-[#284342] mb-2">{t('payments.installments.colStudent')}</label>
 
             <select
               value={formData.studentId}
@@ -68,19 +71,18 @@ export function CreatePlanModal({
               }}
               className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
             >
-              <option value="">Select Student</option>
+              <option value="">{t('payments.plans.selectStudentOption')}</option>
 
               {enrollments.map((enrollment) => (
                 <option key={enrollment.studentId} value={enrollment.studentId}>
                   {enrollment.studentName} - {enrollment.courseName}
-                  {!enrollment.hasEnrollment ? ' (No Enrollment)' : ''}
+                  {!enrollment.hasEnrollment ? ` (${t('payments.plans.noEnrollmentTag')})` : ''}
                 </option>
               ))}
             </select>
 
             <p className="text-xs text-[#6b6b6b] mt-2">
-              Students without enrollment are shown, but payment plan can only
-              be created after they are assigned to a class batch.
+              {t('payments.plans.noEnrollmentHint')}
             </p>
           </div>
 
@@ -117,14 +119,14 @@ export function CreatePlanModal({
             onClick={onClose}
             className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
 
           <button
             onClick={onCreate}
             className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors"
           >
-            Create Plan
+            {t('payments.plans.createPlanButton')}
           </button>
         </div>
       </div>

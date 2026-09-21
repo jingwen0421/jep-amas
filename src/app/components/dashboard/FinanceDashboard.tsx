@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { DollarSign, CreditCard, AlertCircle, TrendingUp, FileText, Users } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { getCurrentUser } from '../../utils/session';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface OverdueInstallment {
   id: string;
@@ -13,6 +14,7 @@ interface OverdueInstallment {
 
 export default function FinanceDashboard() {
   const currentUser = getCurrentUser();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
 
   const [totalOutstanding, setTotalOutstanding] = useState(0);
@@ -94,7 +96,7 @@ export default function FinanceDashboard() {
         const student = getSingle(plan?.students);
         return {
           id: inst.id,
-          studentName: student?.full_name || 'Student',
+          studentName: student?.full_name || t('dashboard.finance.fallbackStudent'),
           amount: Number(inst.amount || 0),
           dueDate: inst.due_date,
         };
@@ -107,13 +109,13 @@ export default function FinanceDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl text-[#284342]">Finance Dashboard</h1>
-        <p className="text-[#6b6b6b] mt-1">Welcome back, {currentUser.name}</p>
+        <h1 className="text-3xl text-[#284342]">{t('dashboard.finance.title')}</h1>
+        <p className="text-[#6b6b6b] mt-1">{t('dashboard.finance.welcome', { name: currentUser.name })}</p>
       </div>
 
       {loading && (
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
-          Loading financial overview...
+          {t('dashboard.finance.loading')}
         </div>
       )}
 
@@ -123,37 +125,37 @@ export default function FinanceDashboard() {
             <StatCard
               icon={<CreditCard size={24} />}
               color="#d4183d"
-              label="Total Outstanding"
+              label={t('dashboard.finance.totalOutstanding')}
               value={`RM ${totalOutstanding.toLocaleString()}`}
-              subtitle="Across all students"
+              subtitle={t('dashboard.finance.acrossAllStudents')}
             />
             <StatCard
               icon={<DollarSign size={24} />}
               color="#2d8659"
-              label="Collected This Month"
+              label={t('dashboard.finance.collectedThisMonth')}
               value={`RM ${collectedThisMonth.toLocaleString()}`}
-              subtitle="Payments received"
+              subtitle={t('dashboard.finance.paymentsReceived')}
             />
             <StatCard
               icon={<AlertCircle size={24} />}
               color="#d4183d"
-              label="Overdue Installments"
+              label={t('dashboard.finance.overdueInstallments')}
               value={overdueCount}
-              subtitle="Past due date"
+              subtitle={t('dashboard.finance.pastDueDate')}
             />
             <StatCard
               icon={<TrendingUp size={24} />}
               color="#284342"
-              label="Active Payment Plans"
+              label={t('dashboard.finance.activePaymentPlans')}
               value={activePlans}
-              subtitle="Currently in progress"
+              subtitle={t('dashboard.finance.currentlyInProgress')}
             />
           </div>
 
-          <Panel title="Overdue Installments" actionLabel="View Outstanding" actionLink="/app/payments/outstanding">
+          <Panel title={t('dashboard.finance.overdueInstallments')} actionLabel={t('dashboard.finance.viewOutstanding')} actionLink="/app/payments/outstanding">
             <div className="space-y-3">
               {overdueInstallments.length === 0 && (
-                <p className="text-sm text-[#6b6b6b]">No overdue installments. Great work!</p>
+                <p className="text-sm text-[#6b6b6b]">{t('dashboard.finance.noOverdue')}</p>
               )}
               {overdueInstallments.map((inst) => (
                 <div
@@ -163,7 +165,7 @@ export default function FinanceDashboard() {
                   <div>
                     <p className="text-sm text-[#284342]">{inst.studentName}</p>
                     <p className="text-xs text-[#6b6b6b] mt-1">
-                      Due {new Date(inst.dueDate).toLocaleDateString()}
+                      {t('dashboard.finance.due', { date: new Date(inst.dueDate).toLocaleDateString() })}
                     </p>
                   </div>
                   <span className="text-sm text-red-700">
@@ -175,12 +177,12 @@ export default function FinanceDashboard() {
           </Panel>
 
           <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-            <h2 className="text-xl text-[#284342] mb-4">Quick Actions</h2>
+            <h2 className="text-xl text-[#284342] mb-4">{t('dashboard.finance.quickActions')}</h2>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <QuickAction to="/app/payments/installments" icon={<DollarSign size={22} />} label="Record Payment" />
-              <QuickAction to="/app/payments/outstanding" icon={<CreditCard size={22} />} label="Outstanding" />
-              <QuickAction to="/app/students/list" icon={<Users size={22} />} label="Students" />
-              <QuickAction to="/app/reports" icon={<FileText size={22} />} label="Reports" />
+              <QuickAction to="/app/payments/installments" icon={<DollarSign size={22} />} label={t('dashboard.finance.recordPayment')} />
+              <QuickAction to="/app/payments/outstanding" icon={<CreditCard size={22} />} label={t('dashboard.finance.outstanding')} />
+              <QuickAction to="/app/students/list" icon={<Users size={22} />} label={t('dashboard.finance.students')} />
+              <QuickAction to="/app/reports" icon={<FileText size={22} />} label={t('dashboard.finance.reports')} />
             </div>
           </div>
         </>

@@ -1,13 +1,15 @@
 import { Info, Server, Code2, Database } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function AboutSystem() {
+  const { t } = useLanguage();
   const items = [
-    { label: 'System Name', value: 'JEP Academy Management System' },
-    { label: 'Version', value: '1.0.0' },
-    { label: 'Frontend', value: 'React + TypeScript' },
-    { label: 'Backend', value: 'Supabase' },
-    { label: 'Database', value: 'PostgreSQL' },
-    { label: 'Status', value: 'Development / Pre-deployment' },
+    { label: t('settings.about.systemName'), value: 'JEP Academy Management System' },
+    { label: t('settings.about.version'), value: '1.0.0' },
+    { label: t('settings.about.frontend'), value: 'React + TypeScript' },
+    { label: t('settings.about.backend'), value: 'Supabase' },
+    { label: t('settings.about.database'), value: 'PostgreSQL' },
+    { label: t('settings.about.status'), value: t('settings.about.statusValue') },
   ];
 
   return (
@@ -16,7 +18,7 @@ export default function AboutSystem() {
         <div className="p-3 rounded-lg bg-[#e9da95]/20 text-[#284342]">
           <Info size={22} />
         </div>
-        <h2 className="text-xl text-[#284342]">About System</h2>
+        <h2 className="text-xl text-[#284342]">{t('settings.about.title')}</h2>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -29,9 +31,9 @@ export default function AboutSystem() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-5">
-        <TechCard icon={<Code2 size={22} />} label="Frontend" value="React" />
-        <TechCard icon={<Server size={22} />} label="Hosting" value="Vercel Ready" />
-        <TechCard icon={<Database size={22} />} label="Database" value="Supabase" />
+        <TechCard icon={<Code2 size={22} />} label={t('settings.about.frontend')} value="React" />
+        <TechCard icon={<Server size={22} />} label={t('settings.about.hosting')} value={t('settings.about.hostingValue')} />
+        <TechCard icon={<Database size={22} />} label={t('settings.about.database')} value="Supabase" />
       </div>
     </div>
   );

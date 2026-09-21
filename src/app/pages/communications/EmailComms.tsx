@@ -7,6 +7,10 @@ import {
   fetchTemplates,
   sendEmail,
 } from '../../services/communicationService';
+import { useLanguage } from '../../context/LanguageContext';
+
+const RECIPIENT_FALLBACK = '__recipient_fallback__';
+const SUBJECT_FALLBACK = '__subject_fallback__';
 
 interface EmailRow {
   id: string;
@@ -25,6 +29,7 @@ interface RecipientOption {
 }
 
 export default function EmailComms() {
+  const { t } = useLanguage();
   const currentUser = getCurrentUser();
   const canSend = ['super_admin', 'admin', 'owner', 'finance', 'internal_sales', 'external_sales'].includes(
     currentUser.role
@@ -79,9 +84,9 @@ export default function EmailComms() {
     setEmails(
       (data || []).map((row: any) => ({
         id: row.id,
-        recipientName: row.user_id ? namesByUserId[row.user_id] || 'Recipient' : 'Recipient',
+        recipientName: row.user_id ? namesByUserId[row.user_id] || RECIPIENT_FALLBACK : RECIPIENT_FALLBACK,
         recipientUserId: row.user_id,
-        subject: row.title || '(no subject)',
+        subject: row.title || SUBJECT_FALLBACK,
         body: row.message,
         sentDate: row.sent_at || row.created_at,
         status: row.delivery_status,
@@ -151,17 +156,17 @@ export default function EmailComms() {
     const toEmail = selectedRecipient?.email || manualEmail.trim();
 
     if (!toEmail) {
-      setSendError('Choose a recipient or enter an email address.');
+      setSendError(t('emailComms.error.chooseRecipient'));
       return;
     }
 
     if (!subject.trim()) {
-      setSendError('Add a subject line.');
+      setSendError(t('emailComms.error.subjectRequired'));
       return;
     }
 
     if (!body.trim()) {
-      setSendError('Message body cannot be empty.');
+      setSendError(t('emailComms.error.bodyRequired'));
       return;
     }
 
@@ -180,7 +185,7 @@ export default function EmailComms() {
     setSending(false);
 
     if (!result.success) {
-      setSendError(result.error || 'Failed to send email.');
+      setSendError(result.error || t('emailComms.error.sendFailed'));
       return;
     }
 
@@ -196,8 +201,8 @@ export default function EmailComms() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl text-[#284342]">Email Communications</h1>
-          <p className="text-[#6b6b6b] mt-1">Send and track emails sent through the academy's Gmail</p>
+          <h1 className="text-3xl text-[#284342]">{t('emailComms.title')}</h1>
+          <p className="text-[#6b6b6b] mt-1">{t('emailComms.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -212,7 +217,7 @@ export default function EmailComms() {
               className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
             >
               <Send size={20} />
-              Compose Email
+              {t('emailComms.composeEmail')}
             </button>
           )}
         </div>
@@ -220,34 +225,34 @@ export default function EmailComms() {
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <p className="text-sm text-[#6b6b6b] mb-2">Total</p>
+          <p className="text-sm text-[#6b6b6b] mb-2">{t('emailComms.stat.total')}</p>
           <p className="text-3xl text-[#284342]">{emails.length}</p>
         </div>
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <p className="text-sm text-[#6b6b6b] mb-2">Sent</p>
+          <p className="text-sm text-[#6b6b6b] mb-2">{t('emailComms.stat.sent')}</p>
           <p className="text-3xl text-green-700">{sentCount}</p>
         </div>
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <p className="text-sm text-[#6b6b6b] mb-2">Pending</p>
+          <p className="text-sm text-[#6b6b6b] mb-2">{t('emailComms.stat.pending')}</p>
           <p className="text-3xl text-yellow-700">{pendingCount}</p>
         </div>
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <p className="text-sm text-[#6b6b6b] mb-2">Failed</p>
+          <p className="text-sm text-[#6b6b6b] mb-2">{t('emailComms.stat.failed')}</p>
           <p className="text-3xl text-red-700">{failedCount}</p>
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-lg text-[#284342]">Email History</h2>
+          <h2 className="text-lg text-[#284342]">{t('emailComms.history')}</h2>
         </div>
 
         <div className="divide-y divide-[rgba(40,67,66,0.1)]">
-          {loading && <div className="p-6 text-center text-[#6b6b6b]">Loading emails...</div>}
+          {loading && <div className="p-6 text-center text-[#6b6b6b]">{t('emailComms.loading')}</div>}
 
           {!loading && emails.length === 0 && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              No emails sent yet. {canSend ? 'Compose one to get started.' : ''}
+              {t('emailComms.empty')} {canSend ? t('emailComms.emptyHint') : ''}
             </div>
           )}
 
@@ -260,7 +265,7 @@ export default function EmailComms() {
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center justify-between gap-3 mb-1">
-                      <h3 className="text-[#284342]">{email.subject}</h3>
+                      <h3 className="text-[#284342]">{email.subject === SUBJECT_FALLBACK ? t('emailComms.noSubject') : email.subject}</h3>
                       <span
                         className={`text-xs px-3 py-1 rounded-full shrink-0 ${
                           email.status === 'sent'
@@ -270,10 +275,18 @@ export default function EmailComms() {
                             : 'bg-yellow-100 text-yellow-700'
                         }`}
                       >
-                        {email.status}
+                        {email.status === 'sent'
+                          ? t('emailComms.status.sent')
+                          : email.status === 'failed'
+                          ? t('emailComms.status.failed')
+                          : t('emailComms.status.pending')}
                       </span>
                     </div>
-                    <p className="text-sm text-[#6b6b6b] mb-2">To: {email.recipientName}</p>
+                    <p className="text-sm text-[#6b6b6b] mb-2">
+                      {t('emailComms.to', {
+                        name: email.recipientName === RECIPIENT_FALLBACK ? t('emailComms.recipientFallback') : email.recipientName,
+                      })}
+                    </p>
                     <p className="text-xs text-[#6b6b6b]">
                       {new Date(email.sentDate).toLocaleString()}
                     </p>
@@ -288,7 +301,7 @@ export default function EmailComms() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-[rgba(40,67,66,0.1)] flex items-center justify-between">
-              <h2 className="text-xl text-[#284342]">Compose Email</h2>
+              <h2 className="text-xl text-[#284342]">{t('emailComms.composeEmail')}</h2>
               <button onClick={() => setShowComposer(false)} className="text-[#6b6b6b] hover:text-[#284342]">
                 <X size={20} />
               </button>
@@ -296,7 +309,7 @@ export default function EmailComms() {
 
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm text-[#284342] mb-2">Recipient</label>
+                <label className="block text-sm text-[#284342] mb-2">{t('emailComms.recipient')}</label>
                 {selectedRecipient ? (
                   <div className="flex items-center justify-between px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-[#f8f8f6]">
                     <span className="text-sm text-[#284342]">
@@ -316,7 +329,7 @@ export default function EmailComms() {
                       <input
                         value={recipientSearch}
                         onChange={(e) => searchRecipients(e.target.value)}
-                        placeholder="Search a student or staff member by name..."
+                        placeholder={t('emailComms.recipientSearchPlaceholder')}
                         className="w-full pl-8 pr-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                       />
                       {recipientResults.length > 0 && (
@@ -337,11 +350,11 @@ export default function EmailComms() {
                         </div>
                       )}
                     </div>
-                    <p className="text-xs text-[#6b6b6b] mt-2">Or type an email address directly:</p>
+                    <p className="text-xs text-[#6b6b6b] mt-2">{t('emailComms.orTypeEmail')}</p>
                     <input
                       value={manualEmail}
                       onChange={(e) => setManualEmail(e.target.value)}
-                      placeholder="someone@email.com"
+                      placeholder={t('emailComms.emailPlaceholder')}
                       className="w-full mt-1 px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                     />
                   </>
@@ -350,16 +363,16 @@ export default function EmailComms() {
 
               {templates.length > 0 && (
                 <div>
-                  <label className="block text-sm text-[#284342] mb-2">Start from a template (optional)</label>
+                  <label className="block text-sm text-[#284342] mb-2">{t('emailComms.startFromTemplate')}</label>
                   <select
                     value={templateId}
                     onChange={(e) => applyTemplate(e.target.value)}
                     className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                   >
-                    <option value="">No template</option>
-                    {templates.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
+                    <option value="">{t('emailComms.noTemplate')}</option>
+                    {templates.map((tpl) => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {tpl.name}
                       </option>
                     ))}
                   </select>
@@ -367,28 +380,27 @@ export default function EmailComms() {
               )}
 
               <div>
-                <label className="block text-sm text-[#284342] mb-2">Subject</label>
+                <label className="block text-sm text-[#284342] mb-2">{t('emailComms.subject')}</label>
                 <input
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  placeholder="e.g., Payment Reminder"
+                  placeholder={t('emailComms.subjectPlaceholder')}
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                 />
               </div>
 
               <div>
-                <label className="block text-sm text-[#284342] mb-2">Message</label>
+                <label className="block text-sm text-[#284342] mb-2">{t('emailComms.message')}</label>
                 <textarea
                   value={body}
                   onChange={(e) => setBody(e.target.value)}
                   rows={8}
-                  placeholder="Type your message here..."
+                  placeholder={t('emailComms.messagePlaceholder')}
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                 />
                 {templateId && body.includes('{') && (
                   <p className="text-xs text-[#6b6b6b] mt-1">
-                    Tip: replace any remaining {'{placeholders}'} with real values before sending —
-                    templates aren't auto-filled yet.
+                    {t('emailComms.placeholderTip')}
                   </p>
                 )}
               </div>
@@ -405,7 +417,7 @@ export default function EmailComms() {
                 onClick={() => setShowComposer(false)}
                 className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleSend}
@@ -413,7 +425,7 @@ export default function EmailComms() {
                 className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2 disabled:opacity-50"
               >
                 <Send size={18} />
-                {sending ? 'Sending...' : 'Send Email'}
+                {sending ? t('emailComms.sending') : t('emailComms.sendEmail')}
               </button>
             </div>
           </div>

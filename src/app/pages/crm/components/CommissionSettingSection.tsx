@@ -16,29 +16,32 @@ Save
 import {
 supabase
 } from "../../../lib/supabase";
+import { useLanguage } from "../../../context/LanguageContext";
+import { useConfirm } from "../../../context/ConfirmDialogContext";
 
 
 
 
+function getTypes(t: (key: string) => string) {
+  return [
 
-const TYPES = [
+  {
+  value:"rate",
+  label:t('crm.commission.typeRate')
+  },
 
-{
-value:"rate",
-label:"Rate Commission (%)"
-},
+  {
+  value:"fixed",
+  label:t('crm.commission.typeFixed')
+  },
 
-{
-value:"fixed",
-label:"Fixed Bonus (RM)"
-},
+  {
+  value:"kpi",
+  label:t('crm.commission.typeKpi')
+  }
 
-{
-value:"kpi",
-label:"KPI Bonus"
+  ];
 }
-
-];
 
 
 
@@ -48,6 +51,9 @@ label:"KPI Bonus"
 
 export default function CommissionSettingSection(){
 
+const { t } = useLanguage();
+const confirmDialog = useConfirm();
+const TYPES = getTypes(t);
 
 
 
@@ -261,7 +267,7 @@ if(!form.name)
 {
 
 alert(
-"Rule name required"
+t('crm.commission.ruleNameRequired')
 );
 
 return;
@@ -337,9 +343,10 @@ async function remove(id:string){
 
 
 if(
-!confirm(
-"Delete this rule?"
-)
+!(await confirmDialog(
+t('crm.commission.confirmDelete'),
+{ variant: 'danger' }
+))
 )
 
 return;
@@ -444,7 +451,7 @@ font-semibold
 text-[#284342]
 ">
 
-Commission Settings
+{t('crm.commission.title')}
 
 </h2>
 
@@ -454,7 +461,7 @@ text-sm
 text-gray-500
 ">
 
-Manage sales reward calculation
+{t('crm.commission.subtitle')}
 
 </p>
 
@@ -478,7 +485,7 @@ btn-primary
 
 <Plus size={17}/>
 
-Add Rule
+{t('crm.commission.addRule')}
 
 </button>
 
@@ -519,42 +526,42 @@ p-4
 text-left
 ">
 
-Rule Name
+{t('crm.commission.colRuleName')}
 
 </th>
 
 
 <th>
 
-Type
+{t('crm.commission.colType')}
 
 </th>
 
 
 <th>
 
-Value
+{t('crm.commission.colValue')}
 
 </th>
 
 
 <th>
 
-KPI Target
+{t('crm.commission.colKpiTarget')}
 
 </th>
 
 
 <th>
 
-Status
+{t('payments.installments.colStatus')}
 
 </th>
 
 
 <th>
 
-Action
+{t('crm.commission.colAction')}
 
 </th>
 
@@ -605,7 +612,7 @@ font-medium
 
 {
 
-item.calculation_type
+TYPES.find((type:any)=>type.value===item.calculation_type)?.label || item.calculation_type
 
 }
 
@@ -689,11 +696,11 @@ item.active
 
 ?
 
-"Active"
+t('crm.commission.active')
 
 :
 
-"Disabled"
+t('crm.commission.disabled')
 
 }
 
@@ -836,9 +843,9 @@ text-[#284342]
 
 editing
 ?
-"Edit Rule"
+t('crm.commission.editRule')
 :
-"Add Rule"
+t('crm.commission.addRule')
 
 }
 
@@ -867,7 +874,7 @@ onClick={()=>setShowModal(false)}
 
 <label className="form-label">
 
-Rule Name
+{t('crm.commission.colRuleName')}
 
 </label>
 
@@ -902,7 +909,7 @@ name:e.target.value
 
 <label className="form-label">
 
-Calculation Type
+{t('crm.commission.calculationType')}
 
 </label>
 
@@ -931,17 +938,17 @@ calculation_type:e.target.value
 
 {
 
-TYPES.map(t=>(
+TYPES.map(type=>(
 
 <option
 
-key={t.value}
+key={type.value}
 
-value={t.value}
+value={type.value}
 
 >
 
-{t.label}
+{type.label}
 
 </option>
 
@@ -963,7 +970,7 @@ value={t.value}
 
 <label className="form-label">
 
-Value
+{t('crm.commission.colValue')}
 
 </label>
 
@@ -1007,7 +1014,7 @@ form.calculation_type==="kpi" &&
 
 <label className="form-label">
 
-KPI Target
+{t('crm.commission.colKpiTarget')}
 
 </label>
 
@@ -1058,7 +1065,7 @@ className="btn-primary"
 
 <Save size={16}/>
 
-Save Rule
+{t('crm.commission.saveRule')}
 
 </button>
 

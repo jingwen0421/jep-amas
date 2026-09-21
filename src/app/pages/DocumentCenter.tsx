@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react';
 import { Folder, FileText, Download, Upload, X, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
+import { useLanguage } from '../context/LanguageContext';
+
+const UPLOADER_FALLBACK = '__system__';
 
 interface DocumentItem {
   id: string;
-  name: string;
+  name: string | null;
   type: string;
   category: string;
   uploadedBy: string;
@@ -13,7 +16,34 @@ interface DocumentItem {
   fileUrl: string;
 }
 
+const CATEGORY_KEYS: Record<string, string> = {
+  Registration: 'documentCenter.category.registration',
+  Receipts: 'documentCenter.category.receipts',
+  Certificates: 'documentCenter.category.certificates',
+  Assignments: 'documentCenter.category.assignments',
+  Contracts: 'documentCenter.category.contracts',
+};
+
+function translateCategory(category: string, t: (key: string) => string) {
+  const key = CATEGORY_KEYS[category];
+  return key ? t(key) : category;
+}
+
+const FILE_TYPE_KEYS: Record<string, string> = {
+  PDF: 'documentCenter.fileType.pdf',
+  Image: 'documentCenter.fileType.image',
+  Word: 'documentCenter.fileType.word',
+  Excel: 'documentCenter.fileType.excel',
+  File: 'documentCenter.fileType.file',
+};
+
+function translateFileType(type: string, t: (key: string) => string) {
+  const key = FILE_TYPE_KEYS[type];
+  return key ? t(key) : type;
+}
+
 export default function DocumentCenter() {
+  const { t } = useLanguage();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
@@ -56,14 +86,13 @@ export default function DocumentCenter() {
 
     const mapped: DocumentItem[] = (data || []).map((doc: any) => {
       const category = doc.document_type || 'Document';
-      const fileName = getFileName(doc.file_url, category);
 
       return {
         id: doc.id,
-        name: doc.file_name || getFileName(doc.file_url, category),
+        name: doc.file_name || null,
         type: getFileType(doc.file_url),
         category,
-        uploadedBy: getUploaderName(doc.users) || getStudentName(doc.students) || 'System',
+        uploadedBy: getUploaderName(doc.users) || getStudentName(doc.students) || UPLOADER_FALLBACK,
         uploadedDate: doc.uploaded_at
           ? new Date(doc.uploaded_at).toISOString().slice(0, 10)
           : '-',
@@ -78,7 +107,7 @@ export default function DocumentCenter() {
 
   async function uploadDocument() {
     if (!file) {
-      alert('Please select a file.');
+      alert(t('documentCenter.error.selectFile'));
       return;
     }
 
@@ -96,7 +125,7 @@ export default function DocumentCenter() {
 
     if (uploadError) {
       setUploading(false);
-      alert(`Failed to upload file: ${uploadError.message}`);
+      alert(t('documentCenter.error.uploadFailed', { message: uploadError.message }));
       return;
     }
 
@@ -114,7 +143,7 @@ export default function DocumentCenter() {
 
     if (insertError) {
       setUploading(false);
-      alert(`File uploaded, but failed to save document record: ${insertError.message}`);
+      alert(t('documentCenter.error.recordFailed', { message: insertError.message }));
       return;
     }
 
@@ -156,9 +185,9 @@ export default function DocumentCenter() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl text-[#284342]">Document Center</h1>
+          <h1 className="text-3xl text-[#284342]">{t('documentCenter.title')}</h1>
           <p className="text-[#6b6b6b] mt-1">
-            Manage all academy documents and files
+            {t('documentCenter.subtitle')}
           </p>
         </div>
 
@@ -167,19 +196,19 @@ export default function DocumentCenter() {
           className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
         >
           <Upload size={20} />
-          Upload Document
+          {t('documentCenter.uploadDocument')}
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <SummaryCard
           icon={<FileText size={24} className="text-[#284342]" />}
-          label="Total Documents"
+          label={t('documentCenter.stat.totalDocuments')}
           value={documents.length.toString()}
         />
-        <SummaryCard label="Categories" value={categories.length.toString()} />
-        <SummaryCard label="This Month" value={thisMonthCount.toString()} color="text-blue-700" />
-        <SummaryCard label="Total Size" value={totalSizeLabel} />
+        <SummaryCard label={t('documentCenter.stat.categories')} value={categories.length.toString()} />
+        <SummaryCard label={t('documentCenter.stat.thisMonth')} value={thisMonthCount.toString()} color="text-blue-700" />
+        <SummaryCard label={t('documentCenter.stat.totalSize')} value={totalSizeLabel} />
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
@@ -196,9 +225,9 @@ export default function DocumentCenter() {
               }`}
             >
             <Folder size={48} className="text-[#e9da95] mb-3" />
-            <h3 className="text-sm text-[#284342] mb-1">{category}</h3>
+            <h3 className="text-sm text-[#284342] mb-1">{translateCategory(category, t)}</h3>
             <p className="text-xs text-[#6b6b6b]">
-              {documents.filter((doc) => doc.category === category).length} files
+              {t('documentCenter.fileCount', { count: documents.filter((doc) => doc.category === category).length })}
             </p>
           </div>
         ))}
@@ -208,8 +237,8 @@ export default function DocumentCenter() {
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
           <h2 className="text-lg text-[#284342]">
             {selectedCategory === 'All'
-              ? 'Recent Documents'
-              : `${selectedCategory} Documents`}
+              ? t('documentCenter.recentDocuments')
+              : t('documentCenter.categoryDocuments', { category: translateCategory(selectedCategory, t) })}
           </h2>
         </div>
 
@@ -217,13 +246,13 @@ export default function DocumentCenter() {
           <table className="w-full">
             <thead className="bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
               <tr>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Name</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Type</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Category</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Uploaded By</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Date</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Size</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Actions</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('documentCenter.col.name')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('documentCenter.col.type')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('documentCenter.col.category')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('documentCenter.col.uploadedBy')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('documentCenter.col.date')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('documentCenter.col.size')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('documentCenter.col.actions')}</th>
               </tr>
             </thead>
 
@@ -231,7 +260,7 @@ export default function DocumentCenter() {
               {loading && (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-[#6b6b6b]">
-                    Loading documents...
+                    {t('documentCenter.loading')}
                   </td>
                 </tr>
               )}
@@ -239,7 +268,7 @@ export default function DocumentCenter() {
               {!loading && filteredDocuments.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-[#6b6b6b]">
-                    No documents found.
+                    {t('documentCenter.empty')}
                   </td>
                 </tr>
               )}
@@ -250,20 +279,20 @@ export default function DocumentCenter() {
                     <td className="px-6 py-4 text-sm text-[#284342]">
                       <div className="flex items-center gap-2">
                         <FileText size={16} className="text-[#6b6b6b]" />
-                        {doc.name}
+                        {doc.name || t('documentCenter.categoryDocumentFallback', { category: translateCategory(doc.category, t) })}
                       </div>
                     </td>
 
-                    <td className="px-6 py-4 text-sm text-[#6b6b6b]">{doc.type}</td>
+                    <td className="px-6 py-4 text-sm text-[#6b6b6b]">{translateFileType(doc.type, t)}</td>
 
                     <td className="px-6 py-4">
                       <span className="text-xs px-2 py-1 rounded bg-[#e9da95]/20 text-[#284342]">
-                        {doc.category}
+                        {translateCategory(doc.category, t)}
                       </span>
                     </td>
 
                     <td className="px-6 py-4 text-sm text-[#6b6b6b]">
-                      {doc.uploadedBy}
+                      {doc.uploadedBy === UPLOADER_FALLBACK ? t('documentCenter.systemFallback') : doc.uploadedBy}
                     </td>
 
                     <td className="px-6 py-4 text-sm text-[#6b6b6b]">
@@ -277,7 +306,7 @@ export default function DocumentCenter() {
                         <button
                           onClick={() => window.open(doc.fileUrl, '_blank')}
                           className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                          title="View"
+                          title={t('common.view')}
                         >
                           <Eye size={16} className="text-[#284342]" />
                         </button>
@@ -285,7 +314,7 @@ export default function DocumentCenter() {
                         <button
                           onClick={() => window.open(doc.fileUrl, '_blank')}
                           className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                          title="Download"
+                          title={t('common.download')}
                         >
                           <Download size={16} className="text-[#284342]" />
                         </button>
@@ -302,7 +331,7 @@ export default function DocumentCenter() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-lg w-full p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl text-[#284342]">Upload Document</h2>
+              <h2 className="text-xl text-[#284342]">{t('documentCenter.uploadDocument')}</h2>
               <button onClick={() => setShowModal(false)}>
                 <X size={20} className="text-[#284342]" />
               </button>
@@ -311,7 +340,7 @@ export default function DocumentCenter() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Category
+                  {t('documentCenter.col.category')}
                 </label>
                 <select
                   value={filteredDocuments.length.toString()}
@@ -324,14 +353,14 @@ export default function DocumentCenter() {
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                 >
                   {categories.map((category) => (
-                    <option key={category}>{category}</option>
+                    <option key={category} value={category}>{translateCategory(category, t)}</option>
                   ))}
                 </select>
               </div>
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Select File
+                  {t('documentCenter.selectFile')}
                 </label>
                 <input
                   type="file"
@@ -341,7 +370,7 @@ export default function DocumentCenter() {
                 />
                 {file && (
                   <p className="text-xs text-[#6b6b6b] mt-2">
-                    Selected: {file.name}
+                    {t('documentCenter.selected', { name: file.name })}
                   </p>
                 )}
               </div>
@@ -352,7 +381,7 @@ export default function DocumentCenter() {
                 onClick={() => setShowModal(false)}
                 className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
 
               <button
@@ -360,7 +389,7 @@ export default function DocumentCenter() {
                 disabled={uploading}
                 className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors disabled:opacity-60"
               >
-                {uploading ? 'Uploading...' : 'Upload'}
+                {uploading ? t('documentCenter.uploading') : t('documentCenter.upload')}
               </button>
             </div>
           </div>

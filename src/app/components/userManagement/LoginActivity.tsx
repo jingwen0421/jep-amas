@@ -1,16 +1,19 @@
 import { Activity } from 'lucide-react';
 import type { UserActivity } from '../../types/user';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface Props {
   activities: UserActivity[];
 }
 
 export default function LoginActivity({ activities }: Props) {
+  const { t } = useLanguage();
+
   return (
     <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-lg text-[#284342]">
-          Recent Security Activity
+          {t('userManagement.loginActivity.title')}
         </h2>
 
         <Activity
@@ -23,7 +26,7 @@ export default function LoginActivity({ activities }: Props) {
 
         {activities.length === 0 && (
           <div className="text-center text-[#6b6b6b] py-8">
-            No recent activity found.
+            {t('userManagement.loginActivity.empty')}
           </div>
         )}
 

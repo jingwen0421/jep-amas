@@ -31,15 +31,17 @@ import PaymentCollectionChart from '../components/reports/PaymentCollectionChart
 import BusinessInsights from '../components/reports/BusinessInsights';
 import ReportHistory from '../components/reports/ReportHistory';
 import ReportPreview from '../components/reports/ReportPreview';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function Reports() {
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
 
   const [stats, setStats] = useState<DashboardAnalytics | null>(null);
 
-  const [revenue, setRevenue] = useState<ChartPoint[]>([]);
-  const [students, setStudents] = useState<ChartPoint[]>([]);
-  const [attendance, setAttendance] = useState<ChartPoint[]>([]);
+  const [revenue, setRevenue] = useState<{ label: string; value: number }[]>([]);
+  const [students, setStudents] = useState<{ label: string; value: number }[]>([]);
+  const [attendance, setAttendance] = useState<{ label: string; value: number }[]>([]);
 
   const [courses, setCourses] = useState<any[]>([]);
   const [history, setHistory] = useState<any[]>([]);
@@ -53,11 +55,18 @@ export default function Reports() {
   });
 
   const [selectedReport, setSelectedReport] = useState<GeneratedReport | null>(null);
-  const [generating, setGenerating] = useState(false);  
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     loadDashboard();
   }, []);
+
+  function toLabeledPoints(points: ChartPoint[]) {
+    return points.map((point) => ({
+      label: t(`reports.month.${point.monthIndex}`),
+      value: point.value,
+    }));
+  }
 
   async function handlePreviewReport() {
   setGenerating(true);
@@ -95,11 +104,11 @@ async function handleDownloadPDF() {
 
     setStats(analytics.stats);
 
-    setRevenue(analytics.revenueTrend);
+    setRevenue(toLabeledPoints(analytics.revenueTrend));
 
-    setStudents(analytics.studentGrowth);
+    setStudents(toLabeledPoints(analytics.studentGrowth));
 
-    setAttendance(analytics.attendanceTrend);
+    setAttendance(toLabeledPoints(analytics.attendanceTrend));
 
     setInsights(analytics.insights);
 
@@ -113,7 +122,7 @@ async function handleDownloadPDF() {
   if (loading || !stats) {
     return (
       <div className="p-10 text-center text-[#6b6b6b]">
-        Loading Reports...
+        {t('reports.loading')}
       </div>
     );
   }
@@ -128,11 +137,11 @@ async function handleDownloadPDF() {
         <div>
 
           <h1 className="text-3xl text-[#284342]">
-            Reports & Analytics
+            {t('reports.title')}
           </h1>
 
           <p className="text-[#6b6b6b] mt-2">
-            Academy performance dashboard and report generation
+            {t('reports.subtitle')}
           </p>
 
         </div>
@@ -164,7 +173,7 @@ async function handleDownloadPDF() {
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] p-6">
 
         <h2 className="text-xl text-[#284342] mb-6">
-          Report Generator
+          {t('reports.generator.title')}
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-5">
@@ -172,7 +181,7 @@ async function handleDownloadPDF() {
           <div>
 
             <label className="text-sm text-[#284342] block mb-2">
-              Report Type
+              {t('reports.generator.reportType')}
             </label>
 
             <select
@@ -187,27 +196,27 @@ async function handleDownloadPDF() {
             >
 
               <option value="attendance">
-                Attendance Report
+                {t('reports.type.attendance')}
               </option>
 
               <option value="payment">
-                Payment Report
+                {t('reports.type.payment')}
               </option>
 
               <option value="enrollment">
-                Enrollment Report
+                {t('reports.type.enrollment')}
               </option>
 
               <option value="portfolio">
-                Portfolio Report
+                {t('reports.type.portfolio')}
               </option>
 
               <option value="survey">
-                Student Satisfaction
+                {t('reports.type.survey')}
               </option>
 
               <option value="teacher">
-                Teacher Performance
+                {t('reports.type.teacher')}
               </option>
 
             </select>
@@ -217,7 +226,7 @@ async function handleDownloadPDF() {
           <div>
 
             <label className="text-sm text-[#284342] block mb-2">
-              Start Date
+              {t('reports.generator.startDate')}
             </label>
 
             <input
@@ -237,7 +246,7 @@ async function handleDownloadPDF() {
           <div>
 
             <label className="text-sm text-[#284342] block mb-2">
-              End Date
+              {t('reports.generator.endDate')}
             </label>
 
             <input
@@ -257,7 +266,7 @@ async function handleDownloadPDF() {
           <div>
 
             <label className="text-sm text-[#284342] block mb-2">
-              Course
+              {t('reports.generator.course')}
             </label>
 
             <select
@@ -272,7 +281,7 @@ async function handleDownloadPDF() {
             >
 
               <option value="all">
-                All Courses
+                {t('reports.generator.allCourses')}
               </option>
 
               {courses.map(course=>(
@@ -299,7 +308,7 @@ async function handleDownloadPDF() {
             className="px-6 py-3 rounded-lg bg-[#284342] text-[#e9da95] flex items-center gap-2 disabled:opacity-60"
           >
             <Eye size={18} />
-            {generating ? 'Generating...' : 'Preview Report'}
+            {generating ? t('reports.generating') : t('reports.previewReport')}
           </button>
 
           <button
@@ -311,7 +320,7 @@ async function handleDownloadPDF() {
             className="px-6 py-3 rounded-lg border flex items-center gap-2"
           >
             <Download size={18} />
-            Export PDF
+            {t('reports.exportPdf')}
           </button>
 
           <button
@@ -322,7 +331,7 @@ async function handleDownloadPDF() {
             className="px-6 py-3 rounded-lg border flex items-center gap-2"
           >
             <FileText size={18} />
-            Export Excel
+            {t('reports.exportExcel')}
           </button>
         </div>
         </div>

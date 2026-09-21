@@ -6,8 +6,12 @@ import {
 supabase
 } from "../lib/supabase";
 
+import { useLanguage } from "../context/LanguageContext";
+
 
 export default function ForgotPassword(){
+
+const { t } = useLanguage();
 
 const [email,setEmail]=useState("");
 
@@ -19,7 +23,7 @@ async function sendReset(){
 
 if(!email){
 
-alert("Please enter email");
+alert(t('forgotPassword.error.enterEmail'));
 
 return;
 
@@ -57,7 +61,7 @@ return;
 
 
 alert(
-"Password reset email sent"
+t('forgotPassword.success')
 );
 
 
@@ -92,7 +96,7 @@ text-[#284342]
 mb-5
 ">
 
-Forgot Password
+{t('forgotPassword.title')}
 
 </h1>
 
@@ -102,7 +106,7 @@ Forgot Password
 
 type="email"
 
-placeholder="Email"
+placeholder={t('forgotPassword.emailPlaceholder')}
 
 value={email}
 
@@ -142,9 +146,9 @@ rounded-lg
 {
 loading
 ?
-"Sending..."
+t('forgotPassword.sending')
 :
-"Send Reset Link"
+t('forgotPassword.sendLink')
 }
 
 </button>

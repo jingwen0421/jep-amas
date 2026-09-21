@@ -8,6 +8,9 @@ import {
   queueWhatsAppMessage,
   openWhatsAppChat,
 } from '../../services/communicationService';
+import { useLanguage } from '../../context/LanguageContext';
+
+const RECIPIENT_FALLBACK = '__recipient_fallback__';
 
 interface WhatsAppRow {
   id: string;
@@ -25,6 +28,7 @@ interface RecipientOption {
 }
 
 export default function WhatsAppComms() {
+  const { t } = useLanguage();
   const currentUser = getCurrentUser();
   const canSend = ['super_admin', 'admin', 'owner', 'finance', 'internal_sales', 'external_sales'].includes(
     currentUser.role
@@ -78,7 +82,7 @@ export default function WhatsAppComms() {
     setMessages(
       (data || []).map((row: any) => ({
         id: row.id,
-        recipientName: row.user_id ? namesByUserId[row.user_id] || 'Recipient' : 'Recipient',
+        recipientName: row.user_id ? namesByUserId[row.user_id] || RECIPIENT_FALLBACK : RECIPIENT_FALLBACK,
         phone: row.contact_phone,
         message: row.message,
         sentDate: row.sent_at || row.created_at,
@@ -148,12 +152,12 @@ export default function WhatsAppComms() {
     const phone = selectedRecipient?.phone || manualPhone.trim();
 
     if (!phone) {
-      setSendError('Choose a recipient or enter a phone number.');
+      setSendError(t('whatsappComms.error.chooseRecipient'));
       return;
     }
 
     if (!message.trim()) {
-      setSendError('Message cannot be empty.');
+      setSendError(t('whatsappComms.error.messageRequired'));
       return;
     }
 
@@ -171,7 +175,7 @@ export default function WhatsAppComms() {
     setSending(false);
 
     if (!result.success) {
-      setSendError(result.error || 'Failed to queue message.');
+      setSendError(result.error || t('whatsappComms.error.queueFailed'));
       return;
     }
 
@@ -191,8 +195,8 @@ export default function WhatsAppComms() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl text-[#284342]">WhatsApp Communications</h1>
-          <p className="text-[#6b6b6b] mt-1">Queue and send WhatsApp messages</p>
+          <h1 className="text-3xl text-[#284342]">{t('whatsappComms.title')}</h1>
+          <p className="text-[#6b6b6b] mt-1">{t('whatsappComms.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -207,7 +211,7 @@ export default function WhatsAppComms() {
               className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
             >
               <Send size={20} />
-              Send Message
+              {t('whatsappComms.sendMessage')}
             </button>
           )}
         </div>
@@ -216,39 +220,36 @@ export default function WhatsAppComms() {
       <div className="bg-blue-50 border border-blue-200 rounded-xl p-4 flex items-start gap-3">
         <ShieldAlert size={20} className="text-blue-700 shrink-0 mt-0.5" />
         <p className="text-sm text-blue-900">
-          WhatsApp messages are sent manually through your own WhatsApp — we don't automate this
-          channel (the WhatsApp Business API needs a verified business account and stricter
-          security review). Every message here opens a pre-filled chat for you to review and send
-          yourself, and gets logged below either way.
+          {t('whatsappComms.manualBanner')}
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <p className="text-sm text-[#6b6b6b] mb-2">Total Logged</p>
+          <p className="text-sm text-[#6b6b6b] mb-2">{t('whatsappComms.stat.totalLogged')}</p>
           <p className="text-3xl text-[#284342]">{messages.length}</p>
         </div>
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <p className="text-sm text-[#6b6b6b] mb-2">Marked Sent</p>
+          <p className="text-sm text-[#6b6b6b] mb-2">{t('whatsappComms.stat.markedSent')}</p>
           <p className="text-3xl text-green-700">{sentCount}</p>
         </div>
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <p className="text-sm text-[#6b6b6b] mb-2">Pending</p>
+          <p className="text-sm text-[#6b6b6b] mb-2">{t('whatsappComms.stat.pending')}</p>
           <p className="text-3xl text-yellow-700">{pendingCount}</p>
         </div>
       </div>
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-lg text-[#284342]">Message History</h2>
+          <h2 className="text-lg text-[#284342]">{t('whatsappComms.history')}</h2>
         </div>
 
         <div className="divide-y divide-[rgba(40,67,66,0.1)]">
-          {loading && <div className="p-6 text-center text-[#6b6b6b]">Loading messages...</div>}
+          {loading && <div className="p-6 text-center text-[#6b6b6b]">{t('whatsappComms.loading')}</div>}
 
           {!loading && messages.length === 0 && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              No WhatsApp messages logged yet. {canSend ? 'Send one to get started.' : ''}
+              {t('whatsappComms.empty')} {canSend ? t('whatsappComms.emptyHint') : ''}
             </div>
           )}
 
@@ -262,8 +263,8 @@ export default function WhatsAppComms() {
                   <div className="flex-1">
                     <div className="flex items-center justify-between mb-2">
                       <div>
-                        <h3 className="text-lg text-[#284342]">{msg.recipientName}</h3>
-                        <p className="text-sm text-[#6b6b6b]">{msg.phone || 'No phone on file'}</p>
+                        <h3 className="text-lg text-[#284342]">{msg.recipientName === RECIPIENT_FALLBACK ? t('whatsappComms.recipientFallback') : msg.recipientName}</h3>
+                        <p className="text-sm text-[#6b6b6b]">{msg.phone || t('whatsappComms.noPhoneOnFile')}</p>
                       </div>
                       <div className="flex items-center gap-2">
                         <span
@@ -273,13 +274,13 @@ export default function WhatsAppComms() {
                               : 'bg-yellow-100 text-yellow-700'
                           }`}
                         >
-                          {msg.status}
+                          {msg.status === 'sent' ? t('whatsappComms.status.sent') : t('whatsappComms.status.pending')}
                         </span>
                         {msg.phone && (
                           <button
                             onClick={() => openWhatsAppChat(msg.phone!, msg.message)}
                             className="p-2 rounded-lg hover:bg-green-50"
-                            title="Open in WhatsApp"
+                            title={t('notifications.openWhatsapp')}
                           >
                             <MessageCircle size={16} className="text-green-700" />
                           </button>
@@ -303,7 +304,7 @@ export default function WhatsAppComms() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
             <div className="p-6 border-b border-[rgba(40,67,66,0.1)] flex items-center justify-between">
-              <h2 className="text-xl text-[#284342]">Send WhatsApp Message</h2>
+              <h2 className="text-xl text-[#284342]">{t('whatsappComms.sendMessage')}</h2>
               <button onClick={() => setShowComposer(false)} className="text-[#6b6b6b] hover:text-[#284342]">
                 <X size={20} />
               </button>
@@ -311,7 +312,7 @@ export default function WhatsAppComms() {
 
             <div className="p-6 space-y-4">
               <div>
-                <label className="block text-sm text-[#284342] mb-2">Recipient</label>
+                <label className="block text-sm text-[#284342] mb-2">{t('emailComms.recipient')}</label>
                 {selectedRecipient ? (
                   <div className="flex items-center justify-between px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-[#f8f8f6]">
                     <span className="text-sm text-[#284342]">
@@ -331,7 +332,7 @@ export default function WhatsAppComms() {
                       <input
                         value={recipientSearch}
                         onChange={(e) => searchRecipients(e.target.value)}
-                        placeholder="Search a student or staff member by name..."
+                        placeholder={t('emailComms.recipientSearchPlaceholder')}
                         className="w-full pl-8 pr-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                       />
                       {recipientResults.length > 0 && (
@@ -352,7 +353,7 @@ export default function WhatsAppComms() {
                         </div>
                       )}
                     </div>
-                    <p className="text-xs text-[#6b6b6b] mt-2">Or type a phone number directly:</p>
+                    <p className="text-xs text-[#6b6b6b] mt-2">{t('whatsappComms.orTypePhone')}</p>
                     <input
                       value={manualPhone}
                       onChange={(e) => setManualPhone(e.target.value)}
@@ -365,16 +366,16 @@ export default function WhatsAppComms() {
 
               {templates.length > 0 && (
                 <div>
-                  <label className="block text-sm text-[#284342] mb-2">Start from a template (optional)</label>
+                  <label className="block text-sm text-[#284342] mb-2">{t('emailComms.startFromTemplate')}</label>
                   <select
                     value={templateId}
                     onChange={(e) => applyTemplate(e.target.value)}
                     className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                   >
-                    <option value="">No template</option>
-                    {templates.map((t) => (
-                      <option key={t.id} value={t.id}>
-                        {t.name}
+                    <option value="">{t('emailComms.noTemplate')}</option>
+                    {templates.map((tpl) => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {tpl.name}
                       </option>
                     ))}
                   </select>
@@ -382,12 +383,12 @@ export default function WhatsAppComms() {
               )}
 
               <div>
-                <label className="block text-sm text-[#284342] mb-2">Message</label>
+                <label className="block text-sm text-[#284342] mb-2">{t('emailComms.message')}</label>
                 <textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
                   rows={6}
-                  placeholder="Type your message here..."
+                  placeholder={t('emailComms.messagePlaceholder')}
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                 />
               </div>
@@ -404,7 +405,7 @@ export default function WhatsAppComms() {
                 onClick={() => setShowComposer(false)}
                 className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleSend}
@@ -412,7 +413,7 @@ export default function WhatsAppComms() {
                 className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2 disabled:opacity-50"
               >
                 <Send size={18} />
-                {sending ? 'Queueing...' : 'Open in WhatsApp'}
+                {sending ? t('whatsappComms.queueing') : t('whatsappComms.openInWhatsapp')}
               </button>
             </div>
           </div>

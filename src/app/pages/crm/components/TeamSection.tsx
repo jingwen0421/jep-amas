@@ -5,8 +5,24 @@ Briefcase,
 DollarSign,
 TrendingUp
 } from "lucide-react";
+import { useLanguage } from "../../../context/LanguageContext";
 
-
+function roleLabel(role: string, t: (key: string) => string) {
+  switch (role) {
+    case "teacher":
+      return t('login.role.teacher');
+    case "internal_sales":
+      return t('login.role.internalSales');
+    case "external_sales":
+      return t('login.role.externalSales');
+    case "super_admin":
+      return t('crm.team.roleSuperAdmin');
+    case "admin":
+      return t('login.role.admin');
+    default:
+      return role;
+  }
+}
 
 export default function TeamSection({
 
@@ -21,6 +37,8 @@ commissions,
 currentUser
 
 }:any){
+
+const { t } = useLanguage();
 
 
 
@@ -213,7 +231,7 @@ font-semibold
 text-[#284342]
 ">
 
-Sales Team Performance
+{t('crm.team.title')}
 
 </h2>
 
@@ -236,7 +254,7 @@ p-6
 text-gray-500
 ">
 
-No sales team member found.
+{t('crm.team.empty')}
 
 </div>
 
@@ -274,6 +292,8 @@ key={person.id}
 person={person}
 
 stats={getStats(person)}
+
+t={t}
 
 />
 
@@ -314,7 +334,9 @@ function TeamCard({
 
 person,
 
-stats
+stats,
+
+t
 
 }:any){
 
@@ -381,7 +403,7 @@ text-sm
 text-gray-500
 ">
 
-{person.role}
+{roleLabel(person.role, t)}
 
 </p>
 
@@ -415,7 +437,7 @@ gap-4
 
 icon={<Users size={18}/>}
 
-label="Leads"
+label={t('crm.team.leads')}
 
 value={stats.leads}
 
@@ -429,7 +451,7 @@ value={stats.leads}
 
 icon={<Target size={18}/>}
 
-label="Converted"
+label={t('crm.status.converted')}
 
 value={stats.converted}
 
@@ -443,7 +465,7 @@ value={stats.converted}
 
 icon={<Briefcase size={18}/>}
 
-label="Deals"
+label={t('crm.team.deals')}
 
 value={stats.deals}
 
@@ -457,7 +479,7 @@ value={stats.deals}
 
 icon={<DollarSign size={18}/>}
 
-label="Revenue"
+label={t('crm.team.revenue')}
 
 value={
 
@@ -475,7 +497,7 @@ value={
 
 icon={<TrendingUp size={18}/>}
 
-label="Commission"
+label={t('crm.dashboard.commission')}
 
 value={
 

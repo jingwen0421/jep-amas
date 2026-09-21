@@ -18,10 +18,14 @@ import { PlanStatusBadge } from '../../components/payments/StatusBadges';
 import { PlanDetailsModal } from './components/PlanDetailsModal';
 import { CreatePlanModal, type CreateFormData } from './components/CreatePlanModal';
 import { EditPlanModal, type EditFormData } from './components/EditPlanModal';
+import { useLanguage } from '../../context/LanguageContext';
+import { useConfirm } from '../../context/ConfirmDialogContext';
 
 export default function PaymentPlans() {
   const navigate = useNavigate();
   const currentUser = getCurrentUser();
+  const { t } = useLanguage();
+  const confirmDialog = useConfirm();
 
   const isStudentView = currentUser.role === 'student';
 
@@ -100,14 +104,12 @@ export default function PaymentPlans() {
     );
 
     if (!selectedStudent) {
-      alert('Please select a student.');
+      alert(t('payments.plans.selectStudent'));
       return;
     }
 
     if (!selectedStudent.hasEnrollment || !selectedStudent.id) {
-      alert(
-        'This student does not have an enrollment/class batch yet. Please assign the student to a class batch before creating a payment plan.'
-      );
+      alert(t('payments.plans.noEnrollment'));
       return;
     }
 
@@ -118,7 +120,7 @@ export default function PaymentPlans() {
       .maybeSingle();
 
     if (existingPlan) {
-      alert('This student already has a payment plan. Please edit the existing plan instead.');
+      alert(t('payments.plans.alreadyHasPlan'));
       return;
     }
 
@@ -127,12 +129,12 @@ export default function PaymentPlans() {
     const finalAmount = originalFee - discountAmount;
 
     if (!originalFee || originalFee <= 0) {
-      alert('Please enter valid original fee.');
+      alert(t('payments.plans.invalidOriginalFee'));
       return;
     }
 
     if (discountAmount < 0 || discountAmount >= originalFee) {
-      alert('Discount must be lower than original fee.');
+      alert(t('payments.plans.discountTooHigh'));
       return;
     }
 
@@ -153,7 +155,7 @@ export default function PaymentPlans() {
       .single();
 
     if (error) {
-      alert(`Failed to create payment plan: ${error.message}`);
+      alert(t('payments.plans.errorCreateFailed', { message: error.message }));
       return;
     }
 
@@ -170,7 +172,7 @@ export default function PaymentPlans() {
       .insert(installmentRows);
 
     if (installmentError) {
-      alert(`Plan created, but failed to create installments: ${installmentError.message}`);
+      alert(t('payments.plans.errorCreateInstallmentsFailed', { message: installmentError.message }));
       return;
     }
 
@@ -232,9 +234,9 @@ export default function PaymentPlans() {
     );
 
     if (paidInstallments.length > 0) {
-      const confirmed = confirm(
-        'This plan already has paid installment(s). Updating will only regenerate unpaid installments. Continue?'
-      );
+      const confirmed = await confirmDialog(t('payments.plans.confirmRegenerateUnpaid'), {
+        variant: 'danger',
+      });
 
       if (!confirmed) return;
     }
@@ -244,12 +246,12 @@ export default function PaymentPlans() {
     const finalAmount = originalFee - discountAmount;
 
     if (!originalFee || originalFee <= 0) {
-      alert('Please enter valid original fee.');
+      alert(t('payments.plans.invalidOriginalFee'));
       return;
     }
 
     if (discountAmount < 0 || discountAmount >= originalFee) {
-      alert('Discount must be lower than original fee.');
+      alert(t('payments.plans.discountTooHigh'));
       return;
     }
 
@@ -269,7 +271,7 @@ export default function PaymentPlans() {
       .eq('id', editingPlan.id);
 
     if (planError) {
-      alert(`Failed to update payment plan: ${planError.message}`);
+      alert(t('payments.plans.errorUpdateFailed', { message: planError.message }));
       return;
     }
 
@@ -284,9 +286,7 @@ export default function PaymentPlans() {
         .in('id', unpaidIds);
 
       if (deleteError) {
-        alert(
-          `Plan updated, but failed to remove old unpaid installments: ${deleteError.message}`
-        );
+        alert(t('payments.plans.errorRemoveInstallmentsFailed', { message: deleteError.message }));
         return;
       }
     }
@@ -305,9 +305,7 @@ export default function PaymentPlans() {
         .insert(installmentRows);
 
       if (installmentError) {
-        alert(
-          `Plan updated, but failed to regenerate installments: ${installmentError.message}`
-        );
+        alert(t('payments.plans.errorRegenerateInstallmentsFailed', { message: installmentError.message }));
         return;
       }
     }
@@ -337,7 +335,7 @@ export default function PaymentPlans() {
 
     setEditingPlan(null);
     fetchPaymentPlans();
-    alert('Payment plan updated successfully.');
+    alert(t('payments.plans.updateSuccess'));
   }
 
   async function sendReminder(plan: PaymentPlan) {
@@ -358,7 +356,7 @@ export default function PaymentPlans() {
       window.open(result.whatsapp.waLink, '_blank');
     }
 
-    alert(`Reminder sent to ${plan.student}.`);
+    alert(t('payments.outstanding.reminderSent', { name: plan.student }));
   }
 
   function resetCreateForm() {
@@ -385,18 +383,24 @@ export default function PaymentPlans() {
     .filter((item) => item.status === 'Overdue')
     .reduce((sum, item) => sum + Math.max(item.totalFee - item.paidAmount, 0), 0);
 
+  function planTypeLabel(rawPlanType: string) {
+    if (rawPlanType === 'full_payment') return t('payments.plans.typeFullPayment');
+    if (rawPlanType === 'deposit_balance') return t('payments.plans.typeDepositBalance');
+    return t('payments.plans.typeInstallments');
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl text-[#284342]">
-            {isStudentView ? 'My Payment Plan' : 'Payment Plans'}
+            {isStudentView ? t('payments.plans.titleStudent') : t('payments.plans.title')}
           </h1>
 
           <p className="text-[#6b6b6b] mt-1">
             {isStudentView
-              ? 'View your tuition fee, payment plan and installment progress.'
-              : 'Create, edit and monitor student payment plans.'}
+              ? t('payments.plans.subtitleStudent')
+              : t('payments.plans.subtitle')}
           </p>
         </div>
 
@@ -409,7 +413,7 @@ export default function PaymentPlans() {
             className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
           >
             <Plus size={20} />
-            Create Payment Plan
+            {t('payments.plans.createButton')}
           </button>
         )}
       </div>
@@ -418,21 +422,21 @@ export default function PaymentPlans() {
         <SummaryCard
           icon={<DollarSign size={24} className="text-green-700" />}
           iconBoxClass="bg-green-50"
-          label={isStudentView ? 'My Paid Amount' : 'Total Collected'}
+          label={isStudentView ? t('payments.receipts.myPaidAmount') : t('payments.plans.totalCollected')}
           value={formatCurrency(totalCollected)}
         />
 
         <SummaryCard
           icon={<DollarSign size={24} className="text-yellow-700" />}
           iconBoxClass="bg-yellow-50"
-          label={isStudentView ? 'My Outstanding' : 'Outstanding Amount'}
+          label={isStudentView ? t('payments.outstanding.myOutstanding') : t('payments.plans.outstandingAmount')}
           value={formatCurrency(totalOutstanding)}
         />
 
         <SummaryCard
           icon={<DollarSign size={24} className="text-red-700" />}
           iconBoxClass="bg-red-50"
-          label={isStudentView ? 'Overdue Amount' : 'Overdue Payments'}
+          label={isStudentView ? t('payments.plans.overdueAmount') : t('payments.plans.overduePayments')}
           value={formatCurrency(overdueAmount)}
         />
       </div>
@@ -440,7 +444,7 @@ export default function PaymentPlans() {
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)] flex items-center justify-between">
           <h2 className="text-lg text-[#284342]">
-            {isStudentView ? 'My Active Payment Plan' : 'Active Payment Plans'}
+            {isStudentView ? t('payments.plans.myActivePlan') : t('payments.plans.activePlans')}
           </h2>
 
           {canManagePaymentPlans && (
@@ -449,18 +453,18 @@ export default function PaymentPlans() {
               className="text-sm text-[#284342] flex items-center gap-2 hover:underline"
             >
               <RefreshCw size={15} />
-              Refresh
+              {t('payments.plans.refresh')}
             </button>
           )}
         </div>
 
         <div className="divide-y divide-[rgba(40,67,66,0.1)]">
           {loading && (
-            <div className="p-6 text-center text-[#6b6b6b]">Loading payment plans...</div>
+            <div className="p-6 text-center text-[#6b6b6b]">{t('payments.plans.loading')}</div>
           )}
 
           {!loading && plans.length === 0 && (
-            <div className="p-6 text-center text-[#6b6b6b]">No payment plans found.</div>
+            <div className="p-6 text-center text-[#6b6b6b]">{t('payments.plans.empty')}</div>
           )}
 
           {!loading &&
@@ -486,17 +490,17 @@ export default function PaymentPlans() {
                       )}
 
                       <div className="grid grid-cols-2 md:grid-cols-6 gap-4 text-sm">
-                        <Info label="Plan Type" value={plan.planType} />
-                        <Info label="Original Fee" value={formatCurrency(plan.originalFee)} />
-                        <Info label="Discount" value={formatCurrency(plan.discountAmount)} />
-                        <Info label="Final Fee" value={formatCurrency(plan.totalFee)} />
-                        <InfoGreen label="Paid" value={formatCurrency(plan.paidAmount)} />
-                        <InfoRed label="Outstanding" value={formatCurrency(outstanding)} />
+                        <Info label={t('payments.plans.planType')} value={planTypeLabel(plan.rawPlanType)} />
+                        <Info label={t('payments.plans.originalFee')} value={formatCurrency(plan.originalFee)} />
+                        <Info label={t('payments.plans.discount')} value={formatCurrency(plan.discountAmount)} />
+                        <Info label={t('payments.plans.finalFee')} value={formatCurrency(plan.totalFee)} />
+                        <InfoGreen label={t('dashboard.paid')} value={formatCurrency(plan.paidAmount)} />
+                        <InfoRed label={t('payments.outstanding.colOutstanding')} value={formatCurrency(outstanding)} />
                       </div>
 
                       <div className="mt-4">
                         <div className="flex items-center justify-between mb-2">
-                          <span className="text-xs text-[#6b6b6b]">Payment Progress</span>
+                          <span className="text-xs text-[#6b6b6b]">{t('payments.outstanding.paymentProgress')}</span>
 
                           <span className="text-xs text-[#284342]">{progress}%</span>
                         </div>
@@ -510,7 +514,7 @@ export default function PaymentPlans() {
                       </div>
 
                       <p className="text-xs text-[#6b6b6b] mt-3">
-                        Next payment: {plan.nextPayment} • {formatCurrency(plan.nextAmount)}
+                        {t('payments.plans.nextPayment', { date: plan.nextPayment, amount: formatCurrency(plan.nextAmount) })}
                       </p>
                     </div>
                   </div>
@@ -521,7 +525,7 @@ export default function PaymentPlans() {
                         onClick={() => navigate('/app/payments/installments')}
                         className="px-4 py-2 rounded-lg bg-[#284342] text-[#e9da95] hover:bg-[#1a2f2e] transition-colors text-sm"
                       >
-                        Record Payment
+                        {t('payments.installments.recordPayment')}
                       </button>
                     )}
 
@@ -530,7 +534,7 @@ export default function PaymentPlans() {
                       className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm flex items-center gap-2"
                     >
                       <Eye size={16} />
-                      View Details
+                      {t('payments.plans.viewDetails')}
                     </button>
 
                     {canManagePaymentPlans && (
@@ -539,7 +543,7 @@ export default function PaymentPlans() {
                         className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm flex items-center gap-2"
                       >
                         <Edit size={16} />
-                        Edit Plan
+                        {t('payments.plans.editPlan')}
                       </button>
                     )}
 
@@ -549,7 +553,7 @@ export default function PaymentPlans() {
                         className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm flex items-center gap-2"
                       >
                         <Send size={16} />
-                        Send Reminder
+                        {t('payments.plans.sendReminder')}
                       </button>
                     )}
                   </div>

@@ -13,6 +13,7 @@ import {
 import { supabase } from '../../lib/supabase';
 import { getCurrentUser } from '../../utils/session';
 import { getCurrentStudentId } from '../../utils/studentAccess';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface UpcomingClass {
   id: string;
@@ -29,8 +30,11 @@ interface ModuleProgress {
   sequence: number;
 }
 
+type ActionType = 'outstanding' | 'revision';
+
 export default function StudentDashboard() {
   const currentUser = getCurrentUser();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [studentId, setStudentId] = useState('');
 
@@ -39,7 +43,7 @@ export default function StudentDashboard() {
   const [attendanceRate, setAttendanceRate] = useState(0);
   const [outstanding, setOutstanding] = useState(0);
   const [pendingActions, setPendingActions] = useState<
-    { id: string; title: string; description: string; link: string }[]
+    { id: string; type: ActionType; description: string; link: string }[]
   >([]);
 
   useEffect(() => {
@@ -126,7 +130,7 @@ export default function StudentDashboard() {
 
         return {
           id: lesson.id,
-          title: module?.title || lesson.lesson_title || 'Class',
+          title: module?.title || lesson.lesson_title || t('dashboard.student.fallback.class'),
           datetime: lesson.lesson_datetime,
           teacher: teacherUser?.full_name || teacher?.specialization || '-',
           room: room?.room_name || '-',
@@ -164,7 +168,7 @@ export default function StudentDashboard() {
           const module = getSingle(row.course_modules);
           return {
             id: row.id,
-            title: module?.title || 'Module',
+            title: module?.title || t('dashboard.student.fallback.module'),
             status: row.status,
             sequence: module?.sequence || 0,
           };
@@ -172,14 +176,16 @@ export default function StudentDashboard() {
         .sort((a: any, b: any) => a.sequence - b.sequence)
     );
 
-    const actions: { id: string; title: string; description: string; link: string }[] =
+    const actions: { id: string; type: ActionType; description: string; link: string }[] =
       [];
 
     if (Math.max(totalExpected - totalPaid, 0) > 0) {
       actions.push({
         id: 'outstanding',
-        title: 'Outstanding Balance',
-        description: `RM ${Math.max(totalExpected - totalPaid, 0).toLocaleString()} due`,
+        type: 'outstanding',
+        description: t('dashboard.student.action.outstandingDesc', {
+          amount: `RM ${Math.max(totalExpected - totalPaid, 0).toLocaleString()}`,
+        }),
         link: '/app/payments/outstanding',
       });
     }
@@ -187,8 +193,8 @@ export default function StudentDashboard() {
     (portfolioRes.data || []).forEach((item: any) => {
       actions.push({
         id: `portfolio-${item.id}`,
-        title: 'Portfolio Needs Revision',
-        description: 'A teacher requested changes to your submission',
+        type: 'revision',
+        description: t('dashboard.student.action.revisionDesc'),
         link: '/app/portfolio/submissions',
       });
     });
@@ -202,20 +208,19 @@ export default function StudentDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl text-[#284342]">My Dashboard</h1>
-        <p className="text-[#6b6b6b] mt-1">Welcome back, {currentUser.name}</p>
+        <h1 className="text-3xl text-[#284342]">{t('dashboard.student.title')}</h1>
+        <p className="text-[#6b6b6b] mt-1">{t('dashboard.student.welcome', { name: currentUser.name })}</p>
       </div>
 
       {loading && (
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
-          Loading your dashboard...
+          {t('dashboard.student.loading')}
         </div>
       )}
 
       {!loading && !studentId && (
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
-          We couldn't find a student profile linked to your account. Please contact
-          the academy.
+          {t('dashboard.student.noProfile')}
         </div>
       )}
 
@@ -225,38 +230,38 @@ export default function StudentDashboard() {
             <StatCard
               icon={<Calendar size={24} />}
               color="#284342"
-              label="Upcoming Classes"
+              label={t('dashboard.student.upcomingClasses')}
               value={upcomingClasses.length}
-              subtitle="Scheduled sessions"
+              subtitle={t('dashboard.student.scheduledSessions')}
             />
             <StatCard
               icon={<CheckCircle2 size={24} />}
               color="#2d8659"
-              label="Attendance Rate"
+              label={t('dashboard.student.attendanceRate')}
               value={`${attendanceRate}%`}
-              subtitle="Overall attendance"
+              subtitle={t('dashboard.student.overallAttendance')}
             />
             <StatCard
               icon={<CreditCard size={24} />}
               color="#d4183d"
-              label="Outstanding Balance"
+              label={t('dashboard.student.outstandingBalance')}
               value={`RM ${outstanding.toLocaleString()}`}
-              subtitle="Remaining fees"
+              subtitle={t('dashboard.student.remainingFees')}
             />
             <StatCard
               icon={<BookOpen size={24} />}
               color="#6b8e8d"
-              label="Modules Completed"
+              label={t('dashboard.student.modulesCompleted')}
               value={`${completedModules}/${modules.length}`}
-              subtitle="Course progress"
+              subtitle={t('dashboard.student.courseProgress')}
             />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Panel title="My Upcoming Classes" actionLabel="View Calendar" actionLink="/app/calendar">
+            <Panel title={t('dashboard.student.myUpcomingClasses')} actionLabel={t('dashboard.student.viewCalendar')} actionLink="/app/calendar">
               <div className="space-y-3">
                 {upcomingClasses.length === 0 && (
-                  <p className="text-sm text-[#6b6b6b]">No upcoming classes scheduled.</p>
+                  <p className="text-sm text-[#6b6b6b]">{t('dashboard.student.noUpcomingClasses')}</p>
                 )}
                 {upcomingClasses.map((cls) => (
                   <div
@@ -276,10 +281,10 @@ export default function StudentDashboard() {
               </div>
             </Panel>
 
-            <Panel title="Pending Actions" actionLabel="Notifications" actionLink="/app/notifications">
+            <Panel title={t('dashboard.student.pendingActions')} actionLabel={t('dashboard.student.notifications')} actionLink="/app/notifications">
               <div className="space-y-3">
                 {pendingActions.length === 0 && (
-                  <p className="text-sm text-[#6b6b6b]">Nothing needs your attention.</p>
+                  <p className="text-sm text-[#6b6b6b]">{t('dashboard.student.nothingNeedsAttention')}</p>
                 )}
                 {pendingActions.map((action) => (
                   <Link
@@ -288,10 +293,12 @@ export default function StudentDashboard() {
                     className="flex items-start gap-3 p-4 rounded-lg bg-[#f8f8f6] hover:bg-[#e9da95]/20 transition-colors"
                   >
                     <div className="flex-1">
-                      <p className="text-sm text-[#284342]">{action.title}</p>
+                      <p className="text-sm text-[#284342]">
+                        {t(action.type === 'outstanding' ? 'dashboard.student.action.outstandingTitle' : 'dashboard.student.action.revisionTitle')}
+                      </p>
                       <p className="text-xs text-[#6b6b6b] mt-1">{action.description}</p>
                     </div>
-                    <span className="text-xs text-[#284342]">Open</span>
+                    <span className="text-xs text-[#284342]">{t('dashboard.student.open')}</span>
                   </Link>
                 ))}
               </div>
@@ -299,10 +306,10 @@ export default function StudentDashboard() {
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <Panel title="Course Modules" actionLabel="View Progress" actionLink="/app/students/progress">
+            <Panel title={t('dashboard.student.courseModules')}>
               <div className="space-y-2">
                 {modules.length === 0 && (
-                  <p className="text-sm text-[#6b6b6b]">No modules assigned yet.</p>
+                  <p className="text-sm text-[#6b6b6b]">{t('dashboard.student.noModulesYet')}</p>
                 )}
                 {modules.map((m) => (
                   <div
@@ -319,7 +326,7 @@ export default function StudentDashboard() {
                           : 'bg-gray-100 text-[#6b6b6b]'
                       }`}
                     >
-                      {formatStatus(m.status)}
+                      {formatModuleStatus(m.status, t)}
                     </span>
                   </div>
                 ))}
@@ -327,12 +334,12 @@ export default function StudentDashboard() {
             </Panel>
 
             <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-              <h2 className="text-xl text-[#284342] mb-4">Quick Actions</h2>
+              <h2 className="text-xl text-[#284342] mb-4">{t('dashboard.student.quickActions')}</h2>
               <div className="grid grid-cols-2 gap-4">
-                <QuickAction to="/app/events" icon={<PartyPopper size={22} />} label="My Events" />
-                <QuickAction to="/app/portfolio/submissions" icon={<MessageSquare size={22} />} label="My Portfolio" />
-                <QuickAction to="/app/payments/outstanding" icon={<CreditCard size={22} />} label="My Payments" />
-                <QuickAction to="/app/certificates/completion" icon={<Award size={22} />} label="Certificates" />
+                <QuickAction to="/app/events" icon={<PartyPopper size={22} />} label={t('dashboard.student.myEvents')} />
+                <QuickAction to="/app/portfolio/submissions" icon={<MessageSquare size={22} />} label={t('dashboard.student.myPortfolio')} />
+                <QuickAction to="/app/payments/outstanding" icon={<CreditCard size={22} />} label={t('dashboard.student.myPayments')} />
+                <QuickAction to="/app/certificates/completion" icon={<Award size={22} />} label={t('dashboard.student.certificates')} />
               </div>
             </div>
           </div>
@@ -377,17 +384,19 @@ function Panel({
   children,
 }: {
   title: string;
-  actionLabel: string;
-  actionLink: string;
+  actionLabel?: string;
+  actionLink?: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
       <div className="flex items-center justify-between mb-6">
         <h2 className="text-xl text-[#284342]">{title}</h2>
-        <Link to={actionLink} className="text-sm text-[#284342] hover:underline">
-          {actionLabel}
-        </Link>
+        {actionLabel && actionLink && (
+          <Link to={actionLink} className="text-sm text-[#284342] hover:underline">
+            {actionLabel}
+          </Link>
+        )}
       </div>
       {children}
     </div>
@@ -411,8 +420,12 @@ function getSingle(value: any) {
   return Array.isArray(value) ? value[0] || null : value;
 }
 
-function formatStatus(status: string) {
-  return String(status || '')
+function formatModuleStatus(status: string, t: (key: string) => string) {
+  if (status === 'completed') return t('dashboard.student.status.completed');
+  if (status === 'in_progress') return t('dashboard.student.status.inProgress');
+  if (!status || status === 'not_started') return t('dashboard.student.status.notStarted');
+
+  return String(status)
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (c) => c.toUpperCase());
 }

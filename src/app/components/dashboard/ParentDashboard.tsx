@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { Calendar, CheckCircle2, CreditCard, Award, GraduationCap } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { getCurrentUser } from '../../utils/session';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface ChildSummary {
   id: string;
@@ -16,6 +17,7 @@ interface ChildSummary {
 
 export default function ParentDashboard() {
   const currentUser = getCurrentUser();
+  const { t } = useLanguage();
   const [loading, setLoading] = useState(true);
   const [children, setChildren] = useState<ChildSummary[]>([]);
 
@@ -92,7 +94,7 @@ export default function ParentDashboard() {
 
         return {
           id: child.id,
-          name: child.full_name || 'Student',
+          name: child.full_name || t('dashboard.parent.fallbackStudent'),
           course: child.course || '-',
           attendanceRate,
           outstanding: Math.max(expected - paid, 0),
@@ -109,20 +111,19 @@ export default function ParentDashboard() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl text-[#284342]">Parent Dashboard</h1>
-        <p className="text-[#6b6b6b] mt-1">Welcome back, {currentUser.name}</p>
+        <h1 className="text-3xl text-[#284342]">{t('dashboard.parent.title')}</h1>
+        <p className="text-[#6b6b6b] mt-1">{t('dashboard.parent.welcome', { name: currentUser.name })}</p>
       </div>
 
       {loading && (
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
-          Loading your children's progress...
+          {t('dashboard.parent.loading')}
         </div>
       )}
 
       {!loading && children.length === 0 && (
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
-          No student profiles are linked to your account yet. Please contact the
-          academy if this looks wrong.
+          {t('dashboard.parent.noChildren')}
         </div>
       )}
 
@@ -144,25 +145,25 @@ export default function ParentDashboard() {
               <MiniStat
                 icon={<CheckCircle2 size={18} />}
                 color="#2d8659"
-                label="Attendance"
+                label={t('dashboard.parent.attendance')}
                 value={`${child.attendanceRate}%`}
               />
               <MiniStat
                 icon={<Calendar size={18} />}
                 color="#284342"
-                label="Upcoming Classes"
+                label={t('dashboard.parent.upcomingClasses')}
                 value={child.upcomingClasses}
               />
               <MiniStat
                 icon={<CreditCard size={18} />}
                 color="#d4183d"
-                label="Outstanding"
+                label={t('dashboard.parent.outstanding')}
                 value={`RM ${child.outstanding.toLocaleString()}`}
               />
               <MiniStat
                 icon={<Award size={18} />}
                 color="#6b8e8d"
-                label="Certificates"
+                label={t('dashboard.parent.certificates')}
                 value={child.certificates}
               />
             </div>
@@ -171,10 +172,10 @@ export default function ParentDashboard() {
 
       {!loading && children.length > 0 && (
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-xl text-[#284342] mb-4">Quick Links</h2>
+          <h2 className="text-xl text-[#284342] mb-4">{t('dashboard.parent.quickLinks')}</h2>
           <div className="grid grid-cols-2 gap-4">
-            <QuickAction to="/app/certificates/completion" icon={<Award size={22} />} label="Completion Certificates" />
-            <QuickAction to="/app/certificates/attendance" icon={<Award size={22} />} label="Attendance Certificates" />
+            <QuickAction to="/app/certificates/completion" icon={<Award size={22} />} label={t('dashboard.parent.completionCerts')} />
+            <QuickAction to="/app/certificates/attendance" icon={<Award size={22} />} label={t('dashboard.parent.attendanceCerts')} />
           </div>
         </div>
       )}

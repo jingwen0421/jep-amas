@@ -9,10 +9,15 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router';
 import { supabase } from '../../lib/supabase';
+import { notify } from '../../services/unifiedNotificationService';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface StudentProgressData {
   id: string;
   studentId: string;
+  userId: string | null;
+  email: string | null;
+  phone: string | null;
   name: string;
   course: string;
   batch: string;
@@ -29,9 +34,11 @@ interface StudentProgressData {
 }
 
 export default function StudentProgress() {
+  const { t } = useLanguage();
   const [selectedBatch, setSelectedBatch] = useState('All Batches');
   const [students, setStudents] = useState<StudentProgressData[]>([]);
   const [loading, setLoading] = useState(true);
+  const [sendingReportId, setSendingReportId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchStudents();
@@ -46,6 +53,9 @@ export default function StudentProgress() {
         id,
         student_code,
         full_name,
+        user_id,
+        email,
+        phone,
         progress,
         status,
         enrollments(
@@ -149,7 +159,10 @@ export default function StudentProgress() {
       return {
         id: student.student_code || student.id,
         studentId: student.id,
-        name: student.full_name || 'Unnamed Student',
+        userId: student.user_id || null,
+        email: student.email || null,
+        phone: student.phone || null,
+        name: student.full_name || t('students.progress.fallback.unnamedStudent'),
         course: course?.course_name || '-',
         batch: batch?.batch_name || '-',
         overallProgress: Math.min(100, overallProgress),
@@ -167,6 +180,49 @@ export default function StudentProgress() {
 
     setStudents(mappedStudents);
     setLoading(false);
+  }
+
+  async function sendProgressReport(student: StudentProgressData) {
+    if (!student.userId && !student.email) {
+      alert(t('students.progress.error.noContact'));
+      return;
+    }
+
+    setSendingReportId(student.studentId);
+
+    const scoreSuffix = student.averageScore
+      ? t('students.progress.reportMessage.scoreSuffix', { score: student.averageScore })
+      : '';
+
+    const message = t('students.progress.reportMessage', {
+      name: student.name,
+      course: student.course,
+      progress: student.overallProgress,
+      lessonsCompleted: student.lessonsCompleted,
+      totalLessons: student.totalLessons,
+      attendanceRate: student.attendanceRate,
+      assignmentsCompleted: student.assignmentsCompleted,
+      totalAssignments: student.totalAssignments,
+      scoreSuffix,
+    });
+
+    await notify({
+      target: {
+        userId: student.userId,
+        name: student.name,
+        email: student.email,
+        phone: student.phone,
+      },
+      channels: ['in_app', 'email'],
+      title: t('students.progress.notificationTitle'),
+      message,
+      type: 'progress_report',
+      relatedModule: 'Student Progress',
+      relatedId: student.studentId,
+    });
+
+    setSendingReportId(null);
+    alert(t('students.progress.reportSent', { name: student.name }));
   }
 
   const batches = [
@@ -214,10 +270,10 @@ export default function StudentProgress() {
       <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl text-[#284342]">
-            Student Progress Tracking
+            {t('students.progress.title')}
           </h1>
           <p className="text-[#6b6b6b] mt-1">
-            Monitor student course completion, attendance and portfolio progress.
+            {t('students.progress.subtitle')}
           </p>
         </div>
 
@@ -226,20 +282,20 @@ export default function StudentProgress() {
           className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
         >
           <RefreshCw size={18} />
-          Refresh
+          {t('students.progress.refresh')}
         </button>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <OverviewCard value={`${avgProgress}%`} label="Avg Progress" color="#284342" />
-        <OverviewCard value={`${avgAttendance}%`} label="Avg Attendance" color="green" />
-        <OverviewCard value={onTrackCount.toString()} label="On Track" color="blue" />
-        <OverviewCard value={`${avgScore}%`} label="Avg Score" color="purple" />
+        <OverviewCard value={`${avgProgress}%`} label={t('students.progress.overview.avgProgress')} color="#284342" />
+        <OverviewCard value={`${avgAttendance}%`} label={t('students.progress.overview.avgAttendance')} color="green" />
+        <OverviewCard value={onTrackCount.toString()} label={t('students.progress.overview.onTrack')} color="blue" />
+        <OverviewCard value={`${avgScore}%`} label={t('students.progress.overview.avgScore')} color="purple" />
       </div>
 
       <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
         <div className="flex items-center gap-4 mb-6">
-          <label className="text-sm text-[#284342]">Filter by Batch:</label>
+          <label className="text-sm text-[#284342]">{t('students.progress.filterByBatch')}</label>
 
           <select
             value={selectedBatch}
@@ -247,7 +303,7 @@ export default function StudentProgress() {
             className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
           >
             {batches.map((batch) => (
-              <option key={batch}>{batch}</option>
+              <option key={batch}>{batch === 'All Batches' ? t('students.progress.allBatches') : batch}</option>
             ))}
           </select>
         </div>
@@ -255,13 +311,13 @@ export default function StudentProgress() {
         <div className="space-y-4">
           {loading && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              Loading student progress...
+              {t('students.progress.loading')}
             </div>
           )}
 
           {!loading && filteredStudents.length === 0 && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              No active students found.
+              {t('students.progress.empty')}
             </div>
           )}
 
@@ -286,7 +342,7 @@ export default function StudentProgress() {
                       {student.overallProgress}%
                     </p>
                     <p className="text-xs text-[#6b6b6b]">
-                      Overall Progress
+                      {t('students.progress.overallProgress')}
                     </p>
                   </div>
                 </div>
@@ -295,8 +351,11 @@ export default function StudentProgress() {
                   <div className="flex items-center justify-between mb-2">
                     <span className="text-xs text-[#6b6b6b]">
                       {student.hasModuleData
-                        ? `Course Completion • ${student.modulesCompleted}/${student.totalModules} modules`
-                        : 'Course Completion (attendance-based estimate)'}
+                        ? t('students.progress.completionModules', {
+                            completed: student.modulesCompleted,
+                            total: student.totalModules,
+                          })
+                        : t('students.progress.completionEstimate')}
                     </span>
                   </div>
 
@@ -318,28 +377,28 @@ export default function StudentProgress() {
                         ? `${student.lessonsCompleted}/${student.totalLessons}`
                         : `${student.lessonsCompleted}`
                     }
-                    label={student.hasModuleData ? 'Modules' : 'Lessons'}
+                    label={student.hasModuleData ? t('students.progress.metric.modules') : t('students.progress.metric.lessons')}
                     color="#284342"
                   />
 
                   <MetricCard
                     icon={<Clock size={20} className="text-green-700" />}
                     value={`${student.attendanceRate}%`}
-                    label="Attendance"
+                    label={t('students.progress.metric.attendance')}
                     color="green"
                   />
 
                   <MetricCard
                     icon={<Target size={20} className="text-blue-700" />}
                     value={`${student.assignmentsCompleted}/${student.totalAssignments}`}
-                    label="Portfolio"
+                    label={t('students.progress.metric.portfolio')}
                     color="blue"
                   />
 
                   <MetricCard
                     icon={<Award size={20} className="text-purple-700" />}
                     value={`${student.averageScore}%`}
-                    label="Avg Score"
+                    label={t('students.progress.metric.avgScore')}
                     color="purple"
                   />
 
@@ -363,11 +422,11 @@ export default function StudentProgress() {
                       }`}
                     >
                       {student.overallProgress >= 70
-                        ? 'On Track'
-                        : 'Needs Support'}
+                        ? t('students.progress.status.onTrack')
+                        : t('students.progress.status.needsSupport')}
                     </p>
 
-                    <p className="text-xs text-[#6b6b6b]">Status</p>
+                    <p className="text-xs text-[#6b6b6b]">{t('students.progress.status.label')}</p>
                   </div>
                 </div>
 
@@ -376,16 +435,17 @@ export default function StudentProgress() {
                     to={`/app/students/profile/${student.studentId}`}
                     className="px-4 py-2 rounded-lg bg-[#284342] text-[#e9da95] hover:bg-[#1a2f2e] transition-colors text-sm"
                   >
-                    View Details
+                    {t('students.progress.viewDetails')}
                   </Link>
 
                   <button
-                    onClick={() =>
-                      alert('Progress report sending can be connected after client confirms report format.')
-                    }
-                    className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm"
+                    onClick={() => sendProgressReport(student)}
+                    disabled={sendingReportId === student.studentId}
+                    className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm disabled:opacity-50"
                   >
-                    Send Progress Report
+                    {sendingReportId === student.studentId
+                      ? t('students.progress.sending')
+                      : t('students.progress.sendReport')}
                   </button>
                 </div>
               </div>

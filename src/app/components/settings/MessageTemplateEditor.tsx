@@ -1,11 +1,16 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { MessageSquare, Mail, Save, Eye } from 'lucide-react';
 import { templateVariables } from '../../utils/settingsHelpers';
+import { supabase } from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
+
+const SUBJECT_PREFIX = 'Subject: ';
 
 const defaultTemplates = [
   {
     id: 'payment-reminder',
     name: 'Payment Reminder',
+    nameKey: 'settings.template.paymentReminder',
     channel: 'whatsapp',
     subject: '',
     content:
@@ -14,6 +19,7 @@ const defaultTemplates = [
   {
     id: 'class-reminder',
     name: 'Class Reminder',
+    nameKey: 'settings.template.classReminder',
     channel: 'whatsapp',
     subject: '',
     content:
@@ -22,6 +28,7 @@ const defaultTemplates = [
   {
     id: 'certificate-ready',
     name: 'Certificate Ready',
+    nameKey: 'settings.template.certificateReady',
     channel: 'whatsapp',
     subject: '',
     content:
@@ -30,6 +37,7 @@ const defaultTemplates = [
   {
     id: 'welcome-email',
     name: 'Welcome Email',
+    nameKey: 'settings.template.welcomeEmail',
     channel: 'email',
     subject: 'Welcome to JEP Image Makeup Academy',
     content:
@@ -38,11 +46,56 @@ const defaultTemplates = [
 ];
 
 export default function MessageTemplateEditor() {
+  const { t } = useLanguage();
   const [templates, setTemplates] = useState(defaultTemplates);
   const [selectedId, setSelectedId] = useState(defaultTemplates[0].id);
+  const [saving, setSaving] = useState(false);
 
   const selectedTemplate =
     templates.find((template) => template.id === selectedId) || templates[0];
+
+  useEffect(() => {
+    loadSavedTemplates();
+  }, []);
+
+  async function loadSavedTemplates() {
+    const { data, error } = await supabase
+      .from('message_templates')
+      .select('template_name, channel, message_body')
+      .eq('language', 'en');
+
+    if (error || !data) {
+      console.error('Error loading message templates:', error?.message);
+      return;
+    }
+
+    setTemplates((prev) =>
+      prev.map((template) => {
+        const saved = data.find(
+          (row) =>
+            row.template_name === template.name &&
+            row.channel === template.channel
+        );
+
+        if (!saved) return template;
+
+        const isEmailWithSubject =
+          template.channel === 'email' &&
+          saved.message_body.startsWith(SUBJECT_PREFIX);
+
+        if (isEmailWithSubject) {
+          const [subjectLine, ...rest] = saved.message_body.split('\n\n');
+          return {
+            ...template,
+            subject: subjectLine.slice(SUBJECT_PREFIX.length),
+            content: rest.join('\n\n'),
+          };
+        }
+
+        return { ...template, content: saved.message_body };
+      })
+    );
+  }
 
   function updateTemplate(field: 'name' | 'subject' | 'content', value: string) {
     setTemplates((prev) =>
@@ -58,16 +111,41 @@ export default function MessageTemplateEditor() {
     updateTemplate('content', `${selectedTemplate.content} ${variable}`);
   }
 
-  function saveTemplate() {
-    alert('Template saved locally. Database save can be connected after template table is confirmed.');
+  async function saveTemplate() {
+    setSaving(true);
+
+    const messageBody =
+      selectedTemplate.channel === 'email' && selectedTemplate.subject
+        ? `${SUBJECT_PREFIX}${selectedTemplate.subject}\n\n${selectedTemplate.content}`
+        : selectedTemplate.content;
+
+    const { error } = await supabase.from('message_templates').upsert(
+      {
+        template_name: selectedTemplate.name,
+        channel: selectedTemplate.channel,
+        language: 'en',
+        message_body: messageBody,
+        status: 'active',
+      },
+      { onConflict: 'template_name,channel,language' }
+    );
+
+    setSaving(false);
+
+    if (error) {
+      alert(t('settings.template.saveFailed', { message: error.message }));
+      return;
+    }
+
+    alert(t('settings.template.saved'));
   }
 
   return (
     <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
       <div className="p-5 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
-        <h2 className="text-xl text-[#284342]">Message Template Editor</h2>
+        <h2 className="text-xl text-[#284342]">{t('settings.template.editorTitle')}</h2>
         <p className="text-sm text-[#6b6b6b] mt-1">
-          Edit WhatsApp and email message templates in one place
+          {t('settings.template.editorSubtitle')}
         </p>
       </div>
 
@@ -89,7 +167,7 @@ export default function MessageTemplateEditor() {
                 ) : (
                   <Mail size={16} />
                 )}
-                <span className="text-sm">{template.name}</span>
+                <span className="text-sm">{t(template.nameKey)}</span>
               </div>
               <p className="text-xs opacity-70 mt-1">
                 {template.channel.toUpperCase()}
@@ -101,13 +179,13 @@ export default function MessageTemplateEditor() {
         <div className="lg:col-span-2 p-6 space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input
-              label="Template Name"
+              label={t('settings.template.nameLabel')}
               value={selectedTemplate.name}
               onChange={(value) => updateTemplate('name', value)}
             />
 
             <Input
-              label="Channel"
+              label={t('settings.template.channelLabel')}
               value={selectedTemplate.channel.toUpperCase()}
               disabled
             />
@@ -115,7 +193,7 @@ export default function MessageTemplateEditor() {
 
           {selectedTemplate.channel === 'email' && (
             <Input
-              label="Email Subject"
+              label={t('settings.template.emailSubjectLabel')}
               value={selectedTemplate.subject}
               onChange={(value) => updateTemplate('subject', value)}
             />
@@ -123,7 +201,7 @@ export default function MessageTemplateEditor() {
 
           <div>
             <label className="block text-sm text-[#284342] mb-2">
-              Message Content
+              {t('settings.template.messageContentLabel')}
             </label>
             <textarea
               value={selectedTemplate.content}
@@ -134,7 +212,7 @@ export default function MessageTemplateEditor() {
           </div>
 
           <div>
-            <p className="text-sm text-[#284342] mb-2">Insert Variables</p>
+            <p className="text-sm text-[#284342] mb-2">{t('settings.template.insertVariables')}</p>
             <div className="flex flex-wrap gap-2">
               {templateVariables.map((variable) => (
                 <button
@@ -151,7 +229,7 @@ export default function MessageTemplateEditor() {
           <div className="bg-[#f8f8f6] rounded-lg p-4">
             <div className="flex items-center gap-2 mb-2 text-[#284342]">
               <Eye size={16} />
-              <p className="text-sm">Preview</p>
+              <p className="text-sm">{t('settings.template.preview')}</p>
             </div>
             <p className="text-sm text-[#6b6b6b] whitespace-pre-line">
               {selectedTemplate.content}
@@ -160,10 +238,11 @@ export default function MessageTemplateEditor() {
 
           <button
             onClick={saveTemplate}
-            className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] flex items-center gap-2"
+            disabled={saving}
+            className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] flex items-center gap-2 disabled:opacity-50"
           >
             <Save size={16} />
-            Save Template
+            {saving ? t('settings.template.saving') : t('settings.template.saveButton')}
           </button>
         </div>
       </div>

@@ -21,8 +21,9 @@ import {
   DialogTitle,
   DialogDescription,
 } from '../../components/ui/dialog';
+import { useLanguage } from '../../context/LanguageContext';
 
-type ItemType = 'class' | 'makeup' | 'external_makeup' | 'event' | 'room_rental';
+type ItemType = 'class' | 'external_makeup' | 'event' | 'room_rental';
 
 interface CalendarItem {
   id: string;
@@ -39,66 +40,124 @@ interface CalendarItem {
 
 const TYPE_META: Record<
   ItemType,
-  { label: string; dot: string; block: string; badge: string }
+  { dot: string; block: string; badge: string }
 > = {
   class: {
-    label: 'Class',
     dot: 'bg-[#284342]',
     block: 'bg-[#284342] text-[#e9da95]',
     badge: 'bg-[#284342]/10 text-[#284342]',
   },
-  makeup: {
-    label: 'Makeup Class',
-    dot: 'bg-teal-600',
-    block: 'bg-teal-600 text-white',
-    badge: 'bg-teal-100 text-teal-700',
-  },
   external_makeup: {
-    label: 'External Makeup',
     dot: 'bg-orange-600',
     block: 'bg-orange-600 text-white',
     badge: 'bg-orange-100 text-orange-700',
   },
   event: {
-    label: 'Event',
     dot: 'bg-purple-600',
     block: 'bg-purple-600 text-white',
     badge: 'bg-purple-100 text-purple-700',
   },
   room_rental: {
-    label: 'Room Rental',
     dot: 'bg-amber-500',
     block: 'bg-amber-500 text-white',
     badge: 'bg-amber-100 text-amber-700',
   },
 };
 
+const TYPE_LABEL_KEYS: Record<ItemType, string> = {
+  class: 'unifiedCalendar.type.class',
+  external_makeup: 'unifiedCalendar.type.externalMakeup',
+  event: 'unifiedCalendar.type.event',
+  room_rental: 'unifiedCalendar.type.roomRental',
+};
+
+function getTypeLabel(type: ItemType, t: (key: string) => string) {
+  return t(TYPE_LABEL_KEYS[type]);
+}
+
+const STATUS_LABEL_KEYS: Record<string, string> = {
+  scheduled: 'unifiedCalendar.status.scheduled',
+  completed: 'unifiedCalendar.status.completed',
+  cancelled: 'unifiedCalendar.status.cancelled',
+  confirmed: 'unifiedCalendar.status.confirmed',
+  pending: 'unifiedCalendar.status.pending',
+  approved: 'unifiedCalendar.status.approved',
+  rejected: 'unifiedCalendar.status.rejected',
+  active: 'common.active',
+};
+
+function getStatusLabel(status: string, t: (key: string) => string) {
+  const key = STATUS_LABEL_KEYS[String(status || '').toLowerCase()];
+  return key ? t(key) : status;
+}
+
+// Calendar items are fetched once and re-rendered on every language switch
+// without a refetch, so any fixed English fallback text composed into
+// title/subtitle at fetch time is stored as one of these language-neutral
+// sentinel tokens instead of real text — resolveDisplay() below swaps each
+// sentinel for its translated string at render time. Real data (course
+// names, batch names, renter names, teacher names, etc.) never gets a
+// sentinel and passes through resolveDisplay() unchanged.
+const S_CLASS = '⁣CLASS⁣';
+const S_SCHEDULED_SESSION = '⁣SCHEDULED_SESSION⁣';
+const S_MAKEUP_PREFIX = '⁣MAKEUP_PREFIX⁣';
+const S_MAKEUP_CLASS = '⁣MAKEUP_CLASS⁣';
+const S_EXTERNAL_MAKEUP = '⁣EXTERNAL_MAKEUP⁣';
+const S_WITH = '⁣WITH⁣';
+const S_OFFSITE = '⁣OFFSITE⁣';
+const S_ACADEMY_EVENT = '⁣ACADEMY_EVENT⁣';
+const S_EVENT = '⁣EVENT⁣';
+const S_ROOM_RENTAL_PREFIX = '⁣ROOM_RENTAL_PREFIX⁣';
+const S_EXTERNAL_COWORKING = '⁣EXTERNAL_COWORKING⁣';
+
+const SENTINEL_KEYS: [string, string][] = [
+  [S_CLASS, 'unifiedCalendar.fallback.class'],
+  [S_SCHEDULED_SESSION, 'unifiedCalendar.fallback.scheduledSession'],
+  [S_MAKEUP_PREFIX, 'unifiedCalendar.makeupPrefix'],
+  [S_MAKEUP_CLASS, 'unifiedCalendar.fallback.makeupClass'],
+  [S_EXTERNAL_MAKEUP, 'unifiedCalendar.type.externalMakeup'],
+  [S_WITH, 'unifiedCalendar.withPrefix'],
+  [S_OFFSITE, 'unifiedCalendar.fallback.offsite'],
+  [S_ACADEMY_EVENT, 'unifiedCalendar.fallback.academyEvent'],
+  [S_EVENT, 'unifiedCalendar.type.event'],
+  [S_ROOM_RENTAL_PREFIX, 'unifiedCalendar.roomRentalPrefix'],
+  [S_EXTERNAL_COWORKING, 'unifiedCalendar.fallback.externalCoworking'],
+];
+
+function resolveDisplay(text: string, t: (key: string) => string) {
+  let result = text;
+  for (const [sentinel, key] of SENTINEL_KEYS) {
+    if (result.includes(sentinel)) result = result.split(sentinel).join(t(key));
+  }
+  return result;
+}
+
 const ALL_TYPES: ItemType[] = [
   'class',
-  'makeup',
   'external_makeup',
   'event',
   'room_rental',
 ];
 
-const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const WEEKDAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
 
-const MONTH_NAMES = [
-  'January',
-  'February',
-  'March',
-  'April',
-  'May',
-  'June',
-  'July',
-  'August',
-  'September',
-  'October',
-  'November',
-  'December',
+const MONTH_KEYS = [
+  'january',
+  'february',
+  'march',
+  'april',
+  'may',
+  'june',
+  'july',
+  'august',
+  'september',
+  'october',
+  'november',
+  'december',
 ];
 
 export default function UnifiedCalendar() {
+  const { t } = useLanguage();
   const currentUser = getCurrentUser();
   const isStudentView = currentUser.role === 'student';
   const isTeacherView =
@@ -268,11 +327,11 @@ export default function UnifiedCalendar() {
             lesson.class_batches?.courses?.course_name ||
             lesson.course_modules?.courses?.course_name ||
             lesson.lesson_title ||
-            'Class',
+            S_CLASS,
           subtitle: `${
             lesson.class_batches?.batch_name ||
             lesson.course_modules?.title ||
-            'Scheduled Session'
+            S_SCHEDULED_SESSION
           } • ${getTeacherName(lesson.teachers)}`,
           date: start ? start.toISOString().slice(0, 10) : '',
           startTime: start ? start.toTimeString().slice(0, 5) : '-',
@@ -320,31 +379,30 @@ export default function UnifiedCalendar() {
 
         return {
           id: `makeup-${makeup.id}`,
-          // In-house makeup classes get their own filterable "Makeup
-          // Class" type so they're distinguishable from a regular class
-          // (and from the reschedule-request originated ones too). A
-          // makeup done through an external/outsourced provider keeps its
-          // separate "External Makeup" type — it's not on the academy's
-          // own schedule at all.
-          type: isExternal ? ('external_makeup' as const) : ('makeup' as const),
+          // An in-house makeup class is still just a class on the
+          // academy's own schedule, so it's filed under the same "Class"
+          // type as a regular lesson. Only a makeup done through an
+          // external/outsourced provider gets its own "External Makeup"
+          // type — it's not on the academy's own schedule at all.
+          type: isExternal ? ('external_makeup' as const) : ('class' as const),
           title: isExternal
-            ? `External Makeup${makeup.external_provider ? `: ${makeup.external_provider}` : ''}`
+            ? `${S_EXTERNAL_MAKEUP}${makeup.external_provider ? `: ${makeup.external_provider}` : ''}`
             : makeup.reason
-            ? `Makeup: ${makeup.reason}`
-            : 'Makeup Class',
+            ? `${S_MAKEUP_PREFIX}: ${makeup.reason}`
+            : S_MAKEUP_CLASS,
           subtitle: isExternal
             ? `${getStudentName(makeup.students)}${
                 makeup.reason ? ` • ${makeup.reason}` : ''
               }`
             : isStudentView
-            ? `with ${getTeacherName(makeup.teachers)}`
+            ? `${S_WITH} ${getTeacherName(makeup.teachers)}`
             : `${getStudentName(makeup.students)} • ${getTeacherName(
                 makeup.teachers
               )}`,
           date: start ? start.toISOString().slice(0, 10) : '',
           startTime: start ? start.toTimeString().slice(0, 5) : '-',
           endTime: end ? end.toTimeString().slice(0, 5) : '-',
-          location: isExternal ? makeup.external_provider || 'Off-site' : '-',
+          location: isExternal ? makeup.external_provider || S_OFFSITE : '-',
           status: makeup.status || 'scheduled',
           calendarEventId: eventIdMap[`makeup_classes:${makeup.id}`] || null,
         };
@@ -388,8 +446,8 @@ export default function UnifiedCalendar() {
         return {
           id: `room_rental-${rental.id}`,
           type: 'room_rental' as const,
-          title: `Room Rental: ${rental.renter_name}`,
-          subtitle: rental.renter_contact || 'External co-working booking',
+          title: `${S_ROOM_RENTAL_PREFIX}: ${rental.renter_name}`,
+          subtitle: rental.renter_contact || S_EXTERNAL_COWORKING,
           date: start ? start.toISOString().slice(0, 10) : '',
           startTime: start ? start.toTimeString().slice(0, 5) : '-',
           endTime: end ? end.toTimeString().slice(0, 5) : '-',
@@ -428,8 +486,8 @@ export default function UnifiedCalendar() {
         return {
           id: `event-${occurrence.id}`,
           type: 'event' as const,
-          title: occurrence.events?.title || 'Academy Event',
-          subtitle: occurrence.events?.event_kind || 'Event',
+          title: occurrence.events?.title || S_ACADEMY_EVENT,
+          subtitle: occurrence.events?.event_kind || S_EVENT,
           date: start ? start.toISOString().slice(0, 10) : '',
           startTime: start ? start.toTimeString().slice(0, 5) : '-',
           endTime: end ? end.toTimeString().slice(0, 5) : '-',
@@ -480,14 +538,14 @@ export default function UnifiedCalendar() {
     if (!rescheduleTarget?.calendarEventId) return;
 
     if (!rescheduleReason.trim()) {
-      setRescheduleError('Please tell us why you need to reschedule.');
+      setRescheduleError(t('unifiedCalendar.error.reasonRequired'));
       return;
     }
 
     const studentId = await getCurrentStudentId();
 
     if (!studentId) {
-      setRescheduleError('Unable to identify your student profile.');
+      setRescheduleError(t('unifiedCalendar.error.noStudentProfile'));
       return;
     }
 
@@ -527,13 +585,13 @@ export default function UnifiedCalendar() {
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl text-[#284342]">Calendar</h1>
+          <h1 className="text-3xl text-[#284342]">{t('unifiedCalendar.title')}</h1>
           <p className="text-[#6b6b6b] mt-1">
             {isStudentView
-              ? 'Your classes and academy events in one place.'
+              ? t('unifiedCalendar.subtitle.student')
               : isTeacherView
-              ? 'Your classes (including makeups) and academy events in one place.'
-              : 'Classes, makeup sessions, and events across the academy.'}
+              ? t('unifiedCalendar.subtitle.teacher')
+              : t('unifiedCalendar.subtitle.staff')}
           </p>
         </div>
 
@@ -546,7 +604,7 @@ export default function UnifiedCalendar() {
                 : 'bg-white text-[#284342] border border-[rgba(40,67,66,0.2)]'
             }`}
           >
-            Month
+            {t('unifiedCalendar.view.month')}
           </button>
 
           <button
@@ -557,7 +615,7 @@ export default function UnifiedCalendar() {
                 : 'bg-white text-[#284342] border border-[rgba(40,67,66,0.2)]'
             }`}
           >
-            Week
+            {t('unifiedCalendar.view.week')}
           </button>
 
           {canManageEvents && (
@@ -572,7 +630,7 @@ export default function UnifiedCalendar() {
                 className="px-4 py-2 rounded-lg text-sm bg-white text-[#284342] border border-[rgba(40,67,66,0.2)] hover:bg-[#f8f8f6] transition-colors flex items-center gap-1.5"
               >
                 <Plus size={16} />
-                Schedule Class
+                {t('unifiedCalendar.scheduleClass')}
               </Link>
 
               {/* Event Management owns full event creation (staff-involved
@@ -583,7 +641,7 @@ export default function UnifiedCalendar() {
                 className="px-4 py-2 rounded-lg text-sm bg-white text-[#284342] border border-[rgba(40,67,66,0.2)] hover:bg-[#f8f8f6] transition-colors flex items-center gap-1.5"
               >
                 <CalendarPlus size={16} />
-                Add Event
+                {t('unifiedCalendar.addEvent')}
               </Link>
             </>
           )}
@@ -592,24 +650,24 @@ export default function UnifiedCalendar() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <SummaryCard
-          label="Today"
+          label={t('unifiedCalendar.summary.today')}
           value={todayItems.length}
           color="text-[#284342]"
         />
         <SummaryCard
-          label="This Week"
+          label={t('unifiedCalendar.summary.thisWeek')}
           value={weekCount}
           color="text-blue-700"
         />
         <SummaryCard
-          label="Total Scheduled"
+          label={t('unifiedCalendar.summary.totalScheduled')}
           value={visibleItems.length}
           color="text-amber-700"
         />
       </div>
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] p-4 flex flex-wrap items-center gap-3">
-        <span className="text-sm text-[#6b6b6b] mr-1">Show:</span>
+        <span className="text-sm text-[#6b6b6b] mr-1">{t('unifiedCalendar.show')}</span>
 
         <button
           onClick={() => setActiveFilter('all')}
@@ -619,7 +677,7 @@ export default function UnifiedCalendar() {
               : 'border-[rgba(40,67,66,0.15)] text-[#6b6b6b]'
           }`}
         >
-          All
+          {t('unifiedCalendar.filterAll')}
         </button>
 
         {ALL_TYPES.map((type) => {
@@ -637,7 +695,7 @@ export default function UnifiedCalendar() {
               }`}
             >
               <span className={`w-2 h-2 rounded-full ${meta.dot}`} />
-              {meta.label}
+              {getTypeLabel(type, t)}
             </button>
           );
         })}
@@ -645,7 +703,7 @@ export default function UnifiedCalendar() {
 
       {loading && (
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
-          Loading calendar...
+          {t('unifiedCalendar.loading')}
         </div>
       )}
 
@@ -688,7 +746,7 @@ export default function UnifiedCalendar() {
             </DialogTitle>
             <DialogDescription>
               {selectedDate
-                ? `${(itemsByDate[selectedDate] || []).length} scheduled item(s)`
+                ? t('unifiedCalendar.scheduledItemCount', { count: (itemsByDate[selectedDate] || []).length })
                 : ''}
             </DialogDescription>
           </DialogHeader>
@@ -701,7 +759,7 @@ export default function UnifiedCalendar() {
                 className="text-xs px-3 py-1.5 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors flex items-center gap-1"
               >
                 <Plus size={13} />
-                Schedule class on this day
+                {t('unifiedCalendar.scheduleClassOnDay')}
               </Link>
 
               <Link
@@ -710,7 +768,7 @@ export default function UnifiedCalendar() {
                 className="text-xs px-3 py-1.5 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors flex items-center gap-1"
               >
                 <CalendarPlus size={13} />
-                Add event on this day
+                {t('unifiedCalendar.addEventOnDay')}
               </Link>
             </div>
           )}
@@ -719,7 +777,7 @@ export default function UnifiedCalendar() {
             {selectedDate &&
               (itemsByDate[selectedDate] || []).length === 0 && (
                 <p className="text-sm text-[#6b6b6b] py-4 text-center">
-                  Nothing scheduled on this day.
+                  {t('unifiedCalendar.nothingScheduled')}
                 </p>
               )}
 
@@ -748,11 +806,11 @@ export default function UnifiedCalendar() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle className="text-[#284342]">
-              Request Reschedule
+              {t('unifiedCalendar.requestReschedule')}
             </DialogTitle>
             <DialogDescription>
               {rescheduleTarget
-                ? `${rescheduleTarget.title} — ${rescheduleTarget.date}, ${rescheduleTarget.startTime}-${rescheduleTarget.endTime}`
+                ? `${resolveDisplay(rescheduleTarget.title, t)} — ${rescheduleTarget.date}, ${rescheduleTarget.startTime}-${rescheduleTarget.endTime}`
                 : ''}
             </DialogDescription>
           </DialogHeader>
@@ -760,25 +818,25 @@ export default function UnifiedCalendar() {
           <div className="space-y-4">
             <div>
               <label className="block text-sm text-[#284342] mb-2">
-                Reason
+                {t('unifiedCalendar.reason')}
               </label>
               <textarea
                 value={rescheduleReason}
                 onChange={(e) => setRescheduleReason(e.target.value)}
                 rows={3}
-                placeholder="Why do you need to reschedule?"
+                placeholder={t('unifiedCalendar.reasonPlaceholder')}
                 className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
               />
             </div>
 
             <div>
               <label className="block text-sm text-[#284342] mb-2">
-                Preferred New Time (optional)
+                {t('unifiedCalendar.preferredNewTime')}
               </label>
               <input
                 value={reschedulePreferred}
                 onChange={(e) => setReschedulePreferred(e.target.value)}
-                placeholder="e.g., Next Saturday afternoon"
+                placeholder={t('unifiedCalendar.preferredTimePlaceholder')}
                 className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
               />
             </div>
@@ -795,7 +853,7 @@ export default function UnifiedCalendar() {
               onClick={closeRescheduleModal}
               className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
             >
-              Cancel
+              {t('unifiedCalendar.cancel')}
             </button>
 
             <button
@@ -803,7 +861,7 @@ export default function UnifiedCalendar() {
               disabled={rescheduleSubmitting}
               className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors disabled:opacity-50"
             >
-              {rescheduleSubmitting ? 'Submitting...' : 'Submit Request'}
+              {rescheduleSubmitting ? t('unifiedCalendar.submitting') : t('unifiedCalendar.submitRequest')}
             </button>
           </div>
         </DialogContent>
@@ -826,6 +884,7 @@ function MonthGrid({
   onNext: () => void;
   onSelectDate: (date: string) => void;
 }) {
+  const { t } = useLanguage();
   const days = getDaysInMonth(currentDate);
   const today = new Date().toISOString().slice(0, 10);
 
@@ -847,7 +906,7 @@ function MonthGrid({
         </button>
 
         <h2 className="text-lg text-[#284342]">
-          {MONTH_NAMES[currentDate.getMonth()]} {currentDate.getFullYear()}
+          {t(`unifiedCalendar.month.${MONTH_KEYS[currentDate.getMonth()]}`)} {currentDate.getFullYear()}
         </h2>
 
         <button
@@ -859,12 +918,12 @@ function MonthGrid({
       </div>
 
       <div className="grid grid-cols-7 border-b border-[rgba(40,67,66,0.1)]">
-        {WEEKDAY_LABELS.map((day) => (
+        {WEEKDAY_KEYS.map((day) => (
           <div
             key={day}
             className="p-3 text-center text-sm text-[#284342] bg-[#f8f8f6] border-r border-[rgba(40,67,66,0.1)] last:border-r-0"
           >
-            {day}
+            {t(`unifiedCalendar.weekday.${day}`)}
           </div>
         ))}
       </div>
@@ -899,17 +958,17 @@ function MonthGrid({
                       <div
                         key={item.id}
                         className={`p-1.5 rounded text-xs ${TYPE_META[item.type].block}`}
-                        title={`${item.title} • ${item.subtitle}`}
+                        title={`${resolveDisplay(item.title, t)} • ${resolveDisplay(item.subtitle, t)}`}
                       >
                         <div className="truncate">
-                          {item.startTime} {item.title}
+                          {item.startTime} {resolveDisplay(item.title, t)}
                         </div>
                       </div>
                     ))}
 
                     {dayItems.length > 3 && (
                       <div className="text-xs text-[#6b6b6b] pl-1">
-                        +{dayItems.length - 3} more
+                        {t('unifiedCalendar.more', { count: dayItems.length - 3 })}
                       </div>
                     )}
                   </div>
@@ -936,6 +995,7 @@ function WeekAgenda({
   onNext: () => void;
   onSelectDate: (date: string) => void;
 }) {
+  const { t } = useLanguage();
   const today = new Date().toISOString().slice(0, 10);
 
   return (
@@ -975,7 +1035,7 @@ function WeekAgenda({
                 }`}
               >
                 <p className="text-xs text-[#6b6b6b]">
-                  {WEEKDAY_LABELS[date.getDay()]}
+                  {t(`unifiedCalendar.weekday.${WEEKDAY_KEYS[date.getDay()]}`)}
                 </p>
                 <p
                   className={`text-sm ${
@@ -995,10 +1055,10 @@ function WeekAgenda({
                   <div
                     key={item.id}
                     className={`p-1.5 rounded text-xs ${TYPE_META[item.type].block}`}
-                    title={`${item.title} • ${item.subtitle}`}
+                    title={`${resolveDisplay(item.title, t)} • ${resolveDisplay(item.subtitle, t)}`}
                   >
                     <div className="truncate">{item.startTime}</div>
-                    <div className="truncate">{item.title}</div>
+                    <div className="truncate">{resolveDisplay(item.title, t)}</div>
                   </div>
                 ))}
               </div>
@@ -1021,6 +1081,7 @@ function DayDetailCard({
   rescheduleStatus?: string;
   onRequestReschedule: (item: CalendarItem) => void;
 }) {
+  const { t } = useLanguage();
   const meta = TYPE_META[item.type];
   const canRequestReschedule =
     isStudentView && item.type !== 'event' && !!item.calendarEventId;
@@ -1028,9 +1089,9 @@ function DayDetailCard({
   return (
     <div className="border border-[rgba(40,67,66,0.1)] rounded-lg p-4">
       <div className="flex items-center justify-between gap-3 mb-2">
-        <h4 className="text-sm text-[#284342]">{item.title}</h4>
+        <h4 className="text-sm text-[#284342]">{resolveDisplay(item.title, t)}</h4>
         <span className={`text-[10px] px-2 py-0.5 rounded-full ${meta.badge}`}>
-          {meta.label}
+          {getTypeLabel(item.type, t)}
         </span>
       </div>
 
@@ -1042,26 +1103,26 @@ function DayDetailCard({
 
         <span className="flex items-center gap-1.5">
           <User size={13} />
-          {item.subtitle}
+          {resolveDisplay(item.subtitle, t)}
         </span>
 
         {item.location !== '-' && (
           <span className="flex items-center gap-1.5">
             <MapPin size={13} />
-            {item.location}
+            {resolveDisplay(item.location, t)}
           </span>
         )}
       </div>
 
-      <p className="text-[11px] text-[#6b6b6b] mt-2 capitalize">
-        Status: {item.status}
+      <p className="text-[11px] text-[#6b6b6b] mt-2">
+        {t('unifiedCalendar.statusLabel', { status: getStatusLabel(item.status, t) })}
       </p>
 
       {canRequestReschedule && (
         <div className="mt-3 pt-3 border-t border-[rgba(40,67,66,0.1)]">
           {rescheduleStatus ? (
             <span
-              className={`text-[11px] px-2 py-1 rounded-full capitalize ${
+              className={`text-[11px] px-2 py-1 rounded-full ${
                 rescheduleStatus === 'pending'
                   ? 'bg-yellow-100 text-yellow-700'
                   : rescheduleStatus === 'approved'
@@ -1069,14 +1130,14 @@ function DayDetailCard({
                   : 'bg-red-100 text-red-700'
               }`}
             >
-              Reschedule {rescheduleStatus}
+              {t('unifiedCalendar.rescheduleStatus', { status: getStatusLabel(rescheduleStatus, t) })}
             </span>
           ) : (
             <button
               onClick={() => onRequestReschedule(item)}
               className="text-xs px-3 py-1.5 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
             >
-              Request Reschedule
+              {t('unifiedCalendar.requestReschedule')}
             </button>
           )}
         </div>

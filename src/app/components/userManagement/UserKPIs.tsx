@@ -5,38 +5,41 @@ import {
   Shield,
 } from 'lucide-react';
 import type { UserStats } from '../../types/user';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface Props {
   stats: UserStats;
 }
 
 export default function UserKPIs({ stats }: Props) {
+  const { t } = useLanguage();
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
       <KPICard
         icon={<Users size={24} />}
-        title="Total Users"
+        title={t('userManagement.kpis.totalUsers')}
         value={stats.total}
         color="text-[#284342]"
       />
 
       <KPICard
         icon={<CheckCircle2 size={24} />}
-        title="Active Users"
+        title={t('userManagement.kpis.activeUsers')}
         value={stats.active}
         color="text-green-700"
       />
 
       <KPICard
         icon={<AlertCircle size={24} />}
-        title="Inactive Users"
+        title={t('userManagement.kpis.inactiveUsers')}
         value={stats.inactive}
         color="text-red-700"
       />
 
       <KPICard
         icon={<Shield size={24} />}
-        title="Admin Access"
+        title={t('userManagement.kpis.adminAccess')}
         value={stats.adminAccess}
         color="text-blue-700"
       />

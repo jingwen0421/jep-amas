@@ -6,9 +6,12 @@ import {
 supabase
 } from "../lib/supabase";
 
+import { useLanguage } from "../context/LanguageContext";
+
 
 export default function ResetPassword(){
 
+const { t } = useLanguage();
 
 const [password,setPassword]=useState("");
 
@@ -22,7 +25,7 @@ async function updatePassword(){
 if(password.length < 8){
 
 alert(
-"Password must be at least 8 characters"
+t('resetPassword.error.passwordLength')
 );
 
 return;
@@ -56,7 +59,7 @@ return;
 
 
 alert(
-"Password updated successfully"
+t('resetPassword.success')
 );
 
 
@@ -94,7 +97,7 @@ text-[#284342]
 mb-5
 ">
 
-Create New Password
+{t('resetPassword.title')}
 
 </h1>
 
@@ -105,7 +108,7 @@ Create New Password
 
 type="password"
 
-placeholder="New password"
+placeholder={t('resetPassword.newPasswordPlaceholder')}
 
 value={password}
 
@@ -145,9 +148,9 @@ rounded-lg
 {
 loading
 ?
-"Updating..."
+t('resetPassword.updating')
 :
-"Update Password"
+t('resetPassword.updateButton')
 }
 
 </button>

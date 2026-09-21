@@ -10,6 +10,7 @@ import {
   FileText,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface SubmissionReview {
   id: string;
@@ -24,6 +25,7 @@ interface SubmissionReview {
 }
 
 export default function TeacherFeedback() {
+  const { t } = useLanguage();
   const [submissions, setSubmissions] = useState<SubmissionReview[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedSubmission, setSelectedSubmission] =
@@ -81,7 +83,7 @@ export default function TeacherFeedback() {
 
       return {
         id: item.id,
-        student: getStudentName(item.students),
+        student: getStudentName(item.students, t),
         assignment: item.title || '-',
         course: getCourseName(item.lessons, item.description),
         submittedDate: item.submitted_at
@@ -113,7 +115,7 @@ export default function TeacherFeedback() {
     const numericScore = Number(score);
 
     if (Number.isNaN(numericScore) || numericScore < 0 || numericScore > 100) {
-      alert('Please enter a valid score between 0 and 100.');
+      alert(t('portfolio.feedback.invalidScore'));
       return;
     }
 
@@ -155,7 +157,7 @@ export default function TeacherFeedback() {
 
     if (updateError) {
       setSaving(false);
-      alert(`Failed to update submission: ${updateError.message}`);
+      alert(t('portfolio.feedback.errorUpdateSubmission', { message: updateError.message }));
       return;
     }
 
@@ -178,7 +180,7 @@ export default function TeacherFeedback() {
 
       if (feedbackError) {
         setSaving(false);
-        alert(`Submission updated, but feedback update failed: ${feedbackError.message}`);
+        alert(t('portfolio.feedback.errorFeedbackUpdateFailed', { message: feedbackError.message }));
         return;
       }
     } else {
@@ -194,7 +196,7 @@ export default function TeacherFeedback() {
 
       if (feedbackError) {
         setSaving(false);
-        alert(`Submission updated, but feedback failed: ${feedbackError.message}`);
+        alert(t('portfolio.feedback.errorFeedbackFailed', { message: feedbackError.message }));
         return;
       }
     }
@@ -241,33 +243,33 @@ export default function TeacherFeedback() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl text-[#284342]">Teacher Feedback</h1>
+        <h1 className="text-3xl text-[#284342]">{t('portfolio.feedback.title')}</h1>
         <p className="text-[#6b6b6b] mt-1">
-          Review student portfolio submissions and provide feedback
+          {t('portfolio.feedback.subtitle')}
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <SummaryCard label="Pending Review" value={pendingCount} color="text-yellow-700" />
-        <SummaryCard label="Reviewed" value={reviewedCount} color="text-green-700" />
-        <SummaryCard label="Revision Requested" value={revisionCount} color="text-blue-700" />
+        <SummaryCard label={t('portfolio.feedback.pendingReview')} value={pendingCount} color="text-yellow-700" />
+        <SummaryCard label={t('portfolio.feedback.reviewed')} value={reviewedCount} color="text-green-700" />
+        <SummaryCard label={t('portfolio.feedback.revisionRequested')} value={revisionCount} color="text-blue-700" />
       </div>
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-lg text-[#284342]">Student Submissions</h2>
+          <h2 className="text-lg text-[#284342]">{t('portfolio.feedback.studentSubmissions')}</h2>
         </div>
 
         <div className="divide-y divide-[rgba(40,67,66,0.1)]">
           {loading && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              Loading submissions...
+              {t('portfolio.feedback.loading')}
             </div>
           )}
 
           {!loading && submissions.length === 0 && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              No submissions found.
+              {t('portfolio.feedback.empty')}
             </div>
           )}
 
@@ -278,24 +280,24 @@ export default function TeacherFeedback() {
                 className="p-6 hover:bg-[#f8f8f6] transition-colors"
               >
                 <div className="flex flex-col lg:flex-row gap-5">
-                  <SubmissionPreview fileUrl={submission.fileUrl} />
+                  <SubmissionPreview fileUrl={submission.fileUrl} t={t} />
 
                   <div className="flex-1">
                     <div className="flex items-center gap-3 mb-2 flex-wrap">
                       <h3 className="text-lg text-[#284342]">
                         {submission.assignment}
                       </h3>
-                      <StatusBadge status={submission.status} />
+                      <StatusBadge status={submission.status} t={t} />
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-3">
-                      <Info label="Student" value={submission.student} />
-                      <Info label="Course" value={submission.course} />
-                      <Info label="Submitted" value={submission.submittedDate} />
+                      <Info label={t('portfolio.feedback.student')} value={submission.student} />
+                      <Info label={t('portfolio.feedback.course')} value={submission.course} />
+                      <Info label={t('portfolio.feedback.submitted')} value={submission.submittedDate} />
 
                       {submission.score !== undefined && (
                         <div>
-                          <p className="text-xs text-[#6b6b6b] mb-1">Score</p>
+                          <p className="text-xs text-[#6b6b6b] mb-1">{t('portfolio.feedback.score')}</p>
                           <div className="flex items-center gap-2">
                             <Star size={16} className="text-[#e9da95] fill-[#e9da95]" />
                             <p className="text-[#284342]">{submission.score}%</p>
@@ -308,7 +310,7 @@ export default function TeacherFeedback() {
                       <div className="p-3 bg-[#f8f8f6] rounded-lg">
                         <div className="flex items-center gap-2 mb-2">
                           <MessageSquare size={14} className="text-[#284342]" />
-                          <p className="text-xs text-[#6b6b6b]">Feedback:</p>
+                          <p className="text-xs text-[#6b6b6b]">{t('portfolio.feedback.feedbackLabel')}</p>
                         </div>
                         <p className="text-sm text-[#284342]">
                           {submission.feedback}
@@ -324,7 +326,7 @@ export default function TeacherFeedback() {
                             className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors text-sm flex items-center gap-2"
                           >
                             <CheckCircle size={16} />
-                            Approve
+                            {t('common.approve')}
                           </button>
 
                           <button
@@ -334,7 +336,7 @@ export default function TeacherFeedback() {
                             className="px-4 py-2 rounded-lg bg-blue-600 text-white hover:bg-blue-700 transition-colors text-sm flex items-center gap-2"
                           >
                             <AlertCircle size={16} />
-                            Request Revision
+                            {t('portfolio.feedback.requestRevision')}
                           </button>
                         </>
                       ) : (
@@ -342,7 +344,7 @@ export default function TeacherFeedback() {
                           onClick={() => openReviewModal(submission, 'approved')}
                           className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm"
                         >
-                          Edit Feedback
+                          {t('portfolio.feedback.editFeedback')}
                         </button>
                       )}
 
@@ -351,7 +353,7 @@ export default function TeacherFeedback() {
                         className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm flex items-center gap-2"
                       >
                         <Eye size={16} />
-                        Preview Submission
+                        {t('portfolio.feedback.previewSubmission')}
                       </button>
 
                       {submission.fileUrl && (
@@ -359,7 +361,7 @@ export default function TeacherFeedback() {
                           onClick={() => window.open(submission.fileUrl, '_blank')}
                           className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm"
                         >
-                          Open File
+                          {t('portfolio.feedback.openFile')}
                         </button>
                       )}
                     </div>
@@ -374,6 +376,7 @@ export default function TeacherFeedback() {
         <PreviewModal
           submission={selectedSubmission}
           onClose={() => setSelectedSubmission(null)}
+          t={t}
         />
       )}
 
@@ -388,13 +391,14 @@ export default function TeacherFeedback() {
           setFeedback={setFeedback}
           onClose={() => setReviewModal(null)}
           onSave={saveReview}
+          t={t}
         />
       )}
     </div>
   );
 }
 
-function SubmissionPreview({ fileUrl }: { fileUrl?: string }) {
+function SubmissionPreview({ fileUrl, t }: { fileUrl?: string; t: (key: string) => string }) {
   if (!fileUrl) {
     return (
       <div className="w-full lg:w-44 h-44 rounded-lg bg-[#f8f8f6] border border-[rgba(40,67,66,0.1)] flex items-center justify-center">
@@ -416,7 +420,7 @@ function SubmissionPreview({ fileUrl }: { fileUrl?: string }) {
   return (
     <div className="w-full lg:w-44 h-44 rounded-lg bg-[#f8f8f6] border border-[rgba(40,67,66,0.1)] flex flex-col items-center justify-center">
       <FileText size={40} className="text-[#284342] mb-2" />
-      <p className="text-xs text-[#6b6b6b]">Document</p>
+      <p className="text-xs text-[#6b6b6b]">{t('portfolio.feedback.document')}</p>
     </div>
   );
 }
@@ -424,9 +428,11 @@ function SubmissionPreview({ fileUrl }: { fileUrl?: string }) {
 function PreviewModal({
   submission,
   onClose,
+  t,
 }: {
   submission: SubmissionReview;
   onClose: () => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
@@ -447,7 +453,7 @@ function PreviewModal({
         <div className="p-6">
           {!submission.fileUrl && (
             <div className="h-96 rounded-lg bg-[#f8f8f6] flex items-center justify-center text-[#6b6b6b]">
-              No file uploaded.
+              {t('portfolio.feedback.noFileUploaded')}
             </div>
           )}
 
@@ -482,6 +488,7 @@ function ReviewModal({
   setFeedback,
   onClose,
   onSave,
+  t,
 }: {
   submission: SubmissionReview;
   status: 'approved' | 'revision_required';
@@ -492,13 +499,14 @@ function ReviewModal({
   setFeedback: (value: string) => void;
   onClose: () => void;
   onSave: () => void;
+  t: (key: string) => string;
 }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl max-w-xl w-full p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl text-[#284342]">
-            {status === 'approved' ? 'Approve Submission' : 'Request Revision'}
+            {status === 'approved' ? t('portfolio.feedback.approveSubmission') : t('portfolio.feedback.requestRevision')}
           </h2>
           <button onClick={onClose}>
             <X size={20} className="text-[#284342]" />
@@ -506,12 +514,12 @@ function ReviewModal({
         </div>
 
         <div className="space-y-4">
-          <Info label="Student" value={submission.student} />
-          <Info label="Assignment" value={submission.assignment} />
+          <Info label={t('portfolio.feedback.student')} value={submission.student} />
+          <Info label={t('portfolio.feedback.assignment')} value={submission.assignment} />
 
           <div>
             <label className="block text-sm text-[#284342] mb-2">
-              Score (0-100)
+              {t('portfolio.feedback.scoreRange')}
             </label>
             <input
               type="number"
@@ -525,13 +533,13 @@ function ReviewModal({
 
           <div>
             <label className="block text-sm text-[#284342] mb-2">
-              Feedback
+              {t('portfolio.feedback.feedbackFieldLabel')}
             </label>
             <textarea
               rows={5}
               value={feedback}
               onChange={(e) => setFeedback(e.target.value)}
-              placeholder="Write teacher feedback here..."
+              placeholder={t('portfolio.feedback.feedbackPlaceholder')}
               className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
             />
           </div>
@@ -542,7 +550,7 @@ function ReviewModal({
             onClick={onClose}
             className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
 
           <button
@@ -554,7 +562,7 @@ function ReviewModal({
                 : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
-            {saving ? 'Saving...' : 'Save Review'}
+            {saving ? t('portfolio.feedback.savingReview') : t('portfolio.feedback.saveReview')}
           </button>
         </div>
       </div>
@@ -578,10 +586,10 @@ function getCourseName(lesson: any, fallback?: string) {
   return course?.course_name || actualLesson?.lesson_title || fallback || '-';
 }
 
-function getStudentName(student: any) {
-  if (!student) return 'Unnamed Student';
+function getStudentName(student: any, t: (key: string) => string) {
+  if (!student) return t('dashboard.fallback.unnamedStudent');
   const actualStudent = getSingle(student);
-  return actualStudent?.full_name || 'Unnamed Student';
+  return actualStudent?.full_name || t('dashboard.fallback.unnamedStudent');
 }
 
 function getSingle(value: any) {
@@ -618,7 +626,13 @@ function SummaryCard({
   );
 }
 
-function StatusBadge({ status }: { status: SubmissionReview['status'] }) {
+function StatusBadge({
+  status,
+  t,
+}: {
+  status: SubmissionReview['status'];
+  t: (key: string) => string;
+}) {
   const className =
     status === 'Reviewed'
       ? 'bg-green-100 text-green-700'
@@ -626,9 +640,16 @@ function StatusBadge({ status }: { status: SubmissionReview['status'] }) {
       ? 'bg-blue-100 text-blue-700'
       : 'bg-yellow-100 text-yellow-700';
 
+  const label =
+    status === 'Reviewed'
+      ? t('portfolio.feedback.reviewed')
+      : status === 'Revision Requested'
+      ? t('portfolio.feedback.revisionRequested')
+      : t('portfolio.feedback.pendingReview');
+
   return (
     <span className={`text-xs px-3 py-1 rounded-full ${className}`}>
-      {status}
+      {label}
     </span>
   );
 }

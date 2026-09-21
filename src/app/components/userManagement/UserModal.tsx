@@ -1,6 +1,7 @@
 import { X, Save } from 'lucide-react';
 import type { SystemUser, UserFormData } from '../../types/user';
-import { roles, formatRole } from '../../utils/userHelpers';
+import { roles, translateRole } from '../../utils/userHelpers';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface Props {
   editingUser: SystemUser | null;
@@ -17,12 +18,14 @@ export default function UserModal({
   onClose,
   onSave,
 }: Props) {
+  const { t } = useLanguage();
+
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl max-w-lg w-full p-6">
         <div className="flex items-center justify-between mb-6">
           <h2 className="text-xl text-[#284342]">
-            {editingUser ? 'Edit User' : 'Add New User'}
+            {editingUser ? t('userManagement.modal.editTitle') : t('userManagement.modal.addTitle')}
           </h2>
 
           <button onClick={onClose}>
@@ -32,7 +35,7 @@ export default function UserModal({
 
         <div className="space-y-4">
           <Input
-            label="Full Name"
+            label={t('userManagement.modal.fullName')}
             value={formData.fullName}
             onChange={(value) =>
               setFormData((prev) => ({ ...prev, fullName: value }))
@@ -40,7 +43,7 @@ export default function UserModal({
           />
 
           <Input
-            label="Email"
+            label={t('userManagement.modal.email')}
             type="email"
             value={formData.email}
             onChange={(value) =>
@@ -49,7 +52,7 @@ export default function UserModal({
           />
 
           <div>
-            <label className="block text-sm text-[#284342] mb-2">Role</label>
+            <label className="block text-sm text-[#284342] mb-2">{t('userManagement.modal.role')}</label>
             <select
               value={formData.role}
               onChange={(e) =>
@@ -59,14 +62,14 @@ export default function UserModal({
             >
               {roles.map((role) => (
                 <option key={role} value={role}>
-                  {formatRole(role)}
+                  {translateRole(role, t)}
                 </option>
               ))}
             </select>
           </div>
 
           <div>
-            <label className="block text-sm text-[#284342] mb-2">Status</label>
+            <label className="block text-sm text-[#284342] mb-2">{t('userManagement.modal.status')}</label>
             <select
               value={formData.status}
               onChange={(e) =>
@@ -74,8 +77,8 @@ export default function UserModal({
               }
               className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
             >
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
+              <option value="active">{t('common.active')}</option>
+              <option value="inactive">{t('common.inactive')}</option>
             </select>
           </div>
         </div>
@@ -85,7 +88,7 @@ export default function UserModal({
             onClick={onClose}
             className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
           >
-            Cancel
+            {t('common.cancel')}
           </button>
 
           <button
@@ -93,7 +96,7 @@ export default function UserModal({
             className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
           >
             <Save size={16} />
-            {editingUser ? 'Save Changes' : 'Create User'}
+            {editingUser ? t('userManagement.modal.saveChanges') : t('userManagement.modal.createUser')}
           </button>
         </div>
       </div>

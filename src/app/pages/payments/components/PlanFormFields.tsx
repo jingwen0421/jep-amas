@@ -1,6 +1,8 @@
 // Shared by CreatePlanModal and EditPlanModal — the fee inputs and
 // plan-type/installments/first-due-date inputs are identical in both.
 
+import { useLanguage } from '../../../context/LanguageContext';
+
 export function FeeFields({
   originalFee,
   discountAmount,
@@ -14,11 +16,13 @@ export function FeeFields({
   onOriginalFeeChange: (value: string) => void;
   onDiscountChange: (value: string) => void;
 }) {
+  const { t } = useLanguage();
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div>
         <label className="block text-sm text-[#284342] mb-2">
-          Original Fee (RM)
+          {t('payments.plans.originalFeeRm')}
         </label>
 
         <input
@@ -31,7 +35,7 @@ export function FeeFields({
 
       <div>
         <label className="block text-sm text-[#284342] mb-2">
-          Discount (RM)
+          {t('payments.plans.discountRm')}
         </label>
 
         <input
@@ -44,7 +48,7 @@ export function FeeFields({
 
       <div>
         <label className="block text-sm text-[#284342] mb-2">
-          Final Amount (RM)
+          {t('payments.plans.finalAmountRm')}
         </label>
 
         <input
@@ -73,26 +77,28 @@ export function PaymentPlanFields({
   setInstallments: (value: string) => void;
   setFirstDueDate: (value: string) => void;
 }) {
+  const { t } = useLanguage();
+
   return (
     <>
       <div>
-        <label className="block text-sm text-[#284342] mb-2">Payment Type</label>
+        <label className="block text-sm text-[#284342] mb-2">{t('payments.plans.paymentType')}</label>
 
         <select
           value={planType}
           onChange={(event) => setPlanType(event.target.value)}
           className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white"
         >
-          <option value="full_payment">Full Payment</option>
-          <option value="deposit_balance">Deposit + Balance</option>
-          <option value="installment">Installments</option>
+          <option value="full_payment">{t('payments.plans.typeFullPayment')}</option>
+          <option value="deposit_balance">{t('payments.plans.typeDepositBalance')}</option>
+          <option value="installment">{t('payments.plans.typeInstallments')}</option>
         </select>
       </div>
 
       {planType !== 'full_payment' && (
         <div>
           <label className="block text-sm text-[#284342] mb-2">
-            Number of Installments
+            {t('payments.plans.numberOfInstallments')}
           </label>
 
           <select
@@ -100,17 +106,17 @@ export function PaymentPlanFields({
             onChange={(event) => setInstallments(event.target.value)}
             className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white"
           >
-            <option value="2">2 Installments</option>
-            <option value="3">3 Installments</option>
-            <option value="4">4 Installments</option>
-            <option value="5">5 Installments</option>
-            <option value="6">6 Installments</option>
+            <option value="2">{t('payments.plans.installmentsCount', { count: 2 })}</option>
+            <option value="3">{t('payments.plans.installmentsCount', { count: 3 })}</option>
+            <option value="4">{t('payments.plans.installmentsCount', { count: 4 })}</option>
+            <option value="5">{t('payments.plans.installmentsCount', { count: 5 })}</option>
+            <option value="6">{t('payments.plans.installmentsCount', { count: 6 })}</option>
           </select>
         </div>
       )}
 
       <div>
-        <label className="block text-sm text-[#284342] mb-2">First Due Date</label>
+        <label className="block text-sm text-[#284342] mb-2">{t('payments.plans.firstDueDate')}</label>
 
         <input
           type="date"

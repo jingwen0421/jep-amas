@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle2, XCircle, Clock, Coffee } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
 
 type AttendanceStatus = 'Present' | 'Absent' | 'Late' | 'Leave';
 
@@ -14,12 +15,14 @@ interface Student {
 
 interface LessonOption {
   id: string;
-  label: string;
+  rawTitle: string;
+  time: string;
   batchId: string;
   batchName: string;
 }
 
 export default function DailyAttendance() {
+  const { t } = useLanguage();
   const [selectedClass, setSelectedClass] = useState('');
   const [selectedDate, setSelectedDate] = useState(
     new Date().toISOString().slice(0, 10)
@@ -78,7 +81,8 @@ export default function DailyAttendance() {
         id: lesson.id,
         batchId: lesson.batch_id,
         batchName: lesson.class_batches?.batch_name || '-',
-        label: `${lesson.lesson_title || lesson.class_batches?.courses?.course_name || 'Class'} - ${time}`,
+        rawTitle: lesson.lesson_title || lesson.class_batches?.courses?.course_name || '',
+        time,
       };
     });
 
@@ -134,7 +138,7 @@ export default function DailyAttendance() {
       return {
         id: student?.student_code || '-',
         dbId: student?.id,
-        name: student?.full_name || 'Unnamed Student',
+        name: student?.full_name || t('dailyAttendance.unnamedStudent'),
         batch: batchName,
         status: attendanceMap.get(student?.id) || null,
       };
@@ -160,7 +164,7 @@ export default function DailyAttendance() {
 
   async function handleSubmit() {
     if (!selectedClass) {
-      alert('Please select a class.');
+      alert(t('dailyAttendance.alert.selectClass'));
       return;
     }
 
@@ -174,7 +178,7 @@ export default function DailyAttendance() {
       }));
 
     if (records.length === 0) {
-      alert('Please mark attendance first.');
+      alert(t('dailyAttendance.alert.markFirst'));
       return;
     }
 
@@ -185,14 +189,14 @@ export default function DailyAttendance() {
       });
 
     if (error) {
-      alert(`Failed to save attendance: ${error.message}`);
+      alert(t('dailyAttendance.alert.saveFailed', { message: error.message }));
       return;
     }
 
     const presentCount = students.filter((s) => s.status === 'Present').length;
     const absentCount = students.filter((s) => s.status === 'Absent').length;
 
-    alert(`Attendance saved!\nPresent: ${presentCount}\nAbsent: ${absentCount}`);
+    alert(t('dailyAttendance.alert.saved', { present: presentCount, absent: absentCount }));
   }
 
   const stats = {
@@ -207,9 +211,9 @@ export default function DailyAttendance() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl text-[#284342]">Daily Attendance</h1>
+          <h1 className="text-3xl text-[#284342]">{t('dailyAttendance.title')}</h1>
           <p className="text-[#6b6b6b] mt-1">
-            Mark student attendance for classes
+            {t('dailyAttendance.subtitle')}
           </p>
         </div>
 
@@ -217,14 +221,14 @@ export default function DailyAttendance() {
           onClick={handleSubmit}
           className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors"
         >
-          Save Attendance
+          {t('dailyAttendance.saveAttendance')}
         </button>
       </div>
 
       <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
           <div>
-            <label className="block text-sm text-[#284342] mb-2">Date</label>
+            <label className="block text-sm text-[#284342] mb-2">{t('dailyAttendance.field.date')}</label>
             <input
               type="date"
               value={selectedDate}
@@ -234,22 +238,22 @@ export default function DailyAttendance() {
           </div>
 
           <div className="md:col-span-2">
-            <label className="block text-sm text-[#284342] mb-2">Class</label>
+            <label className="block text-sm text-[#284342] mb-2">{t('dailyAttendance.field.class')}</label>
             <select
               value={selectedClass}
               onChange={(e) => setSelectedClass(e.target.value)}
               className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
             >
-              {loadingLessons && <option>Loading classes...</option>}
+              {loadingLessons && <option>{t('dailyAttendance.loadingClasses')}</option>}
 
               {!loadingLessons && lessons.length === 0 && (
-                <option value="">No classes on selected date</option>
+                <option value="">{t('dailyAttendance.noClassesOnDate')}</option>
               )}
 
               {!loadingLessons &&
                 lessons.map((lesson) => (
                   <option key={lesson.id} value={lesson.id}>
-                    {lesson.label}
+                    {`${lesson.rawTitle || t('dailyAttendance.fallback.class')} - ${lesson.time}`}
                   </option>
                 ))}
             </select>
@@ -259,28 +263,28 @@ export default function DailyAttendance() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
           <StatCard
             icon={<CheckCircle2 size={20} className="text-green-700" />}
-            label="Present"
+            label={t('dailyAttendance.status.present')}
             value={`${stats.present}/${stats.total}`}
             bg="bg-green-50"
             text="text-green-700"
           />
           <StatCard
             icon={<XCircle size={20} className="text-red-700" />}
-            label="Absent"
+            label={t('dailyAttendance.status.absent')}
             value={`${stats.absent}/${stats.total}`}
             bg="bg-red-50"
             text="text-red-700"
           />
           <StatCard
             icon={<Clock size={20} className="text-yellow-700" />}
-            label="Late"
+            label={t('dailyAttendance.status.late')}
             value={`${stats.late}/${stats.total}`}
             bg="bg-yellow-50"
             text="text-yellow-700"
           />
           <StatCard
             icon={<Coffee size={20} className="text-blue-700" />}
-            label="Leave"
+            label={t('dailyAttendance.status.leave')}
             value={`${stats.leave}/${stats.total}`}
             bg="bg-blue-50"
             text="text-blue-700"
@@ -293,7 +297,7 @@ export default function DailyAttendance() {
             disabled={students.length === 0}
             className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm disabled:opacity-50"
           >
-            Mark All Present
+            {t('dailyAttendance.markAllPresent')}
           </button>
         </div>
       </div>
@@ -303,16 +307,16 @@ export default function DailyAttendance() {
           <thead className="bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
             <tr>
               <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                Student ID
+                {t('dailyAttendance.table.studentId')}
               </th>
               <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                Name
+                {t('dailyAttendance.table.name')}
               </th>
               <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                Batch
+                {t('dailyAttendance.table.batch')}
               </th>
               <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                Attendance Status
+                {t('dailyAttendance.table.attendanceStatus')}
               </th>
             </tr>
           </thead>
@@ -321,7 +325,7 @@ export default function DailyAttendance() {
             {loadingStudents && (
               <tr>
                 <td colSpan={4} className="px-6 py-8 text-center text-[#6b6b6b]">
-                  Loading students...
+                  {t('dailyAttendance.loadingStudents')}
                 </td>
               </tr>
             )}
@@ -329,7 +333,7 @@ export default function DailyAttendance() {
             {!loadingStudents && students.length === 0 && (
               <tr>
                 <td colSpan={4} className="px-6 py-8 text-center text-[#6b6b6b]">
-                  No students enrolled in this class batch.
+                  {t('dailyAttendance.noStudentsEnrolled')}
                 </td>
               </tr>
             )}
@@ -352,25 +356,25 @@ export default function DailyAttendance() {
                   <td className="px-6 py-4">
                     <div className="flex items-center gap-2">
                       <AttendanceButton
-                        label="Present"
+                        label={t('dailyAttendance.status.present')}
                         active={student.status === 'Present'}
                         color="green"
                         onClick={() => markAttendance(student.id, 'Present')}
                       />
                       <AttendanceButton
-                        label="Absent"
+                        label={t('dailyAttendance.status.absent')}
                         active={student.status === 'Absent'}
                         color="red"
                         onClick={() => markAttendance(student.id, 'Absent')}
                       />
                       <AttendanceButton
-                        label="Late"
+                        label={t('dailyAttendance.status.late')}
                         active={student.status === 'Late'}
                         color="yellow"
                         onClick={() => markAttendance(student.id, 'Late')}
                       />
                       <AttendanceButton
-                        label="Leave"
+                        label={t('dailyAttendance.status.leave')}
                         active={student.status === 'Leave'}
                         color="blue"
                         onClick={() => markAttendance(student.id, 'Leave')}

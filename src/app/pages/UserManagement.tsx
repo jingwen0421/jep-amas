@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { UserPlus } from 'lucide-react';
 
 import { useUsers } from '../hooks/useUsers';
+import { useLanguage } from '../context/LanguageContext';
+import { translateRole } from '../utils/userHelpers';
 
 import type { SystemUser, UserFormData } from '../types/user';
 
@@ -18,6 +20,7 @@ import PendingApproval from '../components/userManagement/PendingApproval';
 type Tab = 'users' | 'pending' | 'invitations' | 'security';
 
 export default function UserManagement() {
+  const { t } = useLanguage();
   const {
     users,
     filteredUsers,
@@ -38,6 +41,7 @@ export default function UserManagement() {
   const [activeTab, setActiveTab] = useState<Tab>('users');
   const [showModal, setShowModal] = useState(false);
   const [editingUser, setEditingUser] = useState<SystemUser | null>(null);
+  const [viewingUser, setViewingUser] = useState<SystemUser | null>(null);
 
   const [formData, setFormData] = useState<UserFormData>({
     fullName: '',
@@ -79,9 +83,9 @@ export default function UserManagement() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl text-[#284342]">User & Access Control</h1>
+          <h1 className="text-3xl text-[#284342]">{t('userManagement.title')}</h1>
           <p className="text-[#6b6b6b] mt-1">
-            Manage users, approvals, invitations and system access.
+            {t('userManagement.subtitle')}
           </p>
         </div>
 
@@ -90,7 +94,7 @@ export default function UserManagement() {
           className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] flex items-center gap-2"
         >
           <UserPlus size={20} />
-          Add User
+          {t('userManagement.addUser')}
         </button>
       </div>
 
@@ -99,25 +103,25 @@ export default function UserManagement() {
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="flex flex-wrap border-b border-[rgba(40,67,66,0.1)] bg-[#f8f8f6]">
           <TabButton
-            label={`Users (${users.length})`}
+            label={t('userManagement.tabs.users', { count: users.length })}
             active={activeTab === 'users'}
             onClick={() => setActiveTab('users')}
           />
 
           <TabButton
-            label={`Pending Approval (${pendingCount})`}
+            label={t('userManagement.tabs.pending', { count: pendingCount })}
             active={activeTab === 'pending'}
             onClick={() => setActiveTab('pending')}
           />
 
           <TabButton
-            label="Invitations"
+            label={t('userManagement.tabs.invitations')}
             active={activeTab === 'invitations'}
             onClick={() => setActiveTab('invitations')}
           />
 
           <TabButton
-            label="Security"
+            label={t('userManagement.tabs.security')}
             active={activeTab === 'security'}
             onClick={() => setActiveTab('security')}
           />
@@ -139,9 +143,7 @@ export default function UserManagement() {
                 users={filteredUsers}
                 totalUsers={users.length}
                 loading={loading}
-                onView={(user) =>
-                  alert(`${user.name}\n${user.email}\n${user.role}`)
-                }
+                onView={setViewingUser}
                 onEdit={openEditUser}
                 onToggleStatus={toggleStatus}
               />
@@ -176,6 +178,55 @@ export default function UserManagement() {
           onSave={handleSave}
         />
       )}
+
+      {viewingUser && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-md w-full p-6">
+            <h2 className="text-xl text-[#284342] mb-6">
+              {viewingUser.name}
+            </h2>
+
+            <div className="space-y-4 text-sm">
+              <Detail label={t('userManagement.viewModal.email')} value={viewingUser.email} />
+              <Detail label={t('userManagement.viewModal.role')} value={translateRole(viewingUser.rawRole, t)} />
+              <Detail
+                label={t('userManagement.viewModal.status')}
+                value={viewingUser.status === 'Active' ? t('common.active') : t('common.inactive')}
+              />
+              <Detail label={t('userManagement.viewModal.created')} value={viewingUser.createdAt} />
+              <Detail label={t('userManagement.viewModal.lastUpdated')} value={viewingUser.lastUpdated} />
+            </div>
+
+            <div className="flex items-center gap-3 mt-6">
+              <button
+                onClick={() => setViewingUser(null)}
+                className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
+              >
+                {t('userManagement.viewModal.close')}
+              </button>
+
+              <button
+                onClick={() => {
+                  openEditUser(viewingUser);
+                  setViewingUser(null);
+                }}
+                className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors"
+              >
+                {t('userManagement.viewModal.editUser')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Detail({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between border-b border-[rgba(40,67,66,0.08)] pb-2">
+      <span className="text-[#6b6b6b]">{label}</span>
+      <span className="text-[#284342]">{value}</span>
     </div>
   );
 }

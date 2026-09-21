@@ -1,6 +1,10 @@
 import { Plus, Edit, Trash2, BookOpen } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router';
 import { supabase } from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
+import { useConfirm } from '../../context/ConfirmDialogContext';
+import { EmptyState } from '../../components/ui/EmptyState';
 
 interface CourseCategory {
   id: string;
@@ -11,7 +15,11 @@ interface CourseCategory {
 }
 
 export default function CourseCategories() {
+  const navigate = useNavigate();
+  const { t } = useLanguage();
+  const confirmDialog = useConfirm();
   const [showModal, setShowModal] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [categories, setCategories] = useState<CourseCategory[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -32,20 +40,34 @@ export default function CourseCategories() {
       .from('course_categories')
       .select('*');
 
-    console.log('DATA:', data);
-    console.log('ERROR:', error);
-
     if (error) {
       console.error(error);
       setLoading(false);
       return;
     }
 
+    const { data: courseRows, error: courseError } = await supabase
+      .from('courses')
+      .select('category_id');
+
+    if (courseError) {
+      console.error(courseError);
+    }
+
+    const countByCategory = new Map<string, number>();
+    (courseRows || []).forEach((row: any) => {
+      if (!row.category_id) return;
+      countByCategory.set(
+        row.category_id,
+        (countByCategory.get(row.category_id) || 0) + 1
+      );
+    });
+
     const mapped = (data || []).map((category: any) => ({
       id: category.id,
       name: category.category_name,
       description: category.description || '-',
-      courseCount: 0,
+      courseCount: countByCategory.get(category.id) || 0,
       color: category.color || '#284342',
     }));
 
@@ -53,21 +75,44 @@ export default function CourseCategories() {
     setLoading(false);
   }
 
-  async function createCategory() {
+  function openAddModal() {
+    setEditingId(null);
+    setFormData({ name: '', description: '', color: '#284342' });
+    setShowModal(true);
+  }
+
+  function openEditModal(category: CourseCategory) {
+    setEditingId(category.id);
+    setFormData({
+      name: category.name,
+      description: category.description === '-' ? '' : category.description,
+      color: category.color,
+    });
+    setShowModal(true);
+  }
+
+  async function saveCategory() {
     if (!formData.name.trim()) {
-      alert('Please enter category name.');
+      alert(t('courses.categories.error.nameRequired'));
       return;
     }
 
-    const { error } = await supabase.from('course_categories').insert({
+    const payload = {
       category_name: formData.name,
       description: formData.description,
       color: formData.color,
       status: 'active',
-    });
+    };
+
+    const { error } = editingId
+      ? await supabase
+          .from('course_categories')
+          .update(payload)
+          .eq('id', editingId)
+      : await supabase.from('course_categories').insert(payload);
 
     if (error) {
-      alert(`Failed to create category: ${error.message}`);
+      alert(t('courses.categories.error.saveFailed', { error: error.message }));
       return;
     }
 
@@ -77,12 +122,16 @@ export default function CourseCategories() {
       color: '#284342',
     });
 
+    setEditingId(null);
     setShowModal(false);
     fetchCategories();
   }
 
   async function deleteCategory(id: string) {
-    const confirmDelete = confirm('Are you sure you want to delete this category?');
+    const confirmDelete = await confirmDialog(t('courses.categories.confirmDelete'), {
+      variant: 'danger',
+      confirmLabel: t('common.delete'),
+    });
 
     if (!confirmDelete) return;
 
@@ -92,7 +141,7 @@ export default function CourseCategories() {
       .eq('id', id);
 
     if (error) {
-      alert(`Failed to delete category: ${error.message}`);
+      alert(t('courses.categories.error.deleteFailed', { error: error.message }));
       return;
     }
 
@@ -111,31 +160,35 @@ export default function CourseCategories() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl text-[#284342]">Course Categories</h1>
+          <h1 className="text-3xl text-[#284342]">{t('courses.categories.title')}</h1>
           <p className="text-[#6b6b6b] mt-1">
-            Organize courses into categories
+            {t('courses.categories.subtitle')}
           </p>
         </div>
 
         <button
-          onClick={() => setShowModal(true)}
+          onClick={openAddModal}
           className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
         >
           <Plus size={20} />
-          Add Category
+          {t('courses.categories.addCategory')}
         </button>
       </div>
 
       {loading && (
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
-          Loading course categories...
+          {t('courses.categories.loading')}
         </div>
       )}
 
       {!loading && categories.length === 0 && (
-        <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
-          No course categories found.
-        </div>
+        <EmptyState
+          icon={<BookOpen size={22} />}
+          message={t('courses.categories.empty')}
+          hint={t('courses.categories.emptyHint')}
+          actionLabel={t('courses.categories.addCategory')}
+          onAction={openAddModal}
+        />
       )}
 
       {!loading && categories.length > 0 && (
@@ -154,7 +207,10 @@ export default function CourseCategories() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors">
+                  <button
+                    onClick={() => openEditModal(category)}
+                    className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
+                  >
                     <Edit size={16} className="text-[#284342]" />
                   </button>
 
@@ -177,14 +233,17 @@ export default function CourseCategories() {
 
               <div className="flex items-center justify-between pt-4 border-t border-[rgba(40,67,66,0.1)]">
                 <div>
-                  <p className="text-sm text-[#6b6b6b]">Courses</p>
+                  <p className="text-sm text-[#6b6b6b]">{t('courses.categories.courses')}</p>
                   <p className="text-xl text-[#284342]">
                     {category.courseCount}
                   </p>
                 </div>
 
-                <button className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm">
-                  View Courses
+                <button
+                  onClick={() => navigate('/app/courses/list')}
+                  className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm"
+                >
+                  {t('courses.categories.viewCourses')}
                 </button>
               </div>
             </div>
@@ -193,13 +252,13 @@ export default function CourseCategories() {
       )}
 
       <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-        <h2 className="text-xl text-[#284342] mb-4">Category Statistics</h2>
+        <h2 className="text-xl text-[#284342] mb-4">{t('courses.categories.statisticsTitle')}</h2>
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <StatCard value={categories.length} label="Total Categories" />
-          <StatCard value={totalCourses} label="Total Courses" />
-          <StatCard value={averageCourses} label="Avg Courses" />
-          <StatCard value={148} label="Active Students" />
+          <StatCard value={categories.length} label={t('courses.categories.stat.totalCategories')} />
+          <StatCard value={totalCourses} label={t('courses.categories.stat.totalCourses')} />
+          <StatCard value={averageCourses} label={t('courses.categories.stat.avgCourses')} />
+          <StatCard value={148} label={t('courses.categories.stat.activeStudents')} />
         </div>
       </div>
 
@@ -207,13 +266,13 @@ export default function CourseCategories() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-2xl w-full p-6">
             <h2 className="text-xl text-[#284342] mb-6">
-              Add New Category
+              {editingId ? t('courses.categories.modal.editTitle') : t('courses.categories.modal.addTitle')}
             </h2>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Category Name
+                  {t('courses.categories.field.name')}
                 </label>
 
                 <input
@@ -225,14 +284,14 @@ export default function CourseCategories() {
                       name: e.target.value,
                     }))
                   }
-                  placeholder="e.g., Professional Courses"
+                  placeholder={t('courses.categories.field.namePlaceholder')}
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                 />
               </div>
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Description
+                  {t('courses.categories.field.description')}
                 </label>
 
                 <textarea
@@ -244,14 +303,14 @@ export default function CourseCategories() {
                       description: e.target.value,
                     }))
                   }
-                  placeholder="Describe this category..."
+                  placeholder={t('courses.categories.field.descriptionPlaceholder')}
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                 />
               </div>
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Color Theme
+                  {t('courses.categories.field.colorTheme')}
                 </label>
 
                 <div className="flex gap-3">
@@ -280,17 +339,20 @@ export default function CourseCategories() {
 
             <div className="flex items-center gap-3 mt-6">
               <button
-                onClick={() => setShowModal(false)}
+                onClick={() => {
+                  setShowModal(false);
+                  setEditingId(null);
+                }}
                 className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
               >
-                Cancel
+                {t('courses.categories.cancel')}
               </button>
 
               <button
-                onClick={createCategory}
+                onClick={saveCategory}
                 className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors"
               >
-                Create Category
+                {editingId ? t('courses.categories.saveChanges') : t('courses.categories.createCategory')}
               </button>
             </div>
           </div>

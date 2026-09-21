@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Image as ImageIcon, Eye, Star, MessageSquare } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface PortfolioItem {
   id: string;
@@ -15,6 +16,7 @@ interface PortfolioItem {
 }
 
 export default function StudentGallery() {
+  const { t } = useLanguage();
   const [items, setItems] = useState<PortfolioItem[]>([]);
   const [filter, setFilter] = useState('All');
   const [selectedItem, setSelectedItem] = useState<PortfolioItem | null>(null);
@@ -54,7 +56,7 @@ export default function StudentGallery() {
 
       return {
         id: item.id,
-        student: getStudentName(item.students),
+        student: getStudentName(item.students, t),
         title: item.title || '-',
         category: getCategory(item.title, item.description),
         date: item.submitted_at
@@ -81,7 +83,7 @@ export default function StudentGallery() {
       .eq('id', id);
 
     if (error) {
-      alert(`Failed to update portfolio item: ${error.message}`);
+      alert(t('portfolio.gallery.errorUpdateItem', { message: error.message }));
       return;
     }
 
@@ -94,12 +96,31 @@ export default function StudentGallery() {
   const filteredItems =
     filter === 'All' ? items : items.filter((item) => item.category === filter);
 
+  function categoryLabel(category: string) {
+    switch (category) {
+      case 'All':
+        return t('portfolio.gallery.categoryAll');
+      case 'Bridal':
+        return t('portfolio.gallery.categoryBridal');
+      case 'Editorial':
+        return t('portfolio.gallery.categoryEditorial');
+      case 'Natural':
+        return t('portfolio.gallery.categoryNatural');
+      case 'SFX':
+        return t('portfolio.gallery.categorySfx');
+      case 'Airbrush':
+        return t('portfolio.gallery.categoryAirbrush');
+      default:
+        return t('portfolio.gallery.categoryPortfolio');
+    }
+  }
+
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl text-[#284342]">Student Work Gallery</h1>
+        <h1 className="text-3xl text-[#284342]">{t('portfolio.gallery.title')}</h1>
         <p className="text-[#6b6b6b] mt-1">
-          View and review student portfolio submissions
+          {t('portfolio.gallery.subtitle')}
         </p>
       </div>
 
@@ -115,20 +136,20 @@ export default function StudentGallery() {
                   : 'bg-[#f8f8f6] text-[#284342]'
               }`}
             >
-              {category}
+              {categoryLabel(category)}
             </button>
           ))}
         </div>
 
         {loading && (
           <div className="text-center text-[#6b6b6b] py-8">
-            Loading gallery...
+            {t('portfolio.gallery.loading')}
           </div>
         )}
 
         {!loading && filteredItems.length === 0 && (
           <div className="text-center text-[#6b6b6b] py-8">
-            No portfolio items found.
+            {t('portfolio.gallery.empty')}
           </div>
         )}
 
@@ -160,15 +181,15 @@ export default function StudentGallery() {
                       <h3 className="text-sm text-[#284342] mb-1">
                         {item.title}
                       </h3>
-                      <p className="text-xs text-[#6b6b6b]">by {item.student}</p>
+                      <p className="text-xs text-[#6b6b6b]">{t('portfolio.gallery.byStudent', { name: item.student })}</p>
                     </div>
 
-                    <StatusBadge status={item.status} />
+                    <StatusBadge status={item.status} t={t} />
                   </div>
 
                   <div className="flex items-center gap-2 mb-3">
                     <span className="text-xs bg-[#e9da95]/20 text-[#284342] px-2 py-1 rounded">
-                      {item.category}
+                      {categoryLabel(item.category)}
                     </span>
                     <span className="text-xs text-[#6b6b6b]">{item.date}</span>
                   </div>
@@ -194,7 +215,7 @@ export default function StudentGallery() {
                     className="w-full py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm flex items-center justify-center gap-2"
                   >
                     <Eye size={16} />
-                    View Details
+                    {t('payments.plans.viewDetails')}
                   </button>
                 </div>
               </div>
@@ -209,7 +230,7 @@ export default function StudentGallery() {
             <div className="p-6 border-b border-[rgba(40,67,66,0.1)]">
               <h2 className="text-xl text-[#284342]">{selectedItem.title}</h2>
               <p className="text-sm text-[#6b6b6b] mt-1">
-                by {selectedItem.student}
+                {t('portfolio.gallery.byStudent', { name: selectedItem.student })}
               </p>
             </div>
 
@@ -230,20 +251,20 @@ export default function StudentGallery() {
               </div>
 
               <div className="grid grid-cols-2 gap-4 mb-6">
-                <Detail label="Category" value={selectedItem.category} />
-                <Detail label="Submission Date" value={selectedItem.date} />
-                <Detail label="Score" value={`${selectedItem.score}%`} />
+                <Detail label={t('portfolio.gallery.category')} value={categoryLabel(selectedItem.category)} />
+                <Detail label={t('portfolio.gallery.submissionDate')} value={selectedItem.date} />
+                <Detail label={t('portfolio.feedback.score')} value={`${selectedItem.score}%`} />
 
                 <div>
-                  <p className="text-xs text-[#6b6b6b] mb-1">Status</p>
-                  <StatusBadge status={selectedItem.status} />
+                  <p className="text-xs text-[#6b6b6b] mb-1">{t('payments.installments.colStatus')}</p>
+                  <StatusBadge status={selectedItem.status} t={t} />
                 </div>
               </div>
 
               {selectedItem.feedback && (
                 <div className="mb-6">
                   <p className="text-xs text-[#6b6b6b] mb-2">
-                    Teacher Feedback
+                    {t('portfolio.gallery.teacherFeedback')}
                   </p>
                   <div className="p-4 bg-[#f8f8f6] rounded-lg text-sm text-[#284342]">
                     {selectedItem.feedback}
@@ -257,7 +278,7 @@ export default function StudentGallery() {
                 onClick={() => setSelectedItem(null)}
                 className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
               >
-                Close
+                {t('payments.receipts.close')}
               </button>
 
               {selectedItem.status === 'Pending' && (
@@ -266,7 +287,7 @@ export default function StudentGallery() {
                     onClick={() => updateStatus(selectedItem.id, 'approved')}
                     className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors"
                   >
-                    Approve
+                    {t('common.approve')}
                   </button>
 
                   <button
@@ -275,7 +296,7 @@ export default function StudentGallery() {
                     }
                     className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors"
                   >
-                    Request Revision
+                    {t('portfolio.feedback.requestRevision')}
                   </button>
                 </>
               )}
@@ -293,10 +314,10 @@ function mapStatus(status: string): PortfolioItem['status'] {
   return 'Pending';
 }
 
-function getStudentName(student: any) {
-  if (!student) return 'Unnamed Student';
-  if (Array.isArray(student)) return student[0]?.full_name || 'Unnamed Student';
-  return student.full_name || 'Unnamed Student';
+function getStudentName(student: any, t: (key: string) => string) {
+  if (!student) return t('dashboard.fallback.unnamedStudent');
+  if (Array.isArray(student)) return student[0]?.full_name || t('dashboard.fallback.unnamedStudent');
+  return student.full_name || t('dashboard.fallback.unnamedStudent');
 }
 
 function getCategory(title: string, description: string) {
@@ -311,7 +332,13 @@ function getCategory(title: string, description: string) {
   return 'Portfolio';
 }
 
-function StatusBadge({ status }: { status: PortfolioItem['status'] }) {
+function StatusBadge({
+  status,
+  t,
+}: {
+  status: PortfolioItem['status'];
+  t: (key: string) => string;
+}) {
   const className =
     status === 'Approved'
       ? 'bg-green-100 text-green-700'
@@ -319,9 +346,16 @@ function StatusBadge({ status }: { status: PortfolioItem['status'] }) {
       ? 'bg-yellow-100 text-yellow-700'
       : 'bg-red-100 text-red-700';
 
+  const label =
+    status === 'Approved'
+      ? t('portfolio.gallery.statusApproved')
+      : status === 'Pending'
+      ? t('common.pending')
+      : t('portfolio.gallery.statusRevisionRequired');
+
   return (
     <span className={`text-xs px-2 py-1 rounded-full ${className}`}>
-      {status}
+      {label}
     </span>
   );
 }

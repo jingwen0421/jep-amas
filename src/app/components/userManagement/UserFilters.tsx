@@ -1,5 +1,6 @@
 import { Search } from 'lucide-react';
-import { roles, formatRole } from '../../utils/userHelpers';
+import { roles, translateRole } from '../../utils/userHelpers';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface Props {
   searchTerm: string;
@@ -19,6 +20,8 @@ export default function UserFilters({
   setRoleFilter,
   setStatusFilter,
 }: Props) {
+  const { t } = useLanguage();
+
   return (
     <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
       <div className="flex flex-col lg:flex-row gap-4">
@@ -35,7 +38,7 @@ export default function UserFilters({
             onChange={(e) =>
               setSearchTerm(e.target.value)
             }
-            placeholder="Search user by name, email or role..."
+            placeholder={t('userManagement.filters.searchPlaceholder')}
             className="w-full pl-10 pr-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] focus:outline-none focus:ring-2 focus:ring-[#284342]"
           />
 
@@ -49,7 +52,7 @@ export default function UserFilters({
           className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
         >
           <option value="all">
-            All Roles
+            {t('userManagement.filters.allRoles')}
           </option>
 
           {roles.map((role) => (
@@ -57,7 +60,7 @@ export default function UserFilters({
               key={role}
               value={role}
             >
-              {formatRole(role)}
+              {translateRole(role, t)}
             </option>
           ))}
         </select>
@@ -70,15 +73,15 @@ export default function UserFilters({
           className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
         >
           <option value="all">
-            All Status
+            {t('userManagement.filters.allStatus')}
           </option>
 
           <option value="active">
-            Active
+            {t('common.active')}
           </option>
 
           <option value="inactive">
-            Inactive
+            {t('common.inactive')}
           </option>
         </select>
 

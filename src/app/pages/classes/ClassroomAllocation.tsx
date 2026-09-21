@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { getCurrentUser } from '../../utils/session';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface Classroom {
   id: string;
@@ -29,15 +30,16 @@ interface RoomBooking {
   endsAt: string;
 }
 
-const SOURCE_LABELS: Record<string, string> = {
-  lessons: 'Class',
-  makeup_classes: 'Makeup Class',
-  event_occurrences: 'Event',
-  room_rentals: 'Room Rental',
-  appointments: 'Appointment',
+const SOURCE_LABEL_KEYS: Record<string, string> = {
+  lessons: 'classroomAllocation.source.class',
+  makeup_classes: 'classroomAllocation.source.makeupClass',
+  event_occurrences: 'classroomAllocation.source.event',
+  room_rentals: 'classroomAllocation.source.roomRental',
+  appointments: 'classroomAllocation.source.appointment',
 };
 
 export default function ClassroomAllocation() {
+  const { t } = useLanguage();
   const currentUser = getCurrentUser();
   const canManage =
     currentUser.role === 'super_admin' || currentUser.role === 'admin';
@@ -169,15 +171,15 @@ export default function ClassroomAllocation() {
     setBookingError(null);
 
     if (!bookingForm.classroomId) {
-      setBookingError('Select a room.');
+      setBookingError(t('classroomAllocation.error.selectRoom'));
       return;
     }
     if (!bookingForm.renterName.trim()) {
-      setBookingError('Enter the renter name.');
+      setBookingError(t('classroomAllocation.error.enterRenterName'));
       return;
     }
     if (!bookingForm.date || !bookingForm.startTime || !bookingForm.endTime) {
-      setBookingError('Select a date, start time, and end time.');
+      setBookingError(t('classroomAllocation.error.selectDateTime'));
       return;
     }
 
@@ -185,7 +187,7 @@ export default function ClassroomAllocation() {
     const endsAt = `${bookingForm.date}T${bookingForm.endTime}:00`;
 
     if (endsAt <= startsAt) {
-      setBookingError('End time must be later than start time.');
+      setBookingError(t('classroomAllocation.error.endAfterStart'));
       return;
     }
 
@@ -237,9 +239,9 @@ export default function ClassroomAllocation() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-3xl text-[#284342]">Classroom Allocation</h1>
+          <h1 className="text-3xl text-[#284342]">{t('classroomAllocation.title')}</h1>
           <p className="text-[#6b6b6b] mt-1">
-            Monitor room availability, including classes and external co-working rentals.
+            {t('classroomAllocation.subtitle')}
           </p>
         </div>
 
@@ -253,14 +255,14 @@ export default function ClassroomAllocation() {
             className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
           >
             <Plus size={20} />
-            Book Rental
+            {t('classroomAllocation.bookRental')}
           </button>
         )}
       </div>
 
       <div className="bg-white rounded-xl p-4 border border-[rgba(40,67,66,0.1)]">
         <div className="flex items-center gap-4">
-          <label className="text-sm text-[#284342]">View Date:</label>
+          <label className="text-sm text-[#284342]">{t('classroomAllocation.viewDate')}</label>
           <input
             type="date"
             value={selectedDate}
@@ -297,7 +299,9 @@ export default function ClassroomAllocation() {
                       : 'bg-yellow-100 text-yellow-700'
                   }`}
                 >
-                  {status}
+                  {status === 'Available'
+                    ? t('classroomAllocation.status.available')
+                    : t('classroomAllocation.status.occupied')}
                 </span>
               </div>
 
@@ -305,18 +309,18 @@ export default function ClassroomAllocation() {
                 {room.capacity != null && (
                   <div className="flex items-center gap-2 text-sm text-[#6b6b6b] mb-2">
                     <Users size={16} />
-                    <span>Capacity: {room.capacity}</span>
+                    <span>{t('classroomAllocation.capacity', { count: room.capacity })}</span>
                   </div>
                 )}
 
                 {current && (
                   <div className="p-3 bg-white rounded-lg mb-2">
                     <p className="text-xs text-[#6b6b6b] mb-1">
-                      {SOURCE_LABELS[current.sourceTable] || 'Booking'}:
+                      {t(SOURCE_LABEL_KEYS[current.sourceTable] || 'classroomAllocation.source.booking')}:
                     </p>
                     <p className="text-sm text-[#284342]">{current.title}</p>
                     <p className="text-xs text-[#6b6b6b] mt-1">
-                      Until {current.endTime}
+                      {t('classroomAllocation.until', { time: current.endTime })}
                     </p>
                   </div>
                 )}
@@ -324,7 +328,7 @@ export default function ClassroomAllocation() {
 
               <div className="space-y-1">
                 <p className="text-xs text-[#6b6b6b] mb-2">
-                  {roomBookings.length} booking(s) on {selectedDate}
+                  {t('classroomAllocation.bookingsOn', { count: roomBookings.length, date: selectedDate })}
                 </p>
                 {roomBookings.slice(0, 3).map((b) => (
                   <div key={b.id} className="flex items-center gap-2">
@@ -342,24 +346,24 @@ export default function ClassroomAllocation() {
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-lg text-[#284342]">Room Bookings — {selectedDate}</h2>
+          <h2 className="text-lg text-[#284342]">{t('classroomAllocation.roomBookingsFor', { date: selectedDate })}</h2>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
               <tr>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Room</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Title</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Type</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Time</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('classroomAllocation.field.room')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('classroomAllocation.field.title')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('classroomAllocation.field.type')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('classroomAllocation.field.time')}</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-[rgba(40,67,66,0.1)]">
               {loading && (
                 <tr>
                   <td colSpan={4} className="px-6 py-8 text-center text-[#6b6b6b]">
-                    Loading bookings...
+                    {t('classroomAllocation.loadingBookings')}
                   </td>
                 </tr>
               )}
@@ -367,7 +371,7 @@ export default function ClassroomAllocation() {
               {!loading && bookings.length === 0 && (
                 <tr>
                   <td colSpan={4} className="px-6 py-8 text-center text-[#6b6b6b]">
-                    No bookings for this date.
+                    {t('classroomAllocation.noBookings')}
                   </td>
                 </tr>
               )}
@@ -384,7 +388,9 @@ export default function ClassroomAllocation() {
                     <td className="px-6 py-4 text-sm text-[#6b6b6b]">{booking.title}</td>
                     <td className="px-6 py-4">
                       <span className="text-xs px-3 py-1 rounded-full bg-[#f8f8f6] border border-[rgba(40,67,66,0.1)] text-[#284342]">
-                        {SOURCE_LABELS[booking.sourceTable] || booking.sourceTable}
+                        {SOURCE_LABEL_KEYS[booking.sourceTable]
+                          ? t(SOURCE_LABEL_KEYS[booking.sourceTable])
+                          : booking.sourceTable}
                       </span>
                     </td>
                     <td className="px-6 py-4 text-sm text-[#6b6b6b]">
@@ -403,15 +409,15 @@ export default function ClassroomAllocation() {
       <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <div className="bg-white rounded-xl p-4 border border-[rgba(40,67,66,0.1)] text-center">
           <p className="text-3xl text-[#284342] mb-2">{classrooms.length}</p>
-          <p className="text-sm text-[#6b6b6b]">Total Rooms</p>
+          <p className="text-sm text-[#6b6b6b]">{t('classroomAllocation.totalRooms')}</p>
         </div>
         <div className="bg-white rounded-xl p-4 border border-[rgba(40,67,66,0.1)] text-center">
           <p className="text-3xl text-green-700 mb-2">{availableCount}</p>
-          <p className="text-sm text-[#6b6b6b]">Available Now</p>
+          <p className="text-sm text-[#6b6b6b]">{t('classroomAllocation.availableNow')}</p>
         </div>
         <div className="bg-white rounded-xl p-4 border border-[rgba(40,67,66,0.1)] text-center">
           <p className="text-3xl text-yellow-700 mb-2">{occupiedCount}</p>
-          <p className="text-sm text-[#6b6b6b]">Occupied Now</p>
+          <p className="text-sm text-[#6b6b6b]">{t('classroomAllocation.occupiedNow')}</p>
         </div>
       </div>
 
@@ -419,7 +425,7 @@ export default function ClassroomAllocation() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-lg w-full p-6">
             <div className="flex items-center justify-between mb-6">
-              <h2 className="text-xl text-[#284342]">Book Room Rental</h2>
+              <h2 className="text-xl text-[#284342]">{t('classroomAllocation.bookRoomRental')}</h2>
               <button onClick={() => setShowBookingModal(false)}>
                 <X size={20} className="text-[#284342]" />
               </button>
@@ -427,7 +433,7 @@ export default function ClassroomAllocation() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-[#284342] mb-2">Room</label>
+                <label className="block text-sm text-[#284342] mb-2">{t('classroomAllocation.field.room')}</label>
                 <select
                   value={bookingForm.classroomId}
                   onChange={(e) =>
@@ -435,7 +441,7 @@ export default function ClassroomAllocation() {
                   }
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                 >
-                  <option value="">Select room</option>
+                  <option value="">{t('classroomAllocation.selectRoom')}</option>
                   {classrooms.map((room) => (
                     <option key={room.id} value={room.id}>
                       {room.name}
@@ -445,34 +451,34 @@ export default function ClassroomAllocation() {
               </div>
 
               <div>
-                <label className="block text-sm text-[#284342] mb-2">Renter Name</label>
+                <label className="block text-sm text-[#284342] mb-2">{t('classroomAllocation.renterName')}</label>
                 <input
                   value={bookingForm.renterName}
                   onChange={(e) =>
                     setBookingForm((prev) => ({ ...prev, renterName: e.target.value }))
                   }
-                  placeholder="e.g., Acme Co-Working Sdn Bhd"
+                  placeholder={t('classroomAllocation.renterNamePlaceholder')}
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                 />
               </div>
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Renter Contact (optional)
+                  {t('classroomAllocation.renterContactOptional')}
                 </label>
                 <input
                   value={bookingForm.renterContact}
                   onChange={(e) =>
                     setBookingForm((prev) => ({ ...prev, renterContact: e.target.value }))
                   }
-                  placeholder="Phone or email"
+                  placeholder={t('classroomAllocation.phoneOrEmailPlaceholder')}
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                 />
               </div>
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm text-[#284342] mb-2">Date</label>
+                  <label className="block text-sm text-[#284342] mb-2">{t('classroomAllocation.field.date')}</label>
                   <input
                     type="date"
                     value={bookingForm.date}
@@ -483,7 +489,7 @@ export default function ClassroomAllocation() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-[#284342] mb-2">Start</label>
+                  <label className="block text-sm text-[#284342] mb-2">{t('classroomAllocation.field.start')}</label>
                   <input
                     type="time"
                     value={bookingForm.startTime}
@@ -494,7 +500,7 @@ export default function ClassroomAllocation() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-[#284342] mb-2">End</label>
+                  <label className="block text-sm text-[#284342] mb-2">{t('classroomAllocation.field.end')}</label>
                   <input
                     type="time"
                     value={bookingForm.endTime}
@@ -508,7 +514,7 @@ export default function ClassroomAllocation() {
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Price (optional)
+                  {t('classroomAllocation.priceOptional')}
                 </label>
                 <input
                   type="number"
@@ -524,7 +530,7 @@ export default function ClassroomAllocation() {
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Notes (optional)
+                  {t('classroomAllocation.notesOptional')}
                 </label>
                 <textarea
                   value={bookingForm.notes}
@@ -549,14 +555,14 @@ export default function ClassroomAllocation() {
                 onClick={() => setShowBookingModal(false)}
                 className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
               >
-                Cancel
+                {t('classroomAllocation.cancel')}
               </button>
               <button
                 onClick={submitBooking}
                 disabled={savingBooking}
                 className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors disabled:opacity-50"
               >
-                {savingBooking ? 'Booking...' : 'Book Rental'}
+                {savingBooking ? t('classroomAllocation.booking') : t('classroomAllocation.bookRental')}
               </button>
             </div>
           </div>

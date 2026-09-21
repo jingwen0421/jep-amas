@@ -7,6 +7,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface ChartPoint {
   label: string;
@@ -18,11 +19,13 @@ export default function RevenueChart({
 }: {
   data: ChartPoint[];
 }) {
+  const { t } = useLanguage();
+
   return (
     <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
 
       <h2 className="text-lg text-[#284342] mb-6">
-        Monthly Revenue
+        {t('reports.chart.monthlyRevenue')}
       </h2>
 
       <ResponsiveContainer width="100%" height={280}>

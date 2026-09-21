@@ -12,6 +12,8 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { getCurrentUser } from '../../utils/session';
+import { useLanguage } from '../../context/LanguageContext';
+import { useConfirm } from '../../context/ConfirmDialogContext';
 
 interface Student {
   id: string;
@@ -29,6 +31,8 @@ interface Student {
 
 export default function StudentList() {
   const currentUser = getCurrentUser();
+  const { t } = useLanguage();
+  const confirmDialog = useConfirm();
 
   const [students, setStudents] = useState<Student[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -90,7 +94,7 @@ export default function StudentList() {
         id: student.id,
         userId: student.user_id || '',
         studentCode: student.student_code || '-',
-        name: student.full_name || student.student_code || 'Unnamed Student',
+        name: student.full_name || student.student_code || t('students.list.unnamedStudent'),
         email: student.email || '-',
         phone: student.phone || '-',
         course: course?.course_name || '-',
@@ -108,7 +112,13 @@ export default function StudentList() {
   async function updateStudentStatus(student: Student, newStatus: string) {
     if (!canManageStudents) return;
 
-    const confirmed = confirm(`Update ${student.name} status to ${formatStatusLabel(newStatus)}?`);
+    const confirmed = await confirmDialog(
+      t('students.list.confirmStatusUpdate', {
+        name: student.name,
+        status: statusRawLabel(newStatus, t),
+      }),
+      { variant: newStatus === 'suspended' ? 'danger' : 'default' }
+    );
     if (!confirmed) return;
 
     const { error } = await supabase
@@ -120,7 +130,7 @@ export default function StudentList() {
       .eq('id', student.id);
 
     if (error) {
-      alert(`Failed to update student: ${error.message}`);
+      alert(t('students.list.updateFailed', { error: error.message }));
       return;
     }
 
@@ -197,9 +207,9 @@ export default function StudentList() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl text-[#284342]">Student List</h1>
+          <h1 className="text-3xl text-[#284342]">{t('students.list.title')}</h1>
           <p className="text-[#6b6b6b] mt-1">
-            Manage all registered students and their enrolment status.
+            {t('students.list.subtitle')}
           </p>
         </div>
 
@@ -208,16 +218,16 @@ export default function StudentList() {
             to="/app/students/registration"
             className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors"
           >
-            Add New Student
+            {t('students.list.addNew')}
           </Link>
         )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <SummaryCard label="Total Students" value={totalStudents} color="text-[#284342]" />
-        <SummaryCard label="Active" value={activeStudents} color="text-green-700" />
-        <SummaryCard label="Completed" value={completedStudents} color="text-blue-700" />
-        <SummaryCard label="On Hold / Inactive" value={onHoldStudents} color="text-yellow-700" />
+        <SummaryCard label={t('students.list.summary.total')} value={totalStudents} color="text-[#284342]" />
+        <SummaryCard label={t('students.list.summary.active')} value={activeStudents} color="text-green-700" />
+        <SummaryCard label={t('students.list.summary.completed')} value={completedStudents} color="text-blue-700" />
+        <SummaryCard label={t('students.list.summary.onHold')} value={onHoldStudents} color="text-yellow-700" />
       </div>
 
       <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
@@ -230,7 +240,7 @@ export default function StudentList() {
 
             <input
               type="text"
-              placeholder="Search by name, email, or student ID..."
+              placeholder={t('students.list.searchPlaceholder')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full pl-10 pr-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
@@ -242,7 +252,7 @@ export default function StudentList() {
             className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] hover:bg-[#f8f8f6] transition-colors flex items-center gap-2"
           >
             <Filter size={20} className="text-[#284342]" />
-            <span className="text-[#284342]">Filters</span>
+            <span className="text-[#284342]">{t('common.filter')}</span>
           </button>
 
           <button
@@ -250,7 +260,7 @@ export default function StudentList() {
             className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] hover:bg-[#f8f8f6] transition-colors flex items-center gap-2"
           >
             <RefreshCw size={20} className="text-[#284342]" />
-            <span className="text-[#284342]">Refresh</span>
+            <span className="text-[#284342]">{t('students.list.refresh')}</span>
           </button>
         </div>
 
@@ -258,18 +268,29 @@ export default function StudentList() {
           <div className="mt-4 pt-4 border-t border-[rgba(40,67,66,0.1)]">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <SelectFilter
-                label="Status"
+                label={t('students.list.filter.status')}
                 value={filterStatus}
                 onChange={setFilterStatus}
                 options={['All', 'Active', 'Completed', 'On Hold', 'Inactive', 'Suspended']}
+                labels={{
+                  All: t('students.list.filter.all'),
+                  Active: t('students.status.active'),
+                  Completed: t('students.status.completed'),
+                  'On Hold': t('students.status.onHold'),
+                  Inactive: t('students.status.inactive'),
+                  Suspended: t('students.status.suspended'),
+                }}
               />
 
               <SelectFilter
-                label="Course"
+                label={t('students.list.filter.course')}
                 value={filterCourse}
                 onChange={setFilterCourse}
-                options={courses.map((course) => (course === '-' ? 'No Course' : course))}
-                rawOptions={courses}
+                options={courses}
+                labels={{
+                  All: t('students.list.filter.all'),
+                  '-': t('students.list.filter.noCourse'),
+                }}
               />
             </div>
           </div>
@@ -281,14 +302,14 @@ export default function StudentList() {
           <table className="w-full">
             <thead className="bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
               <tr>
-                <TableHead>Student ID</TableHead>
-                <TableHead>Name</TableHead>
-                <TableHead>Contact</TableHead>
-                <TableHead>Course</TableHead>
-                <TableHead>Batch</TableHead>
-                <TableHead>Progress</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
+                <TableHead>{t('students.list.table.studentId')}</TableHead>
+                <TableHead>{t('students.list.table.name')}</TableHead>
+                <TableHead>{t('students.list.table.contact')}</TableHead>
+                <TableHead>{t('students.list.table.course')}</TableHead>
+                <TableHead>{t('students.list.table.batch')}</TableHead>
+                <TableHead>{t('students.list.table.progress')}</TableHead>
+                <TableHead>{t('students.list.table.status')}</TableHead>
+                <TableHead>{t('students.list.table.actions')}</TableHead>
               </tr>
             </thead>
 
@@ -296,15 +317,36 @@ export default function StudentList() {
               {loading && (
                 <tr>
                   <td colSpan={8} className="px-6 py-10 text-center text-[#6b6b6b]">
-                    Loading students...
+                    {t('students.list.loading')}
                   </td>
                 </tr>
               )}
 
-              {!loading && filteredStudents.length === 0 && (
+              {!loading && filteredStudents.length === 0 && students.length === 0 && (
+                <tr>
+                  <td colSpan={8} className="px-6 py-10 text-center">
+                    <p className="text-[#284342]">{t('students.list.empty')}</p>
+                    {canManageStudents && (
+                      <>
+                        <p className="text-sm text-[#6b6b6b] mt-1">
+                          {t('students.list.emptyHint')}
+                        </p>
+                        <Link
+                          to="/app/students/registration"
+                          className="inline-block mt-4 px-5 py-2.5 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors text-sm"
+                        >
+                          {t('students.list.addNew')}
+                        </Link>
+                      </>
+                    )}
+                  </td>
+                </tr>
+              )}
+
+              {!loading && filteredStudents.length === 0 && students.length > 0 && (
                 <tr>
                   <td colSpan={8} className="px-6 py-10 text-center text-[#6b6b6b]">
-                    No students found.
+                    {t('students.list.emptyFiltered')}
                   </td>
                 </tr>
               )}
@@ -319,7 +361,7 @@ export default function StudentList() {
                     <td className="px-6 py-4">
                       <p className="text-sm text-[#284342]">{student.name}</p>
                       <p className="text-xs text-[#6b6b6b] mt-1">
-                        Joined {student.joinDate}
+                        {t('students.list.joined', { date: student.joinDate })}
                       </p>
                     </td>
 
@@ -351,7 +393,7 @@ export default function StudentList() {
                     </td>
 
                     <td className="px-6 py-4">
-                      <StatusBadge status={student.status} />
+                      <StatusBadge status={student.status} t={t} />
                     </td>
 
                     <td className="px-6 py-4">
@@ -359,7 +401,7 @@ export default function StudentList() {
                         <Link
                           to={`/app/students/profile/${student.id}`}
                           className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                          title="View Profile"
+                          title={t('students.list.action.viewProfile')}
                         >
                           <Eye size={16} className="text-[#284342]" />
                         </Link>
@@ -367,7 +409,7 @@ export default function StudentList() {
                         <Link
                           to="/app/documents"
                           className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                          title="Documents"
+                          title={t('students.list.action.documents')}
                         >
                           <FileText size={16} className="text-[#284342]" />
                         </Link>
@@ -376,7 +418,7 @@ export default function StudentList() {
                           <button
                             onClick={() => updateStudentStatus(student, 'completed')}
                             className="p-2 hover:bg-blue-100 rounded-lg transition-colors"
-                            title="Mark Completed"
+                            title={t('students.list.action.markCompleted')}
                           >
                             <CheckCircle2 size={16} className="text-blue-700" />
                           </button>
@@ -388,7 +430,7 @@ export default function StudentList() {
                             <button
                               onClick={() => updateStudentStatus(student, 'inactive')}
                               className="p-2 hover:bg-yellow-100 rounded-lg transition-colors"
-                              title="Put On Hold"
+                              title={t('students.list.action.putOnHold')}
                             >
                               <PauseCircle size={16} className="text-yellow-700" />
                             </button>
@@ -398,7 +440,7 @@ export default function StudentList() {
                           <button
                             onClick={() => updateStudentStatus(student, 'active')}
                             className="p-2 hover:bg-green-100 rounded-lg transition-colors"
-                            title="Activate"
+                            title={t('students.list.action.activate')}
                           >
                             <CheckCircle2 size={16} className="text-green-700" />
                           </button>
@@ -408,7 +450,7 @@ export default function StudentList() {
                           <button
                             onClick={() => updateStudentStatus(student, 'suspended')}
                             className="p-2 hover:bg-red-100 rounded-lg transition-colors"
-                            title="Suspend"
+                            title={t('students.list.action.suspend')}
                           >
                             <XCircle size={16} className="text-red-700" />
                           </button>
@@ -423,11 +465,11 @@ export default function StudentList() {
 
         <div className="px-6 py-4 border-t border-[rgba(40,67,66,0.1)] flex items-center justify-between">
           <p className="text-sm text-[#6b6b6b]">
-            Showing {filteredStudents.length} of {students.length} students
+            {t('students.list.showingCount', { shown: filteredStudents.length, total: students.length })}
           </p>
 
           <p className="text-xs text-[#6b6b6b]">
-            Pagination can be added after final data volume is confirmed.
+            {t('students.list.paginationNote')}
           </p>
         </div>
       </div>
@@ -449,25 +491,25 @@ function SelectFilter({
   value,
   onChange,
   options,
-  rawOptions,
+  labels,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: string[];
-  rawOptions?: string[];
+  labels: Record<string, string>;
 }) {
   return (
     <div>
       <label className="block text-sm text-[#284342] mb-2">{label}</label>
       <select
         value={value}
-        onChange={(e) => onChange(rawOptions ? rawOptions[e.target.selectedIndex] : e.target.value)}
+        onChange={(e) => onChange(e.target.value)}
         className="w-full px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
       >
         {options.map((option, index) => (
-          <option key={`${option}-${index}`} value={rawOptions ? rawOptions[index] : option}>
-            {option}
+          <option key={`${option}-${index}`} value={option}>
+            {labels[option] ?? option}
           </option>
         ))}
       </select>
@@ -483,7 +525,7 @@ function TableHead({ children }: { children: React.ReactNode }) {
   );
 }
 
-function StatusBadge({ status }: { status: Student['status'] }) {
+function StatusBadge({ status, t }: { status: Student['status']; t: (key: string) => string }) {
   const className =
     status === 'Active'
       ? 'bg-green-100 text-green-700'
@@ -497,9 +539,25 @@ function StatusBadge({ status }: { status: Student['status'] }) {
 
   return (
     <span className={`inline-block px-3 py-1 rounded-full text-xs ${className}`}>
-      {status}
+      {statusLabel(status, t)}
     </span>
   );
+}
+
+function statusLabel(status: Student['status'], t: (key: string) => string) {
+  if (status === 'Active') return t('students.status.active');
+  if (status === 'Completed') return t('students.status.completed');
+  if (status === 'Inactive') return t('students.status.inactive');
+  if (status === 'Suspended') return t('students.status.suspended');
+  return t('students.status.onHold');
+}
+
+function statusRawLabel(status: string, t: (key: string) => string) {
+  if (status === 'active') return t('students.status.active');
+  if (status === 'completed') return t('students.status.completed');
+  if (status === 'inactive') return t('students.status.inactive');
+  if (status === 'suspended') return t('students.status.suspended');
+  return status;
 }
 
 function mapStudentStatus(status: string): Student['status'] {
@@ -508,12 +566,6 @@ function mapStudentStatus(status: string): Student['status'] {
   if (status === 'inactive') return 'Inactive';
   if (status === 'suspended') return 'Suspended';
   return 'On Hold';
-}
-
-function formatStatusLabel(status: string) {
-  return status
-    .replace(/_/g, ' ')
-    .replace(/\b\w/g, (char) => char.toUpperCase());
 }
 
 function getSingle(value: any) {

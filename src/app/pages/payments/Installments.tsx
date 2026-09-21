@@ -15,8 +15,10 @@ import {
 import { SummaryCard } from '../../components/payments/SummaryCard';
 import { InstallmentStatusBadge } from '../../components/payments/StatusBadges';
 import { Modal, ModalHeader } from '../../components/payments/Modal';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function Installments() {
+  const { t } = useLanguage();
   const [installments, setInstallments] = useState<InstallmentSchedule[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedInstallment, setSelectedInstallment] =
@@ -78,7 +80,7 @@ export default function Installments() {
 
     if (installmentError) {
       setRecording(false);
-      alert(`Failed to update installment: ${installmentError.message}`);
+      alert(t('payments.installments.errorUpdateInstallment', { message: installmentError.message }));
       return;
     }
 
@@ -100,7 +102,7 @@ export default function Installments() {
 
     if (paymentError) {
       setRecording(false);
-      alert(`Installment marked paid, but payment record failed: ${paymentError.message}`);
+      alert(t('payments.installments.errorPaymentRecordFailed', { message: paymentError.message }));
       return;
     }
 
@@ -120,7 +122,7 @@ export default function Installments() {
 
     if (receiptError) {
       setRecording(false);
-      alert(`Payment recorded, but receipt could not be created: ${receiptError.message}`);
+      alert(t('payments.installments.errorReceiptFailed', { message: receiptError.message }));
       return;
     }
 
@@ -194,26 +196,26 @@ export default function Installments() {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl text-[#284342]">
-          {isStudentView ? 'My Installments' : 'Installments'}
+          {isStudentView ? t('payments.installments.titleStudent') : t('payments.installments.title')}
         </h1>
 
         <p className="text-[#6b6b6b] mt-1">
           {isStudentView
-            ? 'View your installment schedule and payment due dates.'
-            : 'Track and manage payment installment schedules'}
+            ? t('payments.installments.subtitleStudent')
+            : t('payments.installments.subtitle')}
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        <SummaryCard label="Total Due" value={formatCurrency(totalDue)} valueColor="text-[#284342]" />
-        <SummaryCard label="Pending" value={pendingCount.toString()} valueColor="text-yellow-700" />
-        <SummaryCard label="Overdue" value={overdueCount.toString()} valueColor="text-red-700" />
-        <SummaryCard label="Paid" value={paidCount.toString()} valueColor="text-green-700" />
+        <SummaryCard label={t('payments.installments.totalDue')} value={formatCurrency(totalDue)} valueColor="text-[#284342]" />
+        <SummaryCard label={t('common.pending')} value={pendingCount.toString()} valueColor="text-yellow-700" />
+        <SummaryCard label={t('payments.installments.overdue')} value={overdueCount.toString()} valueColor="text-red-700" />
+        <SummaryCard label={t('payments.installments.paid')} value={paidCount.toString()} valueColor="text-green-700" />
       </div>
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-lg text-[#284342]">Installment Schedule</h2>
+          <h2 className="text-lg text-[#284342]">{t('payments.installments.scheduleHeading')}</h2>
         </div>
 
         <div className="overflow-x-auto">
@@ -222,16 +224,16 @@ export default function Installments() {
               <tr>
                 {!isStudentView && (
                   <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                    Student
+                    {t('payments.installments.colStudent')}
                   </th>
                 )}
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Course</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Installment</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Amount</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Due Date</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Paid Date</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Status</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Actions</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colCourse')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colInstallment')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colAmount')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colDueDate')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colPaidDate')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colStatus')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colActions')}</th>
               </tr>
             </thead>
 
@@ -239,7 +241,7 @@ export default function Installments() {
               {loading && (
                 <tr>
                   <td colSpan={isStudentView ? 7 : 8} className="px-6 py-8 text-center text-[#6b6b6b]">
-                    Loading installments...
+                    {t('payments.installments.loading')}
                   </td>
                 </tr>
               )}
@@ -247,7 +249,7 @@ export default function Installments() {
               {!loading && installments.length === 0 && (
                 <tr>
                   <td colSpan={isStudentView ? 7 : 8} className="px-6 py-8 text-center text-[#6b6b6b]">
-                    No installments found.
+                    {t('payments.installments.empty')}
                   </td>
                 </tr>
               )}
@@ -292,12 +294,12 @@ export default function Installments() {
                           onClick={() => setSelectedInstallment(inst)}
                           className="px-4 py-2 rounded-lg bg-[#284342] text-[#e9da95] hover:bg-[#1a2f2e] transition-colors text-sm"
                         >
-                          Record Payment
+                          {t('payments.installments.recordPayment')}
                         </button>
                       ) : inst.status === 'Paid' ? (
-                        <span className="text-sm text-green-700">Completed</span>
+                        <span className="text-sm text-green-700">{t('common.completed')}</span>
                       ) : (
-                        <span className="text-sm text-[#6b6b6b]">Pending Payment</span>
+                        <span className="text-sm text-[#6b6b6b]">{t('payments.installments.pendingPayment')}</span>
                       )}
                     </td>
                   </tr>
@@ -311,40 +313,40 @@ export default function Installments() {
         <Modal maxWidth="max-w-lg">
           <div className="p-6">
             <div className="mb-6">
-              <ModalHeader title="Record Payment" onClose={() => setSelectedInstallment(null)} />
+              <ModalHeader title={t('payments.installments.recordPayment')} onClose={() => setSelectedInstallment(null)} />
             </div>
 
             <div className="space-y-4">
-              <Info label="Student" value={selectedInstallment.student} />
-              <Info label="Course" value={selectedInstallment.course} />
-              <Info label="Amount" value={formatCurrency(selectedInstallment.amount)} />
-              <Info label="Due Date" value={selectedInstallment.dueDate} />
+              <Info label={t('payments.installments.colStudent')} value={selectedInstallment.student} />
+              <Info label={t('payments.installments.colCourse')} value={selectedInstallment.course} />
+              <Info label={t('payments.installments.colAmount')} value={formatCurrency(selectedInstallment.amount)} />
+              <Info label={t('payments.installments.colDueDate')} value={selectedInstallment.dueDate} />
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Payment Method
+                  {t('payments.installments.paymentMethod')}
                 </label>
                 <select
                   value={paymentMethod}
                   onChange={(e) => setPaymentMethod(e.target.value)}
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                 >
-                  <option value="cash">Cash</option>
-                  <option value="bank_transfer">Bank Transfer</option>
-                  <option value="card">Card</option>
-                  <option value="ewallet">E-Wallet</option>
+                  <option value="cash">{t('payments.installments.methodCash')}</option>
+                  <option value="bank_transfer">{t('payments.installments.methodBankTransfer')}</option>
+                  <option value="card">{t('payments.installments.methodCard')}</option>
+                  <option value="ewallet">{t('payments.installments.methodEwallet')}</option>
                 </select>
               </div>
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Reference No. / Transaction ID
+                  {t('payments.installments.referenceNo')}
                 </label>
                 <input
                   type="text"
                   value={referenceNo}
                   onChange={(e) => setReferenceNo(e.target.value)}
-                  placeholder="Optional"
+                  placeholder={t('payments.installments.optional')}
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                 />
               </div>
@@ -355,7 +357,7 @@ export default function Installments() {
                 onClick={() => setSelectedInstallment(null)}
                 className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
 
               <button
@@ -363,7 +365,7 @@ export default function Installments() {
                 disabled={recording}
                 className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors disabled:opacity-60"
               >
-                {recording ? 'Recording...' : 'Confirm Payment'}
+                {recording ? t('payments.installments.recording') : t('payments.installments.confirmPayment')}
               </button>
             </div>
           </div>

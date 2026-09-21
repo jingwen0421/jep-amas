@@ -121,6 +121,7 @@ export const ROLE_ACCESS: Record<UserRole, string[]> = {
     '/app/notifications',
     '/app/certificates/completion',
     '/app/certificates/attendance',
+    '/app/payments/outstanding',
   ],
 };
 

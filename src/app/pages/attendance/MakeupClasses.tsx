@@ -1,10 +1,15 @@
 import { useEffect, useState } from 'react';
 import { Calendar, Clock, CheckCircle2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { notify } from '../../services/unifiedNotificationService';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface MakeupClass {
   id: string;
   student: string;
+  studentUserId: string | null;
+  studentEmail: string | null;
+  studentPhone: string | null;
   originalClass: string;
   missedDate: string;
   reason: string;
@@ -23,11 +28,13 @@ interface TeacherOption {
 }
 
 export default function MakeupClasses() {
+  const { t } = useLanguage();
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [makeupClasses, setMakeupClasses] = useState<MakeupClass[]>([]);
   const [teachers, setTeachers] = useState<TeacherOption[]>([]);
   const [selectedMakeupId, setSelectedMakeupId] = useState('');
   const [loading, setLoading] = useState(true);
+  const [sendingNotificationId, setSendingNotificationId] = useState('');
 
   const [formData, setFormData] = useState({
     makeupDate: '',
@@ -54,7 +61,7 @@ export default function MakeupClasses() {
         reason,
         is_external,
         external_provider,
-        students(full_name),
+        students(full_name, user_id, email, phone),
         lessons(lesson_title, lesson_datetime),
         teachers(
           specialization,
@@ -80,10 +87,13 @@ export default function MakeupClasses() {
 
       return {
         id: item.id,
-        student: item.students?.full_name || 'Unnamed Student',
+        student: item.students?.full_name || t('makeupClasses.unnamedStudent'),
+        studentUserId: item.students?.user_id || null,
+        studentEmail: item.students?.email || null,
+        studentPhone: item.students?.phone || null,
         originalClass: item.lessons?.lesson_title || '-',
         missedDate,
-        reason: item.reason || 'Absent',
+        reason: item.reason || t('makeupClasses.fallback.absent'),
         makeupDate: makeupDateTime
           ? makeupDateTime.toISOString().slice(0, 10)
           : '',
@@ -138,12 +148,12 @@ export default function MakeupClasses() {
 
   async function scheduleMakeupClass() {
     if (!selectedMakeupId || !formData.makeupDate || !formData.makeupTime) {
-      alert('Please select makeup date and time.');
+      alert(t('makeupClasses.alert.selectDateTime'));
       return;
     }
 
     if (formData.isExternal && !formData.externalProvider.trim()) {
-      alert('Please enter the external makeup service / location.');
+      alert(t('makeupClasses.alert.enterExternalProvider'));
       return;
     }
 
@@ -161,7 +171,7 @@ export default function MakeupClasses() {
       .eq('id', selectedMakeupId);
 
     if (error) {
-      alert(`Failed to schedule makeup class: ${error.message}`);
+      alert(t('makeupClasses.alert.scheduleFailed', { message: error.message }));
       return;
     }
 
@@ -178,6 +188,42 @@ export default function MakeupClasses() {
     fetchMakeupClasses();
   }
 
+  async function sendNotification(makeup: MakeupClass) {
+    if (!makeup.studentUserId && !makeup.studentEmail) {
+      alert(t('makeupClasses.alert.noContact'));
+      return;
+    }
+
+    setSendingNotificationId(makeup.id);
+
+    const message = makeup.makeupDate
+      ? t('makeupClasses.notifyMessage.scheduled', {
+          className: makeup.originalClass,
+          date: makeup.makeupDate,
+          time: makeup.makeupTime,
+          providerSuffix: makeup.isExternal ? ` (${makeup.externalProvider})` : '',
+        })
+      : t('makeupClasses.notifyMessage.pending', { className: makeup.originalClass });
+
+    await notify({
+      target: {
+        userId: makeup.studentUserId,
+        name: makeup.student,
+        email: makeup.studentEmail,
+        phone: makeup.studentPhone,
+      },
+      channels: ['in_app', 'email'],
+      title: t('makeupClasses.notifyTitle'),
+      message,
+      type: 'makeup_class',
+      relatedModule: 'Makeup Classes',
+      relatedId: makeup.id,
+    });
+
+    setSendingNotificationId('');
+    alert(t('makeupClasses.alert.notificationSent', { name: makeup.student }));
+  }
+
   async function markComplete(makeupId: string) {
     const { error } = await supabase
       .from('makeup_classes')
@@ -185,7 +231,7 @@ export default function MakeupClasses() {
       .eq('id', makeupId);
 
     if (error) {
-      alert(`Failed to complete makeup class: ${error.message}`);
+      alert(t('makeupClasses.alert.completeFailed', { message: error.message }));
       return;
     }
 
@@ -208,9 +254,9 @@ export default function MakeupClasses() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl text-[#284342]">Makeup Classes</h1>
+          <h1 className="text-3xl text-[#284342]">{t('makeupClasses.title')}</h1>
           <p className="text-[#6b6b6b] mt-1">
-            Schedule and track makeup sessions for missed classes
+            {t('makeupClasses.subtitle')}
           </p>
         </div>
 
@@ -218,28 +264,28 @@ export default function MakeupClasses() {
           onClick={() => setShowScheduleModal(true)}
           className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors"
         >
-          Schedule Makeup Class
+          {t('makeupClasses.scheduleMakeupClass')}
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <SummaryCard
           icon={<Clock size={24} className="text-blue-700" />}
-          label="Scheduled"
+          label={t('makeupClasses.status.scheduled')}
           value={scheduledCount}
           color="text-blue-700"
         />
 
         <SummaryCard
           icon={<Calendar size={24} className="text-yellow-700" />}
-          label="Pending"
+          label={t('makeupClasses.status.pending')}
           value={pendingCount}
           color="text-yellow-700"
         />
 
         <SummaryCard
           icon={<CheckCircle2 size={24} className="text-green-700" />}
-          label="Completed"
+          label={t('makeupClasses.status.completed')}
           value={completedCount}
           color="text-green-700"
         />
@@ -247,19 +293,19 @@ export default function MakeupClasses() {
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-lg text-[#284342]">Makeup Class Schedule</h2>
+          <h2 className="text-lg text-[#284342]">{t('makeupClasses.scheduleHeading')}</h2>
         </div>
 
         <div className="divide-y divide-[rgba(40,67,66,0.1)]">
           {loading && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              Loading makeup classes...
+              {t('makeupClasses.loading')}
             </div>
           )}
 
           {!loading && makeupClasses.length === 0 && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              No makeup classes found.
+              {t('makeupClasses.empty')}
             </div>
           )}
 
@@ -285,37 +331,50 @@ export default function MakeupClasses() {
                             : 'bg-yellow-100 text-yellow-700'
                         }`}
                       >
-                        {makeup.status}
+                        {makeup.status === 'Completed'
+                          ? t('makeupClasses.status.completed')
+                          : makeup.status === 'Scheduled'
+                          ? t('makeupClasses.status.scheduled')
+                          : t('makeupClasses.status.pending')}
                       </span>
                       {makeup.isExternal && (
                         <span className="text-xs px-3 py-1 rounded-full bg-orange-100 text-orange-700">
-                          External Service
+                          {t('makeupClasses.externalService')}
                         </span>
                       )}
                     </div>
 
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                      <Info label="Original Class" value={makeup.originalClass} />
-                      <Info label="Missed Date" value={makeup.missedDate} />
-                      <Info label="Reason" value={makeup.reason} />
-                      <Info label="Status" value={makeup.status} />
+                      <Info label={t('makeupClasses.field.originalClass')} value={makeup.originalClass} />
+                      <Info label={t('makeupClasses.field.missedDate')} value={makeup.missedDate} />
+                      <Info label={t('makeupClasses.field.reason')} value={makeup.reason} />
+                      <Info
+                        label={t('makeupClasses.field.status')}
+                        value={
+                          makeup.status === 'Completed'
+                            ? t('makeupClasses.status.completed')
+                            : makeup.status === 'Scheduled'
+                            ? t('makeupClasses.status.scheduled')
+                            : t('makeupClasses.status.pending')
+                        }
+                      />
                     </div>
 
                     {makeup.status !== 'Pending' && (
                       <div className="mt-3 p-4 rounded-lg bg-[#e9da95]/10 border border-[#e9da95]/30">
                         <p className="text-sm text-[#284342] mb-2">
-                          Makeup Session Details:
+                          {t('makeupClasses.sessionDetails')}
                         </p>
 
                         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                          <Info label="Date" value={makeup.makeupDate} />
-                          <Info label="Time" value={makeup.makeupTime} />
+                          <Info label={t('makeupClasses.field.date')} value={makeup.makeupDate} />
+                          <Info label={t('makeupClasses.field.time')} value={makeup.makeupTime} />
                           {makeup.isExternal ? (
-                            <Info label="External Provider" value={makeup.externalProvider} />
+                            <Info label={t('makeupClasses.field.externalProvider')} value={makeup.externalProvider} />
                           ) : (
-                            <Info label="Teacher" value={makeup.teacher} />
+                            <Info label={t('makeupClasses.field.teacher')} value={makeup.teacher} />
                           )}
-                          <Info label="Room" value={makeup.isExternal ? 'Off-site' : '-'} />
+                          <Info label={t('makeupClasses.field.room')} value={makeup.isExternal ? t('makeupClasses.offsite') : '-'} />
                         </div>
                       </div>
                     )}
@@ -328,7 +387,7 @@ export default function MakeupClasses() {
                       onClick={() => openScheduleModal(makeup.id)}
                       className="px-4 py-2 rounded-lg bg-[#284342] text-[#e9da95] hover:bg-[#1a2f2e] transition-colors text-sm"
                     >
-                      Schedule Makeup
+                      {t('makeupClasses.scheduleMakeup')}
                     </button>
                   )}
 
@@ -338,20 +397,26 @@ export default function MakeupClasses() {
                         onClick={() => markComplete(makeup.id)}
                         className="px-4 py-2 rounded-lg bg-green-600 text-white hover:bg-green-700 transition-colors text-sm"
                       >
-                        Mark Complete
+                        {t('makeupClasses.markComplete')}
                       </button>
 
                       <button
                         onClick={() => openScheduleModal(makeup.id)}
                         className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm"
                       >
-                        Reschedule
+                        {t('makeupClasses.reschedule')}
                       </button>
                     </>
                   )}
 
-                  <button className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm">
-                    Send Notification
+                  <button
+                    onClick={() => sendNotification(makeup)}
+                    disabled={sendingNotificationId === makeup.id}
+                    className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm disabled:opacity-50"
+                  >
+                    {sendingNotificationId === makeup.id
+                      ? t('makeupClasses.sending')
+                      : t('makeupClasses.sendNotification')}
                   </button>
                 </div>
               </div>
@@ -361,14 +426,14 @@ export default function MakeupClasses() {
 
       <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
         <h2 className="text-lg text-[#284342] mb-4">
-          How Makeup Classes Work
+          {t('makeupClasses.howItWorks')}
         </h2>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <Step number="1" title="Student Absent" desc="Attendance marked as absent in daily tracking" color="red" />
-          <Step number="2" title="Admin Notified" desc="System creates pending makeup class record" color="yellow" />
-          <Step number="3" title="Schedule Makeup" desc="Admin schedules makeup session with teacher" color="blue" />
-          <Step number="4" title="Progress Updated" desc="Attendance record updated after completion" color="green" />
+          <Step number="1" title={t('makeupClasses.step1.title')} desc={t('makeupClasses.step1.desc')} color="red" />
+          <Step number="2" title={t('makeupClasses.step2.title')} desc={t('makeupClasses.step2.desc')} color="yellow" />
+          <Step number="3" title={t('makeupClasses.step3.title')} desc={t('makeupClasses.step3.desc')} color="blue" />
+          <Step number="4" title={t('makeupClasses.step4.title')} desc={t('makeupClasses.step4.desc')} color="green" />
         </div>
       </div>
 
@@ -376,13 +441,13 @@ export default function MakeupClasses() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-2xl w-full p-6">
             <h2 className="text-xl text-[#284342] mb-6">
-              Schedule Makeup Class
+              {t('makeupClasses.scheduleMakeupClass')}
             </h2>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Makeup Date
+                  {t('makeupClasses.field.makeupDate')}
                 </label>
 
                 <input
@@ -400,7 +465,7 @@ export default function MakeupClasses() {
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Time
+                  {t('makeupClasses.field.time')}
                 </label>
 
                 <input
@@ -431,14 +496,14 @@ export default function MakeupClasses() {
                     className="w-4 h-4 accent-[#284342]"
                   />
                   <span className="text-sm text-[#284342]">
-                    External makeup service (student goes to a third-party / outsourced provider)
+                    {t('makeupClasses.externalServiceCheckbox')}
                   </span>
                 </label>
 
                 {formData.isExternal ? (
                   <div>
                     <label className="block text-sm text-[#284342] mb-2">
-                      External Provider / Location
+                      {t('makeupClasses.field.externalProviderLocation')}
                     </label>
                     <input
                       value={formData.externalProvider}
@@ -448,14 +513,14 @@ export default function MakeupClasses() {
                           externalProvider: e.target.value,
                         }))
                       }
-                      placeholder="e.g., Sunshine Studio KL"
+                      placeholder={t('makeupClasses.externalProviderPlaceholder')}
                       className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                     />
                   </div>
                 ) : (
                   <div>
                     <label className="block text-sm text-[#284342] mb-2">
-                      Teacher
+                      {t('makeupClasses.field.teacher')}
                     </label>
 
                     <select
@@ -468,7 +533,7 @@ export default function MakeupClasses() {
                       }
                       className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                     >
-                      <option value="">Select Teacher</option>
+                      <option value="">{t('makeupClasses.selectTeacher')}</option>
                       {teachers.map((teacher) => (
                         <option key={teacher.id} value={teacher.id}>
                           {getTeacherName(teacher)}
@@ -485,14 +550,14 @@ export default function MakeupClasses() {
                 onClick={() => setShowScheduleModal(false)}
                 className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
               >
-                Cancel
+                {t('makeupClasses.cancel')}
               </button>
 
               <button
                 onClick={scheduleMakeupClass}
                 className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors"
               >
-                Schedule Makeup
+                {t('makeupClasses.scheduleMakeup')}
               </button>
             </div>
           </div>
@@ -570,10 +635,10 @@ function getTeacherName(teacher: TeacherOption) {
   const users = teacher.users;
 
   if (Array.isArray(users)) {
-    return users[0]?.full_name || teacher.specialization || 'Unnamed Teacher';
+    return users[0]?.full_name || teacher.specialization || '-';
   }
 
-  return users?.full_name || teacher.specialization || 'Unnamed Teacher';
+  return users?.full_name || teacher.specialization || '-';
 }
 
 function getTeacherNameFromJoin(teacher: any) {

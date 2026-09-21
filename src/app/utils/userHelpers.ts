@@ -56,6 +56,24 @@ export function formatRole(role: string) {
   return role;
 }
 
+type Translate = (key: string, params?: Record<string, string | number>) => string;
+
+const ROLE_KEYS: Record<string, string> = {
+  super_admin: 'auditLogs.role.superAdmin',
+  owner: 'auditLogs.role.owner',
+  admin: 'login.role.admin',
+  teacher: 'login.role.teacher',
+  finance: 'login.role.finance',
+  student: 'login.role.student',
+};
+
+// Translates a raw role value (e.g. from SystemUser.rawRole) for display.
+// Keeps state holding the raw enum and only formats it at render time.
+export function translateRole(role: string, t: Translate) {
+  const key = ROLE_KEYS[role];
+  return key ? t(key) : formatRole(role);
+}
+
 export function getInitials(name: string) {
   return name
     .split(' ')

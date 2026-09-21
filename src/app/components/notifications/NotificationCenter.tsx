@@ -14,6 +14,8 @@ import {
   ChevronUp,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
+import { useConfirm } from '../../context/ConfirmDialogContext';
 
 interface NotificationItem {
   id: string;
@@ -31,6 +33,8 @@ interface NotificationItem {
 }
 
 export default function NotificationCenter() {
+  const { t } = useLanguage();
+  const confirmDialog = useConfirm();
   const currentUser = getCurrentUser();
 
   // Only academy leadership manages the shared "all notifications" console
@@ -110,7 +114,7 @@ export default function NotificationCenter() {
       .in('id', ids);
 
     if (error) {
-      alert(`Failed to update notification: ${error.message}`);
+      alert(t('notifications.updateFailed', { message: error.message }));
       return;
     }
 
@@ -120,8 +124,11 @@ export default function NotificationCenter() {
   async function deleteNotification(ids: string[]) {
     if (!canManageNotifications || ids.length === 0) return;
 
-    const confirmed = confirm(
-      ids.length > 1 ? `Delete this notification (${ids.length} channels)?` : 'Delete this notification?'
+    const confirmed = await confirmDialog(
+      ids.length > 1
+        ? t('notifications.confirmDeleteMulti', { count: ids.length })
+        : t('notifications.confirmDelete'),
+      { variant: 'danger', confirmLabel: t('common.delete') }
     );
     if (!confirmed) return;
 
@@ -131,7 +138,7 @@ export default function NotificationCenter() {
       .in('id', ids);
 
     if (error) {
-      alert(`Failed to delete notification: ${error.message}`);
+      alert(t('notifications.deleteFailed', { message: error.message }));
       return;
     }
 
@@ -194,13 +201,13 @@ export default function NotificationCenter() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl text-[#284342]">
-            {isPersonalView ? 'My Notifications' : 'Notification Center'}
+            {isPersonalView ? t('notifications.myTitle') : t('notifications.title')}
           </h1>
 
           <p className="text-[#6b6b6b] mt-1">
             {isPersonalView
-              ? 'View your personal updates, reminders and alerts.'
-              : 'Manage system alerts, reminders and WhatsApp notifications.'}
+              ? t('notifications.mySubtitle')
+              : t('notifications.subtitle')}
           </p>
         </div>
 
@@ -209,7 +216,7 @@ export default function NotificationCenter() {
           className="px-6 py-3 rounded-lg bg-[#284342] text-[#e9da95] hover:bg-[#1a2f2e] flex items-center gap-2"
         >
           <RefreshCw size={18} />
-          Refresh
+          {t('notifications.refresh')}
         </button>
       </div>
 
@@ -217,14 +224,14 @@ export default function NotificationCenter() {
   <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
     <SummaryCard
       icon={<Bell size={24} />}
-      label="My Notifications"
+      label={t('notifications.card.myNotifications')}
       value={notifications.length}
       color="text-[#284342]"
     />
 
     <SummaryCard
       icon={<AlertCircle size={24} />}
-      label="Important"
+      label={t('notifications.card.important')}
       value={highPriorityCount}
       color="text-red-700"
     />
@@ -233,28 +240,28 @@ export default function NotificationCenter() {
   <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
     <SummaryCard
       icon={<Bell size={24} />}
-      label="Total"
+      label={t('notifications.card.total')}
       value={notifications.length}
       color="text-[#284342]"
     />
 
     <SummaryCard
       icon={<AlertCircle size={24} />}
-      label="Pending"
+      label={t('notifications.card.pending')}
       value={pendingCount}
       color="text-yellow-700"
     />
 
     <SummaryCard
       icon={<CheckCircle2 size={24} />}
-      label="Sent"
+      label={t('notifications.card.sent')}
       value={sentCount}
       color="text-green-700"
     />
 
     <SummaryCard
       icon={<MessageCircle size={24} />}
-      label="WhatsApp"
+      label={t('notifications.card.whatsapp')}
       value={whatsappCount}
       color="text-green-700"
     />
@@ -266,7 +273,7 @@ export default function NotificationCenter() {
           <input
             value={searchTerm}
             onChange={(event) => setSearchTerm(event.target.value)}
-            placeholder="Search notifications..."
+            placeholder={t('notifications.searchPlaceholder')}
             className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
           />
 {!isPersonalView && (
@@ -276,10 +283,10 @@ export default function NotificationCenter() {
             onChange={(event) => setChannelFilter(event.target.value)}
             className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
           >
-            <option value="all">All Channels</option>
-            <option value="in_app">In App</option>
-            <option value="whatsapp">WhatsApp</option>
-            <option value="email">Email</option>
+            <option value="all">{t('notifications.filter.allChannels')}</option>
+            <option value="in_app">{t('notifications.channel.inApp')}</option>
+            <option value="whatsapp">{t('notifications.channel.whatsapp')}</option>
+            <option value="email">{t('notifications.channel.email')}</option>
           </select>
 
           <select
@@ -287,10 +294,10 @@ export default function NotificationCenter() {
             onChange={(event) => setStatusFilter(event.target.value)}
             className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
           >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="sent">Sent</option>
-            <option value="failed">Failed</option>
+            <option value="all">{t('notifications.filter.allStatus')}</option>
+            <option value="pending">{t('notifications.status.pending')}</option>
+            <option value="sent">{t('notifications.status.sent')}</option>
+            <option value="failed">{t('notifications.status.failed')}</option>
           </select>
            </>
 )}
@@ -300,11 +307,11 @@ export default function NotificationCenter() {
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)] flex items-center justify-between">
           <h2 className="text-lg text-[#284342]">
-            {isPersonalView ? 'Recent Updates' : 'Recent Notifications'}
+            {isPersonalView ? t('notifications.recentUpdates') : t('notifications.recentNotifications')}
           </h2>
 
           <p className="text-sm text-[#6b6b6b]">
-            {highPriorityCount} high priority
+            {t('notifications.highPriorityCount', { count: highPriorityCount })}
           </p>
         </div>
 
@@ -318,13 +325,13 @@ export default function NotificationCenter() {
         <div className="divide-y divide-[rgba(40,67,66,0.1)]">
           {loading && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              Loading notifications...
+              {t('notifications.loading')}
             </div>
           )}
 
           {!loading && groupedNotifications.length === 0 && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              No notifications found.
+              {t('notifications.empty')}
             </div>
           )}
 
@@ -373,7 +380,7 @@ function SummaryCard({
 }
 
 
-function PriorityBadge({ priority }: { priority: string }) {
+function PriorityBadge({ priority, t }: { priority: string; t: (key: string) => string }) {
   return (
     <span
       className={`text-xs px-2 py-1 rounded-full ${
@@ -382,9 +389,27 @@ function PriorityBadge({ priority }: { priority: string }) {
           : 'bg-[#f8f8f6] text-[#6b6b6b]'
       }`}
     >
-      {formatText(priority)}
+      {translatePriority(priority, t)}
     </span>
   );
+}
+
+function translatePriority(priority: string, t: (key: string) => string) {
+  const key = `notifications.priority.${String(priority || 'normal').toLowerCase()}`;
+  const translated = t(key);
+  return translated === key ? formatText(priority) : translated;
+}
+
+function translateStatus(status: string, t: (key: string) => string) {
+  const key = `notifications.status.${String(status || '').toLowerCase()}`;
+  const translated = t(key);
+  return translated === key ? formatText(status) : translated;
+}
+
+function translateChannelLabel(channel: string, t: (key: string) => string) {
+  const key = channel === 'in_app' ? 'notifications.channel.inApp' : `notifications.channel.${String(channel || '').toLowerCase()}`;
+  const translated = t(key);
+  return translated === key ? formatText(channel) : translated;
 }
 
 function getNotificationIcon(type: string) {
@@ -515,6 +540,7 @@ function NotificationGroupRow({
   onDelete: (ids: string[]) => void;
   onOpenWhatsApp: (item: NotificationItem) => void;
 }) {
+  const { t } = useLanguage();
   const [expanded, setExpanded] = useState(false);
 
   const preview = stripHtmlPreview(group.message);
@@ -539,16 +565,16 @@ function NotificationGroupRow({
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-1 flex-wrap">
             <h3 className="text-[#284342]">{group.title}</h3>
-            {group.priority === 'high' && <PriorityBadge priority="high" />}
+            {group.priority === 'high' && <PriorityBadge priority="high" t={t} />}
             {/* One notification, sent through one or more channels — shown
                 as small icons (not a repeated card per channel) so the
                 same message never appears more than once in the list. */}
-            <span className="flex items-center gap-1" title={channelSummary(group.items)}>
+            <span className="flex items-center gap-1" title={channelSummary(group.items, t)}>
               {group.items.map((item) => (
                 <ChannelIcon key={item.id} channel={item.channel} />
               ))}
             </span>
-            <OverallStatusBadge status={overallStatus} />
+            <OverallStatusBadge status={overallStatus} t={t} />
           </div>
 
           <p className="text-sm text-[#6b6b6b] mb-2">
@@ -560,11 +586,11 @@ function NotificationGroupRow({
               >
                 {expanded ? (
                   <>
-                    Show less <ChevronUp size={12} />
+                    {t('notifications.showLess')} <ChevronUp size={12} />
                   </>
                 ) : (
                   <>
-                    Show more <ChevronDown size={12} />
+                    {t('notifications.showMore')} <ChevronDown size={12} />
                   </>
                 )}
               </button>
@@ -573,7 +599,7 @@ function NotificationGroupRow({
 
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-xs text-[#6b6b6b]">
-              {group.relatedModule || 'System'} •{' '}
+              {group.relatedModule || t('notifications.systemFallback')} •{' '}
               {new Date(group.createdAt).toLocaleString()}
             </p>
 
@@ -583,7 +609,7 @@ function NotificationGroupRow({
                   <button
                     onClick={() => onOpenWhatsApp(whatsappItem)}
                     className="p-2 hover:bg-green-50 rounded-lg"
-                    title="Open WhatsApp"
+                    title={t('notifications.openWhatsapp')}
                   >
                     <MessageCircle size={16} className="text-green-700" />
                   </button>
@@ -593,7 +619,7 @@ function NotificationGroupRow({
                   <button
                     onClick={() => onMarkSent(pendingIds)}
                     className="p-2 hover:bg-[#e9da95]/20 rounded-lg"
-                    title="Mark as Sent"
+                    title={t('notifications.markAsSent')}
                   >
                     <CheckCircle2 size={16} className="text-[#284342]" />
                   </button>
@@ -602,7 +628,7 @@ function NotificationGroupRow({
                 <button
                   onClick={() => onDelete(allIds)}
                   className="p-2 hover:bg-red-50 rounded-lg"
-                  title="Delete"
+                  title={t('common.delete')}
                 >
                   <Trash2 size={16} className="text-red-600" />
                 </button>
@@ -624,11 +650,11 @@ function aggregateStatus(items: NotificationItem[]): 'sent' | 'failed' | 'pendin
   return 'pending';
 }
 
-function channelSummary(items: NotificationItem[]) {
-  return items.map((i) => `${channelLabel(i.channel)}: ${formatText(i.delivery_status)}`).join(' • ');
+function channelSummary(items: NotificationItem[], t: (key: string) => string) {
+  return items.map((i) => `${translateChannelLabel(i.channel, t)}: ${translateStatus(i.delivery_status, t)}`).join(' • ');
 }
 
-function OverallStatusBadge({ status }: { status: 'sent' | 'failed' | 'pending' }) {
+function OverallStatusBadge({ status, t }: { status: 'sent' | 'failed' | 'pending'; t: (key: string) => string }) {
   return (
     <span
       className={`text-xs px-2 py-1 rounded-full ${
@@ -639,7 +665,7 @@ function OverallStatusBadge({ status }: { status: 'sent' | 'failed' | 'pending' 
           : 'bg-yellow-100 text-yellow-700'
       }`}
     >
-      {formatText(status)}
+      {translateStatus(status, t)}
     </span>
   );
 }
@@ -648,9 +674,4 @@ function ChannelIcon({ channel }: { channel: string }) {
   if (channel === 'whatsapp') return <MessageCircle size={12} className="text-green-700" />;
   if (channel === 'email') return <Mail size={12} className="text-blue-700" />;
   return <Bell size={12} className="text-[#284342]" />;
-}
-
-function channelLabel(channel: string) {
-  if (channel === 'in_app') return 'In App';
-  return formatText(channel);
 }

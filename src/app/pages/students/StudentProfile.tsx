@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { getCurrentUser } from '../../utils/session';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface StudentProfileData {
   id: string;
@@ -93,6 +94,7 @@ interface EditFormData {
 export default function StudentProfile() {
   const { id } = useParams();
   const currentUser = getCurrentUser();
+  const { t } = useLanguage();
 
   const canEditProfile =
     currentUser.role === 'super_admin' ||
@@ -131,6 +133,7 @@ export default function StudentProfile() {
     if (id) {
       fetchStudentProfile(id);
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
 
   async function fetchBatchOptions() {
@@ -166,8 +169,8 @@ export default function StudentProfile() {
 
     const mapped: BatchOption[] = (batches || []).map((batch: any) => ({
       id: batch.id,
-      batchName: batch.batch_name || 'Unnamed Batch',
-      courseName: courseMap.get(batch.course_id) || 'No Course Linked',
+      batchName: batch.batch_name || t('students.profile.fallback.unnamedBatch'),
+      courseName: courseMap.get(batch.course_id) || t('students.profile.fallback.noCourseLinked'),
     }));
 
     setBatchOptions(mapped);
@@ -277,7 +280,7 @@ export default function StudentProfile() {
     const mappedStudent: StudentProfileData = {
       id: studentData.id,
       studentCode: studentData.student_code || '-',
-      name: studentData.full_name || 'Unnamed Student',
+      name: studentData.full_name || t('students.profile.fallback.unnamedStudent'),
       email: studentData.email || '-',
       phone: studentData.phone || '-',
       icPassport: studentData.ic_passport || '-',
@@ -325,7 +328,7 @@ export default function StudentProfile() {
             lesson?.lesson_datetime?.slice(0, 10) ||
             record.created_at?.slice(0, 10) ||
             '-',
-          lesson: lesson?.lesson_title || 'Lesson',
+          lesson: lesson?.lesson_title || t('students.profile.fallback.lesson'),
           status: formatAttendanceStatus(record.attendance_status),
         };
       })
@@ -336,7 +339,7 @@ export default function StudentProfile() {
         id: payment.id,
         date: payment.paid_at ? payment.paid_at.slice(0, 10) : '-',
         amount: Number(payment.amount_paid || 0),
-        type: formatPaymentMethod(payment.payment_method || 'Payment'),
+        type: formatPaymentMethod(payment.payment_method) || t('students.profile.payment.fallbackType'),
         status: 'Paid',
       }))
     );
@@ -366,10 +369,10 @@ export default function StudentProfile() {
 
         return {
           id: item.id,
-          title: item.title || 'Portfolio Submission',
+          title: item.title || t('students.profile.fallback.portfolioSubmission'),
           date: item.submitted_at ? item.submitted_at.slice(0, 10) : '-',
           score: score !== undefined && score !== null ? `${score}%` : '-',
-          status: formatPortfolioStatus(item.portfolio_status),
+          status: item.portfolio_status || '',
         };
       })
     );
@@ -377,7 +380,7 @@ export default function StudentProfile() {
     setDocuments(
       (documentRes.data || []).map((doc: any) => ({
         id: doc.id,
-        type: doc.document_type || 'Document',
+        type: doc.document_type || t('students.profile.fallback.document'),
         url: doc.file_url || '',
         uploadedAt: doc.uploaded_at ? doc.uploaded_at.slice(0, 10) : '-',
       }))
@@ -423,7 +426,7 @@ export default function StudentProfile() {
     if (!student) return;
 
     if (!editForm.fullName.trim()) {
-      alert('Full name is required.');
+      alert(t('students.profile.error.fullNameRequired'));
       return;
     }
 
@@ -447,7 +450,7 @@ export default function StudentProfile() {
       .eq('id', student.id);
 
     if (error) {
-      alert(`Failed to update student profile: ${error.message}`);
+      alert(t('students.profile.error.updateFailed', { error: error.message }));
       setSaving(false);
       return;
     }
@@ -494,7 +497,7 @@ export default function StudentProfile() {
     newBatchId: string
   ) {
     if (!newBatchId) {
-      alert('Please select a valid class batch.');
+      alert(t('students.profile.error.selectValidBatch'));
       return false;
     }
 
@@ -509,7 +512,7 @@ export default function StudentProfile() {
         .eq('id', currentStudent.enrollmentId);
 
       if (error) {
-        alert(`Failed to update enrollment class: ${error.message}`);
+        alert(t('students.profile.error.enrollmentUpdateFailed', { error: error.message }));
         return false;
       }
 
@@ -526,7 +529,7 @@ export default function StudentProfile() {
     });
 
     if (error) {
-      alert(`Failed to create student enrollment: ${error.message}`);
+      alert(t('students.profile.error.enrollmentCreateFailed', { error: error.message }));
       return false;
     }
 
@@ -547,7 +550,7 @@ export default function StudentProfile() {
   if (loading) {
     return (
       <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
-        Loading student profile...
+        {t('students.profile.loading')}
       </div>
     );
   }
@@ -556,11 +559,11 @@ export default function StudentProfile() {
     return (
       <div className="space-y-4">
         <Link to="/app/students/list" className="text-[#284342] hover:underline">
-          Back to Student List
+          {t('students.profile.backToList')}
         </Link>
 
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
-          Student not found.
+          {t('students.profile.notFound')}
         </div>
       </div>
     );
@@ -573,11 +576,11 @@ export default function StudentProfile() {
         className="inline-flex items-center gap-2 text-sm text-[#284342] hover:underline"
       >
         <ArrowLeft size={16} />
-        Back to Student List
+        {t('students.profile.backToList')}
       </Link>
 
       <div className="flex items-center justify-between">
-        <h1 className="text-3xl text-[#284342]">Student Profile</h1>
+        <h1 className="text-3xl text-[#284342]">{t('students.profile.title')}</h1>
 
         {canEditProfile && (
           <button
@@ -585,7 +588,7 @@ export default function StudentProfile() {
             className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
           >
             <Edit size={18} />
-            Edit Profile
+            {t('students.profile.editProfile')}
           </button>
         )}
       </div>
@@ -599,17 +602,17 @@ export default function StudentProfile() {
           <div className="flex-1">
             <div className="flex items-center gap-3 mb-2">
               <h2 className="text-2xl text-[#284342]">{student.name}</h2>
-              <StatusBadge status={student.status} />
+              <StatusBadge status={student.status} t={t} />
             </div>
 
             <p className="text-[#6b6b6b] mb-4">
-              Student ID: {student.studentCode}
+              {t('students.profile.studentIdLabel', { code: student.studentCode })}
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <ContactInfo icon={<Mail size={16} />} value={student.email} />
               <ContactInfo icon={<Phone size={16} />} value={student.phone} />
-              <ContactInfo icon={<Calendar size={16} />} value={`Joined ${student.joinDate}`} />
+              <ContactInfo icon={<Calendar size={16} />} value={t('students.profile.joined', { date: student.joinDate })} />
             </div>
           </div>
         </div>
@@ -617,26 +620,26 @@ export default function StudentProfile() {
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <StatCard
-          label="Course Progress"
+          label={t('students.profile.stat.courseProgress')}
           value={`${student.progress}%`}
           icon={<TrendingUp size={20} />}
           progress={student.progress}
         />
 
         <StatCard
-          label="Attendance Rate"
+          label={t('students.profile.stat.attendanceRate')}
           value={`${attendanceRate}%`}
           icon={<Award size={20} />}
         />
 
         <StatCard
-          label="Portfolio Items"
+          label={t('students.profile.stat.portfolioItems')}
           value={portfolioItems.length.toString()}
           icon={<Briefcase size={20} />}
         />
 
         <StatCard
-          label="Outstanding Balance"
+          label={t('students.profile.stat.outstandingBalance')}
           value={`RM ${outstandingBalance.toLocaleString()}`}
           icon={<CreditCard size={20} />}
           danger={outstandingBalance > 0}
@@ -644,43 +647,44 @@ export default function StudentProfile() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <Panel title="Course Details">
-          <Info label="Course" value={student.course} />
-          <Info label="Batch" value={student.batch} />
-          <Info label="Experience Level" value={student.experience} />
-          <Info label="Health Condition / Allergies" value={student.healthCondition} />
-          <Info label="Emergency Contact" value={student.emergencyContact} />
-          <Info label="Emergency Relation" value={student.emergencyRelation} />
+        <Panel title={t('students.profile.panel.courseDetails')}>
+          <Info label={t('students.profile.info.course')} value={student.course} />
+          <Info label={t('students.profile.info.batch')} value={student.batch} />
+          <Info label={t('students.profile.info.experienceLevel')} value={student.experience} />
+          <Info label={t('students.profile.info.healthCondition')} value={student.healthCondition} />
+          <Info label={t('students.profile.info.emergencyContact')} value={student.emergencyContact} />
+          <Info label={t('students.profile.info.emergencyRelation')} value={student.emergencyRelation} />
         </Panel>
 
-        <Panel title="Registration Documents">
-          <DocumentLink label="IC / Passport Copy" url={student.icDocumentUrl} />
-          <DocumentLink label="Digital Signature" url={student.signatureUrl} />
+        <Panel title={t('students.profile.panel.registrationDocuments')}>
+          <DocumentLink label={t('students.profile.doc.icCopy')} url={student.icDocumentUrl} t={t} />
+          <DocumentLink label={t('students.profile.doc.signature')} url={student.signatureUrl} t={t} />
 
           {documents.map((doc) => (
             <DocumentLink
               key={doc.id}
               label={`${doc.type} (${doc.uploadedAt})`}
               url={doc.url}
+              t={t}
             />
           ))}
         </Panel>
 
-        <Panel title="Recent Attendance">
-          {attendanceRecords.length === 0 && <EmptyText text="No attendance records." />}
+        <Panel title={t('students.profile.panel.recentAttendance')}>
+          {attendanceRecords.length === 0 && <EmptyText text={t('students.profile.emptyAttendance')} />}
 
           {attendanceRecords.map((record) => (
             <ListRow
               key={record.id}
               title={record.lesson}
               subtitle={record.date}
-              right={<AttendanceBadge status={record.status} />}
+              right={<AttendanceBadge status={record.status} t={t} />}
             />
           ))}
         </Panel>
 
-        <Panel title="Payment History">
-          {paymentHistory.length === 0 && <EmptyText text="No payment records." />}
+        <Panel title={t('students.profile.panel.paymentHistory')}>
+          {paymentHistory.length === 0 && <EmptyText text={t('students.profile.emptyPayments')} />}
 
           {paymentHistory.map((payment) => (
             <ListRow
@@ -692,15 +696,15 @@ export default function StudentProfile() {
                   <p className="text-sm text-[#284342]">
                     RM {payment.amount.toLocaleString()}
                   </p>
-                  <span className="text-xs text-green-700">{payment.status}</span>
+                  <span className="text-xs text-green-700">{t('students.profile.payment.paid')}</span>
                 </div>
               }
             />
           ))}
         </Panel>
 
-        <Panel title="Portfolio Submissions">
-          {portfolioItems.length === 0 && <EmptyText text="No portfolio submissions." />}
+        <Panel title={t('students.profile.panel.portfolioSubmissions')}>
+          {portfolioItems.length === 0 && <EmptyText text={t('students.profile.emptyPortfolio')} />}
 
           {portfolioItems.map((item) => (
             <ListRow
@@ -710,7 +714,7 @@ export default function StudentProfile() {
               right={
                 <div className="text-right">
                   <p className="text-sm text-[#284342]">{item.score}</p>
-                  <span className="text-xs text-green-700">{item.status}</span>
+                  <span className="text-xs text-green-700">{formatPortfolioStatus(item.status, t)}</span>
                 </div>
               }
             />
@@ -726,6 +730,7 @@ export default function StudentProfile() {
           saving={saving}
           onClose={() => setShowEditModal(false)}
           onSave={saveStudentProfile}
+          t={t}
         />
       )}
     </div>
@@ -739,6 +744,7 @@ function EditStudentModal({
   saving,
   onClose,
   onSave,
+  t,
 }: {
   form: EditFormData;
   setForm: React.Dispatch<React.SetStateAction<EditFormData>>;
@@ -746,6 +752,7 @@ function EditStudentModal({
   saving: boolean;
   onClose: () => void;
   onSave: () => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   function updateField(field: keyof EditFormData, value: string) {
     setForm((prev) => ({
@@ -758,7 +765,7 @@ function EditStudentModal({
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl max-w-3xl w-full max-h-[90vh] overflow-auto">
         <div className="p-6 border-b border-[rgba(40,67,66,0.1)] flex items-center justify-between">
-          <h2 className="text-xl text-[#284342]">Edit Student Profile</h2>
+          <h2 className="text-xl text-[#284342]">{t('students.profile.edit.title')}</h2>
 
           <button onClick={onClose}>
             <X size={20} className="text-[#284342]" />
@@ -768,45 +775,45 @@ function EditStudentModal({
         <div className="p-6 space-y-5">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <InputField
-              label="Full Name"
+              label={t('students.profile.edit.fullName')}
               value={form.fullName}
               onChange={(value) => updateField('fullName', value)}
             />
 
             <InputField
-              label="Email"
+              label={t('students.profile.edit.email')}
               type="email"
               value={form.email}
               onChange={(value) => updateField('email', value)}
             />
 
             <InputField
-              label="Phone"
+              label={t('students.profile.edit.phone')}
               value={form.phone}
               onChange={(value) => updateField('phone', value)}
             />
 
             <InputField
-              label="IC / Passport"
+              label={t('students.profile.edit.icPassport')}
               value={form.icPassport}
               onChange={(value) => updateField('icPassport', value)}
             />
 
             <InputField
-              label="Emergency Contact"
+              label={t('students.profile.edit.emergencyContact')}
               value={form.emergencyContact}
               onChange={(value) => updateField('emergencyContact', value)}
             />
 
             <InputField
-              label="Emergency Relation"
+              label={t('students.profile.edit.emergencyRelation')}
               value={form.emergencyRelation}
               onChange={(value) => updateField('emergencyRelation', value)}
             />
 
             <div>
               <label className="block text-sm text-[#284342] mb-2">
-                Experience Level
+                {t('students.profile.edit.experienceLevel')}
               </label>
 
               <select
@@ -814,18 +821,18 @@ function EditStudentModal({
                 onChange={(e) => updateField('experience', e.target.value)}
                 className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white"
               >
-                <option value="">Select Experience</option>
-                <option value="Beginner">Beginner</option>
-                <option value="Some Experience">Some Experience</option>
-                <option value="Intermediate">Intermediate</option>
-                <option value="Advanced">Advanced</option>
-                <option value="Professional">Professional</option>
+                <option value="">{t('students.profile.edit.selectExperience')}</option>
+                <option value="Beginner">{t('students.profile.edit.experience.beginner')}</option>
+                <option value="Some Experience">{t('students.profile.edit.experience.someExperience')}</option>
+                <option value="Intermediate">{t('students.profile.edit.experience.intermediate')}</option>
+                <option value="Advanced">{t('students.profile.edit.experience.advanced')}</option>
+                <option value="Professional">{t('students.profile.edit.experience.professional')}</option>
               </select>
             </div>
 
             <div>
               <label className="block text-sm text-[#284342] mb-2">
-                Status
+                {t('students.profile.edit.status')}
               </label>
 
               <select
@@ -833,15 +840,15 @@ function EditStudentModal({
                 onChange={(e) => updateField('status', e.target.value)}
                 className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white"
               >
-                <option value="active">Active</option>
-                <option value="completed">Completed</option>
-                <option value="inactive">Inactive</option>
-                <option value="suspended">Suspended</option>
+                <option value="active">{t('students.status.active')}</option>
+                <option value="completed">{t('students.status.completed')}</option>
+                <option value="inactive">{t('students.status.inactive')}</option>
+                <option value="suspended">{t('students.status.suspended')}</option>
               </select>
             </div>
 
             <InputField
-              label="Progress (%)"
+              label={t('students.profile.edit.progress')}
               type="number"
               value={form.progress}
               onChange={(value) => updateField('progress', value)}
@@ -849,7 +856,7 @@ function EditStudentModal({
 
             <div>
               <label className="block text-sm text-[#284342] mb-2">
-                Enrolment Class / Batch
+                {t('students.profile.edit.batch')}
               </label>
 
               <select
@@ -857,7 +864,7 @@ function EditStudentModal({
                 onChange={(e) => updateField('batchId', e.target.value)}
                 className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white"
               >
-                <option value="">Select Class Batch</option>
+                <option value="">{t('students.profile.edit.selectBatch')}</option>
 
                 {batches.map((batch) => (
                   <option key={batch.id} value={batch.id}>
@@ -870,7 +877,7 @@ function EditStudentModal({
 
           <div>
             <label className="block text-sm text-[#284342] mb-2">
-              Health Condition / Allergies
+              {t('students.profile.edit.healthCondition')}
             </label>
 
             <textarea
@@ -887,7 +894,7 @@ function EditStudentModal({
             onClick={onClose}
             className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6]"
           >
-            Cancel
+            {t('students.profile.edit.cancel')}
           </button>
 
           <button
@@ -896,7 +903,7 @@ function EditStudentModal({
             className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] disabled:opacity-50 flex items-center gap-2"
           >
             <Save size={18} />
-            {saving ? 'Saving...' : 'Save Changes'}
+            {saving ? t('students.profile.edit.saving') : t('students.profile.edit.save')}
           </button>
         </div>
       </div>
@@ -1019,7 +1026,15 @@ function EmptyText({ text }: { text: string }) {
   return <p className="text-sm text-[#6b6b6b]">{text}</p>;
 }
 
-function DocumentLink({ label, url }: { label: string; url: string }) {
+function DocumentLink({
+  label,
+  url,
+  t,
+}: {
+  label: string;
+  url: string;
+  t: (key: string) => string;
+}) {
   return (
     <div className="flex items-center justify-between p-3 rounded-lg bg-[#f8f8f6]">
       <div className="flex items-center gap-2">
@@ -1034,16 +1049,16 @@ function DocumentLink({ label, url }: { label: string; url: string }) {
           rel="noreferrer"
           className="text-sm text-[#284342] hover:underline flex items-center gap-1"
         >
-          Open <ExternalLink size={14} />
+          {t('students.profile.doc.open')} <ExternalLink size={14} />
         </a>
       ) : (
-        <span className="text-xs text-[#6b6b6b]">Not uploaded</span>
+        <span className="text-xs text-[#6b6b6b]">{t('students.profile.doc.notUploaded')}</span>
       )}
     </div>
   );
 }
 
-function AttendanceBadge({ status }: { status: string }) {
+function AttendanceBadge({ status, t }: { status: string; t: (key: string) => string }) {
   const className =
     status === 'Present'
       ? 'bg-green-100 text-green-700'
@@ -1051,14 +1066,23 @@ function AttendanceBadge({ status }: { status: string }) {
       ? 'bg-yellow-100 text-yellow-700'
       : 'bg-red-100 text-red-700';
 
+  const label =
+    status === 'Present'
+      ? t('students.profile.attendance.present')
+      : status === 'Late'
+      ? t('students.profile.attendance.late')
+      : status === 'Absent'
+      ? t('students.profile.attendance.absent')
+      : status;
+
   return (
     <span className={`text-xs px-3 py-1 rounded-full ${className}`}>
-      {status}
+      {label}
     </span>
   );
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, t }: { status: string; t: (key: string) => string }) {
   const className =
     status === 'Active'
       ? 'bg-green-100 text-green-700'
@@ -1070,9 +1094,20 @@ function StatusBadge({ status }: { status: string }) {
       ? 'bg-gray-100 text-gray-700'
       : 'bg-yellow-100 text-yellow-700';
 
+  const label =
+    status === 'Active'
+      ? t('students.status.active')
+      : status === 'Completed'
+      ? t('students.status.completed')
+      : status === 'Suspended'
+      ? t('students.status.suspended')
+      : status === 'Inactive'
+      ? t('students.status.inactive')
+      : t('students.status.onHold');
+
   return (
     <span className={`text-sm px-3 py-1 rounded-full ${className}`}>
-      {status}
+      {label}
     </span>
   );
 }
@@ -1108,15 +1143,16 @@ function formatAttendanceStatus(status: string) {
   return status || '-';
 }
 
-function formatPortfolioStatus(status: string) {
-  if (status === 'approved') return 'Approved';
-  if (status === 'reviewed') return 'Reviewed';
-  if (status === 'revision_required') return 'Revision Required';
-  if (status === 'submitted') return 'Submitted';
+function formatPortfolioStatus(status: string, t: (key: string) => string) {
+  if (status === 'approved') return t('students.profile.portfolio.approved');
+  if (status === 'reviewed') return t('students.profile.portfolio.reviewed');
+  if (status === 'revision_required') return t('students.profile.portfolio.revisionRequired');
+  if (status === 'submitted') return t('students.profile.portfolio.submitted');
   return status || '-';
 }
 
 function formatPaymentMethod(method: string) {
+  if (!method) return '';
   return method
     .replace(/_/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase());

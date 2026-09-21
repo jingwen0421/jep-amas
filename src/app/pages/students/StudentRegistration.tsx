@@ -4,6 +4,8 @@ import { supabase } from '../../lib/supabase';
 import { useNavigate } from 'react-router';
 import { Upload, X } from 'lucide-react';
 import { notifyStudentRegistrationSubmitted } from '../../services/systemNotificationService';
+import { getCurrentUser } from '../../utils/session';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface Course {
   id: string;
@@ -12,23 +14,39 @@ interface Course {
 
 export default function StudentRegistration() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
   const signatureRef = useRef<SignatureCanvas | null>(null);
+
+  const currentUser = getCurrentUser();
+  const isLoggedIn = !!currentUser.id;
 
   const signupUserId = localStorage.getItem('studentSignupUserId') || '';
   const signupName = localStorage.getItem('studentSignupName') || '';
   const signupEmail = localStorage.getItem('studentSignupEmail') || '';
 
-  const isSignupFlow = !!signupUserId;
+  // A staff member's active session always wins over a stale/leftover
+  // self-signup key from a previous, unrelated signup on this browser.
+  const isSignupFlow = !!signupUserId && !isLoggedIn;
+  const isAdminFlow = !isSignupFlow;
+
+  useEffect(() => {
+    if (isLoggedIn && signupUserId) {
+      localStorage.removeItem('studentSignupUserId');
+      localStorage.removeItem('studentSignupName');
+      localStorage.removeItem('studentSignupEmail');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const [courses, setCourses] = useState<Course[]>([]);
   const [icFile, setIcFile] = useState<File | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
   const [formData, setFormData] = useState({
-    fullName: signupName,
+    fullName: isSignupFlow ? signupName : '',
     icPassport: '',
     phone: '',
-    email: signupEmail,
+    email: isSignupFlow ? signupEmail : '',
     emergencyContact: '',
     emergencyRelation: '',
     makeupExperience: '',
@@ -49,7 +67,7 @@ export default function StudentRegistration() {
       .order('course_name', { ascending: true });
 
     if (error) {
-      alert(`Failed to load courses: ${error.message}`);
+      alert(t('students.registration.error.loadCoursesFailed', { error: error.message }));
       return;
     }
 
@@ -67,27 +85,30 @@ export default function StudentRegistration() {
     e.preventDefault();
 
     if (!formData.fullName.trim()) {
-      alert('Please enter full name.');
+      alert(t('students.registration.error.fullNameRequired'));
       return;
     }
 
     if (!formData.email.trim()) {
-      alert('Please enter email.');
+      alert(t('students.registration.error.emailRequired'));
       return;
     }
 
     if (!formData.courseId) {
-      alert('Please select a course.');
+      alert(t('students.registration.error.courseRequired'));
       return;
     }
 
-    if (!icFile) {
-      alert('Please upload IC/Passport document.');
+    if (!isAdminFlow && !icFile) {
+      alert(t('students.registration.error.icRequired'));
       return;
     }
 
-    if (!signatureRef.current || signatureRef.current.isEmpty()) {
-      alert('Please provide digital signature.');
+    if (
+      !isAdminFlow &&
+      (!signatureRef.current || signatureRef.current.isEmpty())
+    ) {
+      alert(t('students.registration.error.signatureRequired'));
       return;
     }
 
@@ -115,7 +136,7 @@ export default function StudentRegistration() {
         emergency_contact_name: formData.emergencyRelation,
         makeup_experience: formData.makeupExperience,
         health_condition: formData.healthConditions,
-        status: 'inactive',
+        status: isAdminFlow ? 'active' : 'inactive',
         progress: 0,
         enroll_date: new Date().toISOString().slice(0, 10),
       })
@@ -124,61 +145,76 @@ export default function StudentRegistration() {
 
     if (studentError || !newStudent) {
       setSubmitting(false);
-      alert(`Failed to submit student: ${studentError?.message}`);
+      alert(t('students.registration.error.submitFailed', { error: studentError?.message || '' }));
       return;
     }
 
-    const icUrl = await uploadIcDocument(newStudent.id);
+    const hasSignature =
+      !!signatureRef.current && !signatureRef.current.isEmpty();
 
-    if (!icUrl) {
+    const icUrl = icFile ? await uploadIcDocument(newStudent.id) : '';
+
+    if (icFile && !icUrl) {
       setSubmitting(false);
       return;
     }
 
-    const signatureUrl = await uploadSignature(newStudent.id);
+    const signatureUrl = hasSignature
+      ? await uploadSignature(newStudent.id)
+      : '';
 
-    if (!signatureUrl) {
+    if (hasSignature && !signatureUrl) {
       setSubmitting(false);
       return;
     }
 
-    const { error: updateStudentError } = await supabase
-      .from('students')
-      .update({
-        ic_document_url: icUrl,
-        signature_url: signatureUrl,
-      })
-      .eq('id', newStudent.id);
+    if (icUrl || signatureUrl) {
+      const { error: updateStudentError } = await supabase
+        .from('students')
+        .update({
+          ...(icUrl ? { ic_document_url: icUrl } : {}),
+          ...(signatureUrl ? { signature_url: signatureUrl } : {}),
+        })
+        .eq('id', newStudent.id);
 
-    if (updateStudentError) {
-      setSubmitting(false);
-      alert(
-        `Student created, but document URLs failed: ${updateStudentError.message}`
-      );
-      return;
-    }
+      if (updateStudentError) {
+        setSubmitting(false);
+        alert(
+          t('students.registration.error.documentUrlFailed', { error: updateStudentError.message })
+        );
+        return;
+      }
 
-    const { error: docsError } = await supabase.from('documents').insert([
-      {
-        student_id: newStudent.id,
-        document_type: 'IC Copy',
-        file_url: icUrl,
-        uploaded_by: null,
-        uploaded_at: new Date().toISOString(),
-      },
-      {
-        student_id: newStudent.id,
-        document_type: 'Digital Signature',
-        file_url: signatureUrl,
-        uploaded_by: null,
-        uploaded_at: new Date().toISOString(),
-      },
-    ]);
+      const docsToInsert = [
+        icUrl
+          ? {
+              student_id: newStudent.id,
+              document_type: 'IC Copy',
+              file_url: icUrl,
+              uploaded_by: null,
+              uploaded_at: new Date().toISOString(),
+            }
+          : null,
+        signatureUrl
+          ? {
+              student_id: newStudent.id,
+              document_type: 'Digital Signature',
+              file_url: signatureUrl,
+              uploaded_by: null,
+              uploaded_at: new Date().toISOString(),
+            }
+          : null,
+      ].filter((doc) => doc !== null);
 
-    if (docsError) {
-      setSubmitting(false);
-      alert(`Documents upload recorded failed: ${docsError.message}`);
-      return;
+      const { error: docsError } = await supabase
+        .from('documents')
+        .insert(docsToInsert);
+
+      if (docsError) {
+        setSubmitting(false);
+        alert(t('students.registration.error.documentRecordFailed', { error: docsError.message }));
+        return;
+      }
     }
 
     const { error: applicationError } = await supabase
@@ -186,14 +222,15 @@ export default function StudentRegistration() {
       .insert({
         student_id: newStudent.id,
         course_id: formData.courseId,
-        application_status: 'pending',
+        application_status: isAdminFlow ? 'approved' : 'pending',
         submitted_at: new Date().toISOString(),
+        reviewed_at: isAdminFlow ? new Date().toISOString() : null,
       });
 
     if (applicationError) {
       setSubmitting(false);
       alert(
-        `Student created, but failed to send approval: ${applicationError.message}`
+        t('students.registration.error.registrationRecordFailed', { error: applicationError.message })
       );
       return;
     }
@@ -225,8 +262,8 @@ export default function StudentRegistration() {
 
     alert(
       isSignupFlow
-        ? 'Application submitted successfully. Please wait for admin approval before logging in.'
-        : 'Application submitted successfully. It has been sent for approval.'
+        ? t('students.registration.successSignup')
+        : t('students.registration.successAdmin')
     );
 
     navigate('/');
@@ -240,7 +277,7 @@ export default function StudentRegistration() {
       .maybeSingle();
 
     if (existingByIc) {
-      alert('A student with this IC/Passport already exists.');
+      alert(t('students.registration.error.duplicateIc'));
       return true;
     }
 
@@ -251,7 +288,7 @@ export default function StudentRegistration() {
       .maybeSingle();
 
     if (existingByEmail) {
-      alert('A student with this email already exists.');
+      alert(t('students.registration.error.duplicateEmail'));
       return true;
     }
 
@@ -272,7 +309,7 @@ export default function StudentRegistration() {
       });
 
     if (error) {
-      alert(`Failed to upload IC/Passport: ${error.message}`);
+      alert(t('students.registration.error.uploadIcFailed', { error: error.message }));
       return '';
     }
 
@@ -301,7 +338,7 @@ export default function StudentRegistration() {
       });
 
     if (error) {
-      alert(`Failed to upload signature: ${error.message}`);
+      alert(t('students.registration.error.uploadSignatureFailed', { error: error.message }));
       return '';
     }
 
@@ -345,65 +382,64 @@ export default function StudentRegistration() {
   return (
     <div className="max-w-4xl mx-auto space-y-6">
       <div>
-        <h1 className="text-3xl text-[#284342]">Student Registration</h1>
+        <h1 className="text-3xl text-[#284342]">{t('students.registration.title')}</h1>
         <p className="text-[#6b6b6b] mt-1">
           {isSignupFlow
-            ? 'Complete your student profile before admin approval.'
-            : 'Register a new student for JEP Academy.'}
+            ? t('students.registration.subtitleSignup')
+            : t('students.registration.subtitleAdmin')}
         </p>
       </div>
 
       {isSignupFlow && (
         <div className="bg-[#e9da95]/20 border border-[#e9da95] rounded-xl p-4 text-sm text-[#284342]">
-          Your account has been created. Please complete this registration form
-          so admin can review and approve your student access.
+          {t('students.registration.signupNote')}
         </div>
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
           <h2 className="text-xl text-[#284342] mb-6">
-            Personal Information
+            {t('students.registration.section.personalInfo')}
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <TextInput
-              label="Full Name"
+              label={t('students.registration.field.fullName')}
               name="fullName"
               value={formData.fullName}
               onChange={handleChange}
               required
-              placeholder="As per IC/Passport"
+              placeholder={t('students.registration.field.fullNamePlaceholder')}
               full
               disabled={isSignupFlow && !!signupName}
             />
 
             <TextInput
-              label="IC / Passport Number"
+              label={t('students.registration.field.icPassport')}
               name="icPassport"
               value={formData.icPassport}
               onChange={handleChange}
               required
-              placeholder="123456-12-1234"
+              placeholder={t('students.registration.field.icPassportPlaceholder')}
             />
 
             <TextInput
-              label="Phone Number"
+              label={t('students.registration.field.phone')}
               name="phone"
               value={formData.phone}
               onChange={handleChange}
               required
-              placeholder="+60 12-345 6789"
+              placeholder={t('students.registration.field.phonePlaceholder')}
             />
 
             <TextInput
-              label="Email Address"
+              label={t('students.registration.field.email')}
               name="email"
               type="email"
               value={formData.email}
               onChange={handleChange}
               required
-              placeholder="student@email.com"
+              placeholder={t('students.registration.field.emailPlaceholder')}
               full
               disabled={isSignupFlow && !!signupEmail}
             />
@@ -411,11 +447,11 @@ export default function StudentRegistration() {
         </div>
 
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-xl text-[#284342] mb-6">Course Selection</h2>
+          <h2 className="text-xl text-[#284342] mb-6">{t('students.registration.section.courseSelection')}</h2>
 
           <div>
             <label className="block text-sm text-[#284342] mb-2">
-              Course <span className="text-red-500">*</span>
+              {t('students.registration.field.course')} <span className="text-red-500">*</span>
             </label>
 
             <select
@@ -426,7 +462,7 @@ export default function StudentRegistration() {
               className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
             >
               {courses.length === 0 && (
-                <option value="">No course available</option>
+                <option value="">{t('students.registration.noCoursesAvailable')}</option>
               )}
 
               {courses.map((course) => (
@@ -439,21 +475,21 @@ export default function StudentRegistration() {
         </div>
 
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-xl text-[#284342] mb-6">Emergency Contact</h2>
+          <h2 className="text-xl text-[#284342] mb-6">{t('students.registration.section.emergencyContact')}</h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <TextInput
-              label="Emergency Contact Number"
+              label={t('students.registration.field.emergencyContact')}
               name="emergencyContact"
               value={formData.emergencyContact}
               onChange={handleChange}
               required
-              placeholder="+60 12-345 6789"
+              placeholder={t('students.registration.field.phonePlaceholder')}
             />
 
             <div>
               <label className="block text-sm text-[#284342] mb-2">
-                Relationship <span className="text-red-500">*</span>
+                {t('students.registration.field.relationship')} <span className="text-red-500">*</span>
               </label>
 
               <select
@@ -463,12 +499,12 @@ export default function StudentRegistration() {
                 required
                 className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
               >
-                <option value="">Select Relationship</option>
-                <option value="Parent">Parent</option>
-                <option value="Spouse">Spouse</option>
-                <option value="Sibling">Sibling</option>
-                <option value="Friend">Friend</option>
-                <option value="Other">Other</option>
+                <option value="">{t('students.registration.field.selectRelationship')}</option>
+                <option value="Parent">{t('students.registration.relationship.parent')}</option>
+                <option value="Spouse">{t('students.registration.relationship.spouse')}</option>
+                <option value="Sibling">{t('students.registration.relationship.sibling')}</option>
+                <option value="Friend">{t('students.registration.relationship.friend')}</option>
+                <option value="Other">{t('students.registration.relationship.other')}</option>
               </select>
             </div>
           </div>
@@ -476,13 +512,13 @@ export default function StudentRegistration() {
 
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
           <h2 className="text-xl text-[#284342] mb-6">
-            Background Information
+            {t('students.registration.section.backgroundInfo')}
           </h2>
 
           <div className="space-y-6">
             <div>
               <label className="block text-sm text-[#284342] mb-2">
-                Makeup Experience
+                {t('students.registration.field.makeupExperience')}
               </label>
 
               <select
@@ -491,27 +527,27 @@ export default function StudentRegistration() {
                 onChange={handleChange}
                 className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
               >
-                <option value="">Select Experience Level</option>
-                <option value="Beginner">Beginner (No experience)</option>
+                <option value="">{t('students.registration.field.selectExperienceLevel')}</option>
+                <option value="Beginner">{t('students.registration.experience.beginner')}</option>
                 <option value="Some Experience">
-                  Some Experience (1-2 years)
+                  {t('students.registration.experience.someExperience')}
                 </option>
-                <option value="Intermediate">Intermediate (3-5 years)</option>
-                <option value="Advanced">Advanced (5+ years)</option>
-                <option value="Professional">Professional</option>
+                <option value="Intermediate">{t('students.registration.experience.intermediate')}</option>
+                <option value="Advanced">{t('students.registration.experience.advanced')}</option>
+                <option value="Professional">{t('students.registration.experience.professional')}</option>
               </select>
             </div>
 
             <div>
               <label className="block text-sm text-[#284342] mb-2">
-                Health Conditions / Allergies
+                {t('students.registration.field.healthConditions')}
               </label>
 
               <textarea
                 name="healthConditions"
                 value={formData.healthConditions}
                 onChange={handleChange}
-                placeholder="Please specify any health conditions, allergies, or special requirements..."
+                placeholder={t('students.registration.field.healthConditionsPlaceholder')}
                 rows={4}
                 className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
               />
@@ -519,7 +555,7 @@ export default function StudentRegistration() {
 
             <div>
               <label className="block text-sm text-[#284342] mb-2">
-                Preferred Language
+                {t('students.registration.field.preferredLanguage')}
               </label>
 
               <select
@@ -528,23 +564,28 @@ export default function StudentRegistration() {
                 onChange={handleChange}
                 className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
               >
-                <option value="English">English</option>
-                <option value="Chinese">Chinese (中文)</option>
+                <option value="English">{t('students.registration.language.english')}</option>
+                <option value="Chinese">{t('students.registration.language.chinese')}</option>
               </select>
             </div>
           </div>
         </div>
 
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-xl text-[#284342] mb-6">Document Upload</h2>
+          <h2 className="text-xl text-[#284342] mb-6">{t('students.registration.section.documentUpload')}</h2>
 
           <div className="border-2 border-dashed border-[rgba(40,67,66,0.2)] rounded-lg p-8 text-center hover:border-[#e9da95] transition-colors">
             <Upload size={48} className="mx-auto text-[#6b6b6b] mb-4" />
             <p className="text-sm text-[#284342] mb-2">
-              Upload IC/Passport Copy <span className="text-red-500">*</span>
+              {t('students.registration.uploadIc')}{' '}
+              {isAdminFlow ? (
+                <span className="text-[#6b6b6b] text-xs">{t('students.registration.optional')}</span>
+              ) : (
+                <span className="text-red-500">*</span>
+              )}
             </p>
             <p className="text-xs text-[#6b6b6b] mb-4">
-              PDF, JPG, or PNG. Max 5MB.
+              {t('students.registration.uploadHint')}
             </p>
 
             <input
@@ -559,7 +600,7 @@ export default function StudentRegistration() {
               htmlFor="ic-upload"
               className="inline-block px-6 py-2 bg-[#f8f8f6] text-[#284342] rounded-lg hover:bg-[#e9da95]/20 transition-colors cursor-pointer"
             >
-              Choose File
+              {t('students.registration.chooseFile')}
             </label>
 
             {icFile && (
@@ -575,15 +616,13 @@ export default function StudentRegistration() {
 
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
           <h2 className="text-xl text-[#284342] mb-6">
-            Consent & Agreement
+            {t('students.registration.section.consent')}
           </h2>
 
           <div className="space-y-4">
             <div className="p-4 bg-[#f8f8f6] rounded-lg">
               <p className="text-sm text-[#6b6b6b] mb-4">
-                I consent to JEP Image Makeup Academy collecting, using, and
-                processing my personal data in accordance with the Personal Data
-                Protection Act 2010.
+                {t('students.registration.pdpaText')}
               </p>
 
               <label className="flex items-start gap-3 cursor-pointer">
@@ -592,13 +631,17 @@ export default function StudentRegistration() {
                   name="pdpaConsent"
                   checked={formData.pdpaConsent}
                   onChange={handleChange}
-                  required
+                  required={!isAdminFlow}
                   className="mt-1 w-5 h-5 rounded border-[rgba(40,67,66,0.2)] text-[#284342] focus:ring-2 focus:ring-[#284342]"
                 />
 
                 <span className="text-sm text-[#284342]">
-                  I have read and agree to the terms and conditions{' '}
-                  <span className="text-red-500">*</span>
+                  {t('students.registration.agreeTerms')}{' '}
+                  {isAdminFlow ? (
+                    <span className="text-[#6b6b6b] text-xs">{t('students.registration.optional')}</span>
+                  ) : (
+                    <span className="text-red-500">*</span>
+                  )}
                 </span>
               </label>
             </div>
@@ -606,7 +649,12 @@ export default function StudentRegistration() {
             <div className="border border-[rgba(40,67,66,0.1)] rounded-lg p-4">
               <div className="flex items-center justify-between mb-3">
                 <p className="text-sm text-[#284342]">
-                  Digital Signature <span className="text-red-500">*</span>
+                  {t('students.registration.digitalSignature')}{' '}
+                  {isAdminFlow ? (
+                    <span className="text-[#6b6b6b] text-xs">{t('students.registration.optional')}</span>
+                  ) : (
+                    <span className="text-red-500">*</span>
+                  )}
                 </p>
 
                 <button
@@ -614,7 +662,7 @@ export default function StudentRegistration() {
                   onClick={() => signatureRef.current?.clear()}
                   className="text-sm text-[#d4183d] hover:underline"
                 >
-                  Clear
+                  {t('students.registration.clear')}
                 </button>
               </div>
 
@@ -631,7 +679,7 @@ export default function StudentRegistration() {
               </div>
 
               <p className="text-xs text-[#6b6b6b] mt-2">
-                Draw your signature using mouse, trackpad, or touch screen.
+                {t('students.registration.signatureHint')}
               </p>
             </div>
           </div>
@@ -643,7 +691,7 @@ export default function StudentRegistration() {
             onClick={() => navigate(isSignupFlow ? '/' : '/app/students/list')}
             className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
           >
-            Cancel
+            {t('students.registration.cancel')}
           </button>
 
           <button
@@ -651,7 +699,7 @@ export default function StudentRegistration() {
             disabled={submitting}
             className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors disabled:opacity-60"
           >
-            {submitting ? 'Submitting...' : 'Submit Registration'}
+            {submitting ? t('students.registration.submitting') : t('students.registration.submit')}
           </button>
         </div>
       </form>

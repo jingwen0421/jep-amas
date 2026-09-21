@@ -7,6 +7,7 @@
 import { useEffect, useState } from 'react';
 import { Plus, GripVertical, CheckCircle2, Users } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface CourseOption {
   id: string;
@@ -31,6 +32,7 @@ const emptyForm = {
 };
 
 export default function CourseModules() {
+  const { t } = useLanguage();
   const [courses, setCourses] = useState<CourseOption[]>([]);
   const [selectedCourseId, setSelectedCourseId] = useState('');
   const [modules, setModules] = useState<ModuleRow[]>([]);
@@ -160,12 +162,12 @@ export default function CourseModules() {
     setFormError(null);
 
     if (!selectedCourseId) {
-      setFormError('Select a course first.');
+      setFormError(t('courses.modules.error.selectCourseFirst'));
       return;
     }
 
     if (!formData.title.trim()) {
-      setFormError('Module title is required.');
+      setFormError(t('courses.modules.error.titleRequired'));
       return;
     }
 
@@ -207,7 +209,7 @@ export default function CourseModules() {
     if (error) {
       setDeleteError(
         error.message.includes('violates foreign key')
-          ? 'This module already has scheduled sessions or student progress attached — remove those first.'
+          ? t('courses.modules.error.deleteConstraint')
           : error.message
       );
       return;
@@ -224,10 +226,9 @@ export default function CourseModules() {
     <div className="space-y-6">
       <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
-          <h1 className="text-3xl text-[#284342]">Course Modules</h1>
+          <h1 className="text-3xl text-[#284342]">{t('courses.modules.title')}</h1>
           <p className="text-[#6b6b6b] mt-1">
-            Define the curriculum structure that class scheduling and student
-            progress tracking are built on.
+            {t('courses.modules.subtitle')}
           </p>
         </div>
 
@@ -237,21 +238,21 @@ export default function CourseModules() {
           className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2 disabled:opacity-50"
         >
           <Plus size={20} />
-          Add Module
+          {t('courses.modules.addModule')}
         </button>
       </div>
 
       <div className="bg-white rounded-xl p-4 border border-[rgba(40,67,66,0.1)]">
         <div className="flex items-center gap-4 flex-wrap">
-          <label className="text-sm text-[#284342]">Course:</label>
+          <label className="text-sm text-[#284342]">{t('courses.modules.courseLabel')}</label>
 
           {coursesLoading && (
-            <span className="text-sm text-[#6b6b6b]">Loading courses...</span>
+            <span className="text-sm text-[#6b6b6b]">{t('courses.modules.loadingCourses')}</span>
           )}
 
           {!coursesLoading && courses.length === 0 && (
             <span className="text-sm text-[#6b6b6b]">
-              No active courses found — add one under Courses first.
+              {t('courses.modules.noActiveCourses')}
             </span>
           )}
 
@@ -271,8 +272,11 @@ export default function CourseModules() {
 
           {!loading && selectedCourse && (
             <span className="text-sm text-[#6b6b6b]">
-              {modules.length} module{modules.length === 1 ? '' : 's'} •{' '}
-              {requiredCount} required
+              {t('courses.modules.moduleCount', {
+                count: modules.length,
+                plural: modules.length === 1 ? '' : 's',
+                required: requiredCount,
+              })}
             </span>
           )}
         </div>
@@ -282,15 +286,13 @@ export default function CourseModules() {
         <div className="divide-y divide-[rgba(40,67,66,0.1)]">
           {loading && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              Loading modules...
+              {t('courses.modules.loading')}
             </div>
           )}
 
           {!loading && selectedCourseId && modules.length === 0 && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              No modules defined for {selectedCourse?.course_name} yet. Add the
-              first one to start tracking progress and scheduling sessions
-              against it.
+              {t('courses.modules.empty', { course: selectedCourse?.course_name || '' })}
             </div>
           )}
 
@@ -312,7 +314,7 @@ export default function CourseModules() {
 
                         {module.is_required && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-[#284342]/10 text-[#284342]">
-                            Required
+                            {t('courses.modules.required')}
                           </span>
                         )}
                       </div>
@@ -326,13 +328,16 @@ export default function CourseModules() {
                       <div className="flex items-center gap-4 mt-2 text-xs text-[#6b6b6b]">
                         <span className="flex items-center gap-1.5">
                           <Users size={13} />
-                          {module.totalCount} enrolled
+                          {t('courses.modules.enrolled', { count: module.totalCount })}
                         </span>
 
                         {module.totalCount > 0 && (
                           <span className="flex items-center gap-1.5">
                             <CheckCircle2 size={13} className="text-green-700" />
-                            {module.completedCount}/{module.totalCount} completed
+                            {t('courses.modules.completedCount', {
+                              completed: module.completedCount,
+                              total: module.totalCount,
+                            })}
                           </span>
                         )}
                       </div>
@@ -344,7 +349,7 @@ export default function CourseModules() {
                       onClick={() => openEditModal(module)}
                       className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm"
                     >
-                      Edit
+                      {t('courses.modules.edit')}
                     </button>
 
                     {confirmDeleteId === module.id ? (
@@ -354,13 +359,13 @@ export default function CourseModules() {
                           disabled={deletingId === module.id}
                           className="px-4 py-2 rounded-lg bg-red-600 text-white hover:bg-red-700 transition-colors text-sm disabled:opacity-50"
                         >
-                          {deletingId === module.id ? 'Deleting...' : 'Confirm Delete'}
+                          {deletingId === module.id ? t('courses.modules.deleting') : t('courses.modules.confirmDelete')}
                         </button>
                         <button
                           onClick={() => setConfirmDeleteId(null)}
                           className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm"
                         >
-                          Cancel
+                          {t('courses.modules.cancel')}
                         </button>
                       </>
                     ) : (
@@ -371,7 +376,7 @@ export default function CourseModules() {
                         }}
                         className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-red-700 hover:bg-red-50 transition-colors text-sm"
                       >
-                        Delete
+                        {t('courses.modules.delete')}
                       </button>
                     )}
                   </div>
@@ -391,28 +396,28 @@ export default function CourseModules() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-lg w-full p-6">
             <h2 className="text-xl text-[#284342] mb-6">
-              {editingModuleId ? 'Edit Module' : 'Add Module'} —{' '}
+              {editingModuleId ? t('courses.modules.modal.editTitle') : t('courses.modules.modal.addTitle')} —{' '}
               {selectedCourse?.course_name}
             </h2>
 
             <div className="space-y-4">
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Title
+                  {t('courses.modules.field.title')}
                 </label>
                 <input
                   value={formData.title}
                   onChange={(e) =>
                     setFormData((prev) => ({ ...prev, title: e.target.value }))
                   }
-                  placeholder="e.g., Foundation Skin Prep"
+                  placeholder={t('courses.modules.field.titlePlaceholder')}
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                 />
               </div>
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Description (optional)
+                  {t('courses.modules.field.description')}
                 </label>
                 <textarea
                   value={formData.description}
@@ -430,7 +435,7 @@ export default function CourseModules() {
               <div className="grid grid-cols-2 gap-4 items-end">
                 <div>
                   <label className="block text-sm text-[#284342] mb-2">
-                    Sequence
+                    {t('courses.modules.field.sequence')}
                   </label>
                   <input
                     type="number"
@@ -458,7 +463,7 @@ export default function CourseModules() {
                     }
                     className="w-4 h-4"
                   />
-                  Required for completion
+                  {t('courses.modules.field.requiredForCompletion')}
                 </label>
               </div>
 
@@ -474,7 +479,7 @@ export default function CourseModules() {
                 onClick={closeModal}
                 className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
               >
-                Cancel
+                {t('courses.modules.modalCancel')}
               </button>
 
               <button
@@ -482,7 +487,7 @@ export default function CourseModules() {
                 disabled={saving}
                 className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors disabled:opacity-50"
               >
-                {saving ? 'Saving...' : editingModuleId ? 'Save Changes' : 'Add Module'}
+                {saving ? t('courses.modules.saving') : editingModuleId ? t('courses.modules.saveChanges') : t('courses.modules.addModule')}
               </button>
             </div>
           </div>

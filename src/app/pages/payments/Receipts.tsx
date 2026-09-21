@@ -14,10 +14,16 @@ import {
 } from '../../services/paymentsService';
 import { SummaryCard } from '../../components/payments/SummaryCard';
 import { Modal, ModalHeader } from '../../components/payments/Modal';
+import { useLanguage } from '../../context/LanguageContext';
 
 export default function Receipts() {
   const currentUser = getCurrentUser();
   const isStudentView = currentUser.role === 'student';
+  const { t } = useLanguage();
+
+  function receiptStatusLabel(status: string) {
+    return status === 'Void' ? t('payments.receipts.statusVoid') : t('payments.receipts.statusIssued');
+  }
 
   const [receipts, setReceipts] = useState<PaymentReceiptDetails[]>([]);
   const [selectedReceipt, setSelectedReceipt] = useState<PaymentReceiptDetails | null>(
@@ -90,7 +96,7 @@ export default function Receipts() {
 
     if (!receiptElement) {
       document.body.removeChild(hiddenContainer);
-      alert('Unable to generate receipt PDF.');
+      alert(t('payments.receipts.errorGeneratePdf'));
       return;
     }
 
@@ -117,7 +123,7 @@ export default function Receipts() {
 
   async function emailReceipt(receipt: PaymentReceiptDetails) {
     if (!receipt.studentEmail) {
-      alert('This student has no email on file.');
+      alert(t('payments.receipts.noEmailOnFile'));
       return;
     }
 
@@ -139,9 +145,9 @@ export default function Receipts() {
     });
 
     if (result.email?.success) {
-      alert(`Receipt emailed to ${receipt.student}.`);
+      alert(t('payments.receipts.emailSentTo', { name: receipt.student }));
     } else {
-      alert(`Failed to send receipt email: ${result.email?.error || 'unknown error'}`);
+      alert(t('payments.receipts.emailSendFailed', { message: result.email?.error || t('payments.receipts.unknownError') }));
     }
   }
 
@@ -151,7 +157,7 @@ export default function Receipts() {
     const printWindow = window.open('', '_blank');
 
     if (!printWindow) {
-      alert('Unable to open print window.');
+      alert(t('payments.receipts.errorPrintWindow'));
       return;
     }
 
@@ -175,13 +181,13 @@ export default function Receipts() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl text-[#284342]">
-            {isStudentView ? 'My Receipts' : 'Payment Receipts'}
+            {isStudentView ? t('payments.receipts.titleStudent') : t('payments.receipts.title')}
           </h1>
 
           <p className="text-[#6b6b6b] mt-1">
             {isStudentView
-              ? 'View, print and download your own payment receipts.'
-              : 'View, preview, print and download payment receipts.'}
+              ? t('payments.receipts.subtitleStudent')
+              : t('payments.receipts.subtitle')}
           </p>
         </div>
 
@@ -189,28 +195,28 @@ export default function Receipts() {
           onClick={fetchReceipts}
           className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors"
         >
-          Refresh Receipts
+          {t('payments.receipts.refresh')}
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <SummaryCard
           icon={<ReceiptIcon size={24} className="text-[#284342]" />}
-          label={isStudentView ? 'My Receipts' : 'Total Receipts'}
+          label={isStudentView ? t('payments.receipts.myReceipts') : t('payments.receipts.totalReceipts')}
           value={receipts.length.toString()}
           valueColor="text-[#284342]"
         />
 
         <SummaryCard
           icon={<DollarSign size={24} className="text-green-700" />}
-          label={isStudentView ? 'My Paid Amount' : 'Total Amount'}
+          label={isStudentView ? t('payments.receipts.myPaidAmount') : t('payments.receipts.totalAmount')}
           value={formatCurrency(totalAmount)}
           valueColor="text-green-700"
         />
 
         <SummaryCard
           icon={<ReceiptIcon size={24} className="text-blue-700" />}
-          label="This Month"
+          label={t('payments.receipts.thisMonth')}
           value={thisMonthCount.toString()}
           valueColor="text-blue-700"
         />
@@ -219,7 +225,7 @@ export default function Receipts() {
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
           <h2 className="text-lg text-[#284342]">
-            {isStudentView ? 'My Receipt History' : 'All Receipts'}
+            {isStudentView ? t('payments.receipts.myReceiptHistory') : t('payments.receipts.allReceipts')}
           </h2>
         </div>
 
@@ -228,26 +234,26 @@ export default function Receipts() {
             <thead className="bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
               <tr>
                 <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                  Receipt No.
+                  {t('payments.receipts.colReceiptNo')}
                 </th>
 
                 {!isStudentView && (
                   <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                    Student
+                    {t('payments.installments.colStudent')}
                   </th>
                 )}
 
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Course</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Amount</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colCourse')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colAmount')}</th>
                 <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                  Payment Method
+                  {t('payments.installments.paymentMethod')}
                 </th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Reference</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.receipts.colReference')}</th>
                 <th className="px-6 py-4 text-left text-sm text-[#284342]">
-                  Issued Date
+                  {t('payments.receipts.colIssuedDate')}
                 </th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Status</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Actions</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colStatus')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colActions')}</th>
               </tr>
             </thead>
 
@@ -258,7 +264,7 @@ export default function Receipts() {
                     colSpan={isStudentView ? 8 : 9}
                     className="px-6 py-8 text-center text-[#6b6b6b]"
                   >
-                    Loading receipts...
+                    {t('payments.receipts.loading')}
                   </td>
                 </tr>
               )}
@@ -270,8 +276,8 @@ export default function Receipts() {
                     className="px-6 py-8 text-center text-[#6b6b6b]"
                   >
                     {isStudentView
-                      ? 'No receipts found for your account.'
-                      : 'No receipts found.'}
+                      ? t('payments.receipts.emptyStudent')
+                      : t('payments.receipts.empty')}
                   </td>
                 </tr>
               )}
@@ -309,7 +315,7 @@ export default function Receipts() {
 
                     <td className="px-6 py-4">
                       <span className="text-xs px-3 py-1 rounded-full bg-green-100 text-green-700">
-                        {receipt.status}
+                        {receiptStatusLabel(receipt.status)}
                       </span>
                     </td>
 
@@ -318,7 +324,7 @@ export default function Receipts() {
                         <button
                           onClick={() => previewReceipt(receipt)}
                           className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                          title="Preview"
+                          title={t('payments.receipts.preview')}
                         >
                           <Eye size={16} className="text-[#284342]" />
                         </button>
@@ -326,7 +332,7 @@ export default function Receipts() {
                         <button
                           onClick={() => printReceipt(receipt)}
                           className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                          title="Print"
+                          title={t('payments.receipts.print')}
                         >
                           <Printer size={16} className="text-[#284342]" />
                         </button>
@@ -334,7 +340,7 @@ export default function Receipts() {
                         <button
                           onClick={() => downloadReceipt(receipt)}
                           className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                          title="Download"
+                          title={t('common.download')}
                         >
                           <Download size={16} className="text-[#284342]" />
                         </button>
@@ -343,7 +349,7 @@ export default function Receipts() {
                           onClick={() => emailReceipt(receipt)}
                           disabled={!receipt.studentEmail}
                           className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                          title={receipt.studentEmail ? 'Email Receipt' : 'No email on file'}
+                          title={receipt.studentEmail ? t('payments.receipts.emailReceipt') : t('payments.receipts.noEmailShort')}
                         >
                           <Mail size={16} className="text-[#284342]" />
                         </button>
@@ -359,17 +365,17 @@ export default function Receipts() {
       {selectedReceipt && (
         <Modal maxWidth="max-w-3xl" scrollable>
           <div className="p-6 border-b border-[rgba(40,67,66,0.1)]">
-            <ModalHeader title="Receipt Preview" onClose={() => setSelectedReceipt(null)} />
+            <ModalHeader title={t('payments.receipts.receiptPreview')} onClose={() => setSelectedReceipt(null)} />
           </div>
 
-          <ReceiptPreview receipt={selectedReceipt} />
+          <ReceiptPreview receipt={selectedReceipt} t={t} />
 
           <div className="p-6 border-t border-[rgba(40,67,66,0.1)] flex items-center gap-3">
             <button
               onClick={() => setSelectedReceipt(null)}
               className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
             >
-              Close
+              {t('payments.receipts.close')}
             </button>
 
             <button
@@ -377,7 +383,7 @@ export default function Receipts() {
               className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
             >
               <Printer size={16} />
-              Print
+              {t('payments.receipts.print')}
             </button>
 
             <button
@@ -385,17 +391,17 @@ export default function Receipts() {
               className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors flex items-center gap-2"
             >
               <Download size={16} />
-              Download
+              {t('common.download')}
             </button>
 
             <button
               onClick={() => emailReceipt(selectedReceipt)}
               disabled={!selectedReceipt.studentEmail}
               className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors flex items-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
-              title={selectedReceipt.studentEmail ? 'Email Receipt' : 'No email on file'}
+              title={selectedReceipt.studentEmail ? t('payments.receipts.emailReceipt') : t('payments.receipts.noEmailShort')}
             >
               <Mail size={16} />
-              Email
+              {t('payments.receipts.email')}
             </button>
           </div>
         </Modal>
@@ -404,39 +410,45 @@ export default function Receipts() {
   );
 }
 
-function ReceiptPreview({ receipt }: { receipt: PaymentReceiptDetails }) {
+function ReceiptPreview({
+  receipt,
+  t,
+}: {
+  receipt: PaymentReceiptDetails;
+  t: (key: string, params?: Record<string, string | number>) => string;
+}) {
   return (
     <div className="p-8">
       <div className="border-4 border-[#284342] rounded-lg p-8 bg-white">
         <div className="text-center mb-8">
           <h1 className="text-3xl text-[#284342] mb-2">JEP Image Makeup Academy</h1>
-          <p className="text-sm text-[#6b6b6b]">Official Payment Receipt</p>
+          <p className="text-sm text-[#6b6b6b]">{t('payments.receipts.officialReceipt')}</p>
         </div>
 
         <div className="flex items-center justify-between border-y border-[rgba(40,67,66,0.2)] py-4 mb-6">
           <div>
-            <p className="text-xs text-[#6b6b6b] mb-1">Receipt No.</p>
+            <p className="text-xs text-[#6b6b6b] mb-1">{t('payments.receipts.colReceiptNo')}</p>
             <p className="text-sm text-[#284342]">{receipt.receiptNumber}</p>
           </div>
 
           <div className="text-right">
-            <p className="text-xs text-[#6b6b6b] mb-1">Issued Date</p>
+            <p className="text-xs text-[#6b6b6b] mb-1">{t('payments.receipts.colIssuedDate')}</p>
             <p className="text-sm text-[#284342]">{receipt.date}</p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-6 mb-8">
-          <PreviewInfo label="Student Name" value={receipt.student} />
-          <PreviewInfo label="Course" value={receipt.course} />
-          <PreviewInfo label="Payment Method" value={receipt.paymentMethod} />
-          <PreviewInfo label="Reference No." value={receipt.paymentReference} />
-          <PreviewInfo label="Paid Date" value={receipt.paidAt} />
-          <PreviewInfo label="Issued By" value={receipt.issuedBy} />
+          <PreviewInfo label={t('payments.receipts.studentName')} value={receipt.student} />
+          <PreviewInfo label={t('payments.installments.colCourse')} value={receipt.course} />
+          <PreviewInfo label={t('payments.installments.paymentMethod')} value={receipt.paymentMethod} />
+          <PreviewInfo label={t('payments.receipts.colReference')} value={receipt.paymentReference} />
+          <PreviewInfo label={t('payments.receipts.paidDate')} value={receipt.paidAt} />
+          <PreviewInfo label={t('payments.receipts.issuedBy')} value={receipt.issuedBy} />
         </div>
 
         <div className="bg-[#f8f8f6] rounded-lg p-6 mb-8">
           <div className="flex items-center justify-between">
-            <p className="text-lg text-[#284342]">Amount Paid</p>
+            <p className="text-lg text-[#284342]">{t('payments.receipts.amountPaid')}</p>
             <p className="text-3xl text-[#284342]">{formatCurrency(receipt.amount)}</p>
           </div>
         </div>
@@ -444,13 +456,13 @@ function ReceiptPreview({ receipt }: { receipt: PaymentReceiptDetails }) {
         <div className="flex justify-between items-end mt-12">
           <div>
             <div className="w-48 h-px bg-[#284342] mb-2"></div>
-            <p className="text-xs text-[#6b6b6b]">Authorized Signature</p>
+            <p className="text-xs text-[#6b6b6b]">{t('payments.receipts.authorizedSignature')}</p>
           </div>
 
           <div className="text-right">
-            <p className="text-sm text-[#284342]">Thank you for your payment.</p>
+            <p className="text-sm text-[#284342]">{t('payments.receipts.thankYou')}</p>
             <p className="text-xs text-[#6b6b6b] mt-1">
-              This is a computer-generated receipt.
+              {t('payments.receipts.computerGenerated')}
             </p>
           </div>
         </div>

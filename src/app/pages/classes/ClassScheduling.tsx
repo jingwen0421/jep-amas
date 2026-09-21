@@ -11,6 +11,8 @@ import {
   Search,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
+import { notify } from '../../services/unifiedNotificationService';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface ScheduledClass {
   id: string;
@@ -88,6 +90,7 @@ const emptyFormData = {
 };
 
 export default function ClassScheduling() {
+  const { t } = useLanguage();
   const [searchParams, setSearchParams] = useSearchParams();
   const [showScheduleModal, setShowScheduleModal] = useState(false);
   const [selectedWeek, setSelectedWeek] = useState('Current Week');
@@ -131,6 +134,10 @@ export default function ClassScheduling() {
   const [roster, setRoster] = useState<Map<string, RosterMember>>(new Map());
   const [primaryBatchId, setPrimaryBatchId] = useState<string | null>(null);
   const [studentSearch, setStudentSearch] = useState('');
+  const [viewingClass, setViewingClass] = useState<ScheduledClass | null>(null);
+  const [viewingRoster, setViewingRoster] = useState<string[]>([]);
+  const [viewingRosterLoading, setViewingRosterLoading] = useState(false);
+  const [sendingReminderId, setSendingReminderId] = useState<string | null>(null);
 
   const [formData, setFormData] = useState(emptyFormData);
 
@@ -734,6 +741,83 @@ export default function ClassScheduling() {
     setShowScheduleModal(true);
   }
 
+  async function openViewDetails(classItem: ScheduledClass) {
+    setViewingClass(classItem);
+    setViewingRoster([]);
+    setViewingRosterLoading(true);
+
+    const { data, error } = await supabase
+      .from('lesson_participants')
+      .select('student_id, students(full_name)')
+      .eq('lesson_id', classItem.id);
+
+    if (!error) {
+      setViewingRoster(
+        (data || []).map(
+          (row: any) => getSingle(row.students)?.full_name || 'Student'
+        )
+      );
+    }
+
+    setViewingRosterLoading(false);
+  }
+
+  async function sendClassReminder(classItem: ScheduledClass) {
+    setSendingReminderId(classItem.id);
+
+    const { data: participants, error } = await supabase
+      .from('lesson_participants')
+      .select('students(user_id, full_name, email, phone)')
+      .eq('lesson_id', classItem.id);
+
+    if (error) {
+      alert(t('classScheduling.alert.loadRosterFailed', { message: error.message }));
+      setSendingReminderId(null);
+      return;
+    }
+
+    const targets = (participants || [])
+      .map((row: any) => getSingle(row.students))
+      .filter((student: any) => !!student);
+
+    if (targets.length === 0) {
+      alert(t('classScheduling.alert.noStudentsToRemind'));
+      setSendingReminderId(null);
+      return;
+    }
+
+    const message = t('classScheduling.reminderMessage', {
+      course: classItem.course,
+      module: classItem.moduleTitle,
+      date: classItem.date,
+      startTime: classItem.startTime,
+      endTime: classItem.endTime,
+      room: classItem.room,
+    });
+
+    await Promise.all(
+      targets.map((student: any) =>
+        notify({
+          target: {
+            userId: student.user_id || null,
+            name: student.full_name,
+            email: student.email,
+            phone: student.phone,
+          },
+          channels: ['in_app', 'email'],
+          title: t('classScheduling.reminderTitle'),
+          message,
+          type: 'class_reminder',
+          relatedModule: 'Class Scheduling',
+          relatedId: classItem.id,
+        })
+      )
+    );
+
+    setSendingReminderId(null);
+    alert(t('classScheduling.alert.reminderSent', { count: targets.length }));
+  }
+
   function closeModal() {
     setShowScheduleModal(false);
     setEditingLessonId(null);
@@ -750,17 +834,17 @@ export default function ClassScheduling() {
     setFormError(null);
 
     if (!formData.moduleId) {
-      setFormError('Select a course module.');
+      setFormError(t('classScheduling.error.selectModule'));
       return;
     }
 
     if (roster.size === 0) {
-      setFormError('Add at least one student to the roster.');
+      setFormError(t('classScheduling.error.addStudent'));
       return;
     }
 
     if (!formData.date || !formData.startTime || !formData.endTime) {
-      setFormError('Please select a date, start time, and end time.');
+      setFormError(t('classScheduling.error.selectDateTime'));
       return;
     }
 
@@ -770,7 +854,7 @@ export default function ClassScheduling() {
     );
 
     if (durationMinutes <= 0) {
-      setFormError('End time must be later than start time.');
+      setFormError(t('classScheduling.error.endAfterStart'));
       return;
     }
 
@@ -846,7 +930,7 @@ export default function ClassScheduling() {
     setSaving(false);
 
     if (rosterError) {
-      setFormError(`Session saved, but the roster failed to save: ${rosterError.message}`);
+      setFormError(t('classScheduling.error.rosterSaveFailed', { message: rosterError.message }));
       fetchScheduledClasses();
       return;
     }
@@ -854,6 +938,21 @@ export default function ClassScheduling() {
     closeModal();
     fetchScheduledClasses();
     fetchSyncConflicts();
+  }
+
+  function getViewLabel(view: string) {
+    switch (view) {
+      case 'Current Week':
+        return t('classScheduling.view.currentWeek');
+      case 'Next Week':
+        return t('classScheduling.view.nextWeek');
+      case 'This Month':
+        return t('classScheduling.view.thisMonth');
+      case 'Next Month':
+        return t('classScheduling.view.nextMonth');
+      default:
+        return view;
+    }
   }
 
   const filteredRosterCandidates = studentSearch.trim()
@@ -870,9 +969,9 @@ export default function ClassScheduling() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl text-[#284342]">Class Scheduling</h1>
+          <h1 className="text-3xl text-[#284342]">{t('classScheduling.title')}</h1>
           <p className="text-[#6b6b6b] mt-1">
-            Schedule a course module and its student roster together
+            {t('classScheduling.subtitle')}
           </p>
         </div>
 
@@ -881,7 +980,7 @@ export default function ClassScheduling() {
           className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
         >
           <Plus size={20} />
-          Schedule Class
+          {t('classScheduling.scheduleClass')}
         </button>
       </div>
 
@@ -891,7 +990,7 @@ export default function ClassScheduling() {
             <AlertCircle size={20} className="text-yellow-700 mt-0.5" />
             <div className="flex-1">
               <h3 className="text-sm text-yellow-900 mb-3">
-                Scheduling Conflicts Detected ({syncConflicts.length})
+                {t('classScheduling.conflictsDetected', { count: syncConflicts.length })}
               </h3>
 
               <div className="space-y-2">
@@ -908,7 +1007,7 @@ export default function ClassScheduling() {
                         : {conflict.conflict_message}
                       </p>
                       <p className="text-xs text-yellow-700 mt-1">
-                        Detected {new Date(conflict.detected_at).toLocaleString()}
+                        {t('classScheduling.detected', { date: new Date(conflict.detected_at).toLocaleString() })}
                       </p>
                     </div>
 
@@ -917,7 +1016,7 @@ export default function ClassScheduling() {
                       disabled={dismissingId === conflict.id}
                       className="shrink-0 px-3 py-1.5 rounded-lg border border-yellow-300 text-yellow-900 hover:bg-yellow-100 transition-colors text-xs disabled:opacity-50"
                     >
-                      {dismissingId === conflict.id ? 'Dismissing...' : 'Dismiss'}
+                      {dismissingId === conflict.id ? t('classScheduling.dismissing') : t('classScheduling.dismiss')}
                     </button>
                   </div>
                 ))}
@@ -929,17 +1028,17 @@ export default function ClassScheduling() {
 
       <div className="bg-white rounded-xl p-4 border border-[rgba(40,67,66,0.1)]">
         <div className="flex items-center gap-4">
-          <label className="text-sm text-[#284342]">View Schedule:</label>
+          <label className="text-sm text-[#284342]">{t('classScheduling.viewSchedule')}</label>
 
           <select
             value={selectedWeek}
             onChange={(e) => setSelectedWeek(e.target.value)}
             className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
           >
-            <option>Current Week</option>
-            <option>Next Week</option>
-            <option>This Month</option>
-            <option>Next Month</option>
+            <option value="Current Week">{t('classScheduling.view.currentWeek')}</option>
+            <option value="Next Week">{t('classScheduling.view.nextWeek')}</option>
+            <option value="This Month">{t('classScheduling.view.thisMonth')}</option>
+            <option value="Next Month">{t('classScheduling.view.nextMonth')}</option>
           </select>
         </div>
       </div>
@@ -947,22 +1046,22 @@ export default function ClassScheduling() {
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
           <h2 className="text-lg text-[#284342]">
-            Scheduled Classes - {selectedWeek}
+            {t('classScheduling.scheduledClassesFor', { view: getViewLabel(selectedWeek) })}
           </h2>
         </div>
 
         <div className="divide-y divide-[rgba(40,67,66,0.1)]">
           {loading && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              Loading scheduled classes...
+              {t('classScheduling.loadingScheduled')}
             </div>
           )}
 
           {!loading && visibleScheduledClasses.length === 0 && (
             <div className="p-6 text-center text-[#6b6b6b]">
               {scheduledClasses.length === 0
-                ? 'No scheduled classes found.'
-                : `No scheduled classes in ${selectedWeek.toLowerCase()}.`}
+                ? t('classScheduling.noneFound')
+                : t('classScheduling.noneInView', { view: getViewLabel(selectedWeek).toLowerCase() })}
             </div>
           )}
 
@@ -990,7 +1089,9 @@ export default function ClassScheduling() {
                             : 'bg-green-100 text-green-700'
                         }`}
                       >
-                        {classItem.status}
+                        {classItem.status === 'Scheduled'
+                          ? t('classScheduling.status.scheduled')
+                          : t('classScheduling.status.completed')}
                       </span>
 
                       {classItem.teacherId && (
@@ -1002,8 +1103,8 @@ export default function ClassScheduling() {
                           }`}
                         >
                           {classItem.teacherConfirmed
-                            ? 'Confirmed by teacher'
-                            : 'Awaiting teacher confirmation'}
+                            ? t('classScheduling.confirmedByTeacher')
+                            : t('classScheduling.awaitingConfirmation')}
                         </span>
                       )}
                     </div>
@@ -1011,27 +1112,27 @@ export default function ClassScheduling() {
                     <div className="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
                       <Info
                         icon={<Calendar size={14} />}
-                        label="Date"
+                        label={t('classScheduling.field.date')}
                         value={classItem.date}
                       />
                       <Info
                         icon={<Clock size={14} />}
-                        label="Time"
+                        label={t('classScheduling.field.time')}
                         value={`${classItem.startTime} - ${classItem.endTime}`}
                       />
                       <Info
                         icon={<Users size={14} />}
-                        label="Teacher"
+                        label={t('classScheduling.field.teacher')}
                         value={classItem.teacher}
                       />
                       <Info
                         icon={<MapPin size={14} />}
-                        label="Room"
+                        label={t('classScheduling.field.room')}
                         value={classItem.room}
                       />
                       <Info
                         icon={<Users size={14} />}
-                        label="Roster"
+                        label={t('classScheduling.field.roster')}
                         value={classItem.participantCount.toString()}
                       />
                     </div>
@@ -1039,19 +1140,28 @@ export default function ClassScheduling() {
                 </div>
 
                 <div className="flex items-center gap-3 pt-4 border-t border-[rgba(40,67,66,0.1)]">
-                  <button className="px-4 py-2 rounded-lg bg-[#284342] text-[#e9da95] hover:bg-[#1a2f2e] transition-colors text-sm">
-                    View Details
+                  <button
+                    onClick={() => openViewDetails(classItem)}
+                    className="px-4 py-2 rounded-lg bg-[#284342] text-[#e9da95] hover:bg-[#1a2f2e] transition-colors text-sm"
+                  >
+                    {t('classScheduling.viewDetails')}
                   </button>
 
                   <button
                     onClick={() => openEditModal(classItem)}
                     className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm"
                   >
-                    Edit Schedule
+                    {t('classScheduling.editSchedule')}
                   </button>
 
-                  <button className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm">
-                    Send Reminder
+                  <button
+                    onClick={() => sendClassReminder(classItem)}
+                    disabled={sendingReminderId === classItem.id}
+                    className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm disabled:opacity-50"
+                  >
+                    {sendingReminderId === classItem.id
+                      ? t('classScheduling.sending')
+                      : t('classScheduling.sendReminder')}
                   </button>
                 </div>
               </div>
@@ -1063,14 +1173,14 @@ export default function ClassScheduling() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
             <h2 className="text-xl text-[#284342] mb-6">
-              {editingLessonId ? 'Edit Class Schedule' : 'Schedule New Class'}
+              {editingLessonId ? t('classScheduling.editClassSchedule') : t('classScheduling.scheduleNewClass')}
             </h2>
 
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm text-[#284342] mb-2">
-                    Course
+                    {t('classScheduling.field.course')}
                   </label>
                   <select
                     value={formData.courseId}
@@ -1083,7 +1193,7 @@ export default function ClassScheduling() {
                     }
                     className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                   >
-                    <option value="">Select Course</option>
+                    <option value="">{t('classScheduling.selectCourse')}</option>
                     {courses.map((course) => (
                       <option key={course.id} value={course.id}>
                         {course.course_name}
@@ -1094,7 +1204,7 @@ export default function ClassScheduling() {
 
                 <div>
                   <label className="block text-sm text-[#284342] mb-2">
-                    Module
+                    {t('classScheduling.field.module')}
                   </label>
                   <select
                     value={formData.moduleId}
@@ -1105,7 +1215,7 @@ export default function ClassScheduling() {
                     className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342] disabled:opacity-50"
                   >
                     <option value="">
-                      {modulesLoading ? 'Loading...' : 'Select Module'}
+                      {modulesLoading ? t('classScheduling.loadingEllipsis') : t('classScheduling.selectModule')}
                     </option>
                     {modules.map((module) => (
                       <option key={module.id} value={module.id}>
@@ -1115,8 +1225,7 @@ export default function ClassScheduling() {
                   </select>
                   {formData.courseId && !modulesLoading && modules.length === 0 && (
                     <p className="text-xs text-[#6b6b6b] mt-1">
-                      No modules defined for this course yet — add one under
-                      Course Modules.
+                      {t('classScheduling.noModulesDefined')}
                     </p>
                   )}
                 </div>
@@ -1125,9 +1234,9 @@ export default function ClassScheduling() {
               {formData.courseId && (
                 <div className="p-4 bg-[#f8f8f6] rounded-lg border border-[rgba(40,67,66,0.1)] space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm text-[#284342]">Student Roster</p>
+                    <p className="text-sm text-[#284342]">{t('classScheduling.studentRoster')}</p>
                     <span className="text-xs text-[#6b6b6b]">
-                      {roster.size} selected
+                      {t('classScheduling.selectedCount', { count: roster.size })}
                     </span>
                   </div>
 
@@ -1138,7 +1247,7 @@ export default function ClassScheduling() {
                         onClick={() => addBatchToRoster(batch.id)}
                         className="text-xs px-3 py-1.5 rounded-full border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-white transition-colors"
                       >
-                        + Add batch: {batch.batch_name}
+                        {t('classScheduling.addBatch', { name: batch.batch_name })}
                       </button>
                     ))}
 
@@ -1147,7 +1256,7 @@ export default function ClassScheduling() {
                         onClick={addAutoEligible}
                         className="text-xs px-3 py-1.5 rounded-full border border-[#284342]/30 bg-[#284342]/5 text-[#284342] hover:bg-[#284342]/10 transition-colors"
                       >
-                        + Auto-fill still-eligible students
+                        {t('classScheduling.autoFillEligible')}
                       </button>
                     )}
                   </div>
@@ -1160,7 +1269,7 @@ export default function ClassScheduling() {
                     <input
                       value={studentSearch}
                       onChange={(e) => setStudentSearch(e.target.value)}
-                      placeholder="Add an individual student by name..."
+                      placeholder={t('classScheduling.addStudentPlaceholder')}
                       className="w-full pl-8 pr-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342] text-sm"
                     />
 
@@ -1184,14 +1293,14 @@ export default function ClassScheduling() {
 
                   {rosterPoolLoading && (
                     <p className="text-xs text-[#6b6b6b]">
-                      Loading course roster...
+                      {t('classScheduling.loadingCourseRoster')}
                     </p>
                   )}
 
                   <div className="flex flex-wrap gap-2">
                     {roster.size === 0 && (
                       <p className="text-xs text-[#6b6b6b]">
-                        No students added yet.
+                        {t('classScheduling.noStudentsAdded')}
                       </p>
                     )}
 
@@ -1215,7 +1324,7 @@ export default function ClassScheduling() {
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Session Title (optional)
+                  {t('classScheduling.sessionTitleOptional')}
                 </label>
 
                 <input
@@ -1226,14 +1335,14 @@ export default function ClassScheduling() {
                       lessonTitle: e.target.value,
                     }))
                   }
-                  placeholder="Defaults to the module title"
+                  placeholder={t('classScheduling.sessionTitlePlaceholder')}
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                 />
               </div>
 
               <div className="grid grid-cols-3 gap-4">
                 <Input
-                  label="Date"
+                  label={t('classScheduling.field.date')}
                   type="date"
                   value={formData.date}
                   onChange={(value) =>
@@ -1242,7 +1351,7 @@ export default function ClassScheduling() {
                 />
 
                 <Input
-                  label="Start Time"
+                  label={t('classScheduling.field.startTime')}
                   type="time"
                   value={formData.startTime}
                   onChange={(value) =>
@@ -1251,7 +1360,7 @@ export default function ClassScheduling() {
                 />
 
                 <Input
-                  label="End Time"
+                  label={t('classScheduling.field.endTime')}
                   type="time"
                   value={formData.endTime}
                   onChange={(value) =>
@@ -1263,7 +1372,7 @@ export default function ClassScheduling() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm text-[#284342] mb-2">
-                    Teacher
+                    {t('classScheduling.field.teacher')}
                   </label>
 
                   <select
@@ -1276,7 +1385,7 @@ export default function ClassScheduling() {
                     }
                     className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                   >
-                    <option value="">Select Teacher</option>
+                    <option value="">{t('classScheduling.selectTeacher')}</option>
                     {teachers.map((teacher) => (
                       <option key={teacher.id} value={teacher.id}>
                         {getTeacherName(teacher)}
@@ -1287,7 +1396,7 @@ export default function ClassScheduling() {
 
                 <div>
                   <label className="block text-sm text-[#284342] mb-2">
-                    Classroom
+                    {t('classScheduling.field.classroom')}
                   </label>
 
                   <select
@@ -1300,7 +1409,7 @@ export default function ClassScheduling() {
                     }
                     className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                   >
-                    <option value="">Select Room</option>
+                    <option value="">{t('classScheduling.selectRoom')}</option>
                     {classrooms.map((room) => (
                       <option key={room.id} value={room.id}>
                         {room.room_name}
@@ -1313,7 +1422,7 @@ export default function ClassScheduling() {
               {checkingConflicts && (
                 <div className="p-4 bg-[#f8f8f6] border border-[rgba(40,67,66,0.15)] rounded-lg">
                   <p className="text-sm text-[#6b6b6b]">
-                    Checking for scheduling conflicts...
+                    {t('classScheduling.checkingConflicts')}
                   </p>
                 </div>
               )}
@@ -1322,7 +1431,7 @@ export default function ClassScheduling() {
                 <div className="p-4 bg-red-50 border border-red-200 rounded-lg space-y-1">
                   {conflictWarnings.map((warning, idx) => (
                     <p key={idx} className="text-sm text-red-800">
-                      <strong>Conflict:</strong> {warning}
+                      <strong>{t('classScheduling.conflictLabel')}</strong> {warning}
                     </p>
                   ))}
                 </div>
@@ -1331,7 +1440,7 @@ export default function ClassScheduling() {
               {availabilityWarning && (
                 <div className="p-4 bg-amber-50 border border-amber-200 rounded-lg">
                   <p className="text-sm text-amber-900">
-                    <strong>Heads up:</strong> {availabilityWarning}
+                    <strong>{t('classScheduling.headsUp')}</strong> {availabilityWarning}
                   </p>
                 </div>
               )}
@@ -1345,7 +1454,7 @@ export default function ClassScheduling() {
                 formData.endTime && (
                   <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
                     <p className="text-sm text-blue-900">
-                      <strong>Conflict Check:</strong> No conflicts detected for this schedule
+                      <strong>{t('classScheduling.conflictCheckLabel')}</strong> {t('classScheduling.noConflictsDetected')}
                     </p>
                   </div>
                 )}
@@ -1362,7 +1471,7 @@ export default function ClassScheduling() {
                 onClick={closeModal}
                 className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
               >
-                Cancel
+                {t('classScheduling.cancel')}
               </button>
 
               <button
@@ -1371,10 +1480,82 @@ export default function ClassScheduling() {
                 className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors disabled:opacity-50"
               >
                 {saving
-                  ? 'Saving...'
+                  ? t('classScheduling.saving')
                   : editingLessonId
-                    ? 'Save Changes'
-                    : 'Schedule Class'}
+                    ? t('classScheduling.saveChanges')
+                    : t('classScheduling.scheduleClass')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewingClass && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 max-h-[85vh] overflow-y-auto">
+            <h2 className="text-xl text-[#284342] mb-1">
+              {viewingClass.course}
+            </h2>
+            <p className="text-sm text-[#6b6b6b] mb-6">
+              {viewingClass.moduleTitle}
+            </p>
+
+            <div className="grid grid-cols-2 gap-4 text-sm mb-6">
+              <Info
+                icon={<Calendar size={14} />}
+                label={t('classScheduling.field.date')}
+                value={viewingClass.date}
+              />
+              <Info
+                icon={<Clock size={14} />}
+                label={t('classScheduling.field.time')}
+                value={`${viewingClass.startTime} - ${viewingClass.endTime}`}
+              />
+              <Info
+                icon={<Users size={14} />}
+                label={t('classScheduling.field.teacher')}
+                value={viewingClass.teacher}
+              />
+              <Info
+                icon={<MapPin size={14} />}
+                label={t('classScheduling.field.room')}
+                value={viewingClass.room}
+              />
+            </div>
+
+            <p className="text-xs text-[#6b6b6b] mb-2">
+              {t('classScheduling.rosterCount', { count: viewingClass.participantCount })}
+            </p>
+
+            {viewingRosterLoading && (
+              <p className="text-sm text-[#6b6b6b]">{t('classScheduling.loadingRoster')}</p>
+            )}
+
+            {!viewingRosterLoading && viewingRoster.length === 0 && (
+              <p className="text-sm text-[#6b6b6b]">
+                {t('classScheduling.noStudentsOnRoster')}
+              </p>
+            )}
+
+            {!viewingRosterLoading && viewingRoster.length > 0 && (
+              <div className="space-y-2">
+                {viewingRoster.map((name, idx) => (
+                  <div
+                    key={idx}
+                    className="p-3 rounded-lg bg-[#f8f8f6] text-sm text-[#284342]"
+                  >
+                    {name}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className="flex items-center gap-3 mt-6">
+              <button
+                onClick={() => setViewingClass(null)}
+                className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
+              >
+                {t('classScheduling.close')}
               </button>
             </div>
           </div>
@@ -1432,10 +1613,10 @@ function getTeacherName(teacher: TeacherOption) {
   const users = teacher.users;
 
   if (Array.isArray(users)) {
-    return users[0]?.full_name || teacher.specialization || 'Unnamed Teacher';
+    return users[0]?.full_name || teacher.specialization || '-';
   }
 
-  return users?.full_name || teacher.specialization || 'Unnamed Teacher';
+  return users?.full_name || teacher.specialization || '-';
 }
 
 function getTeacherNameFromJoin(

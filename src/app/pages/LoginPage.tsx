@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { supabase } from '../lib/supabase';
+import { useLanguage } from '../context/LanguageContext';
 
 type Mode = 'login' | 'signup';
 
 export default function LoginPage() {
   const navigate = useNavigate();
+  const { t } = useLanguage();
 
   const [mode, setMode] = useState<Mode>('login');
   const [fullName, setFullName] = useState('');
@@ -25,7 +27,7 @@ export default function LoginPage() {
 
     if (authError || !authData.user) {
       setLoading(false);
-      alert('Invalid email or password.');
+      alert(t('login.error.invalidCredentials'));
       return;
     }
 
@@ -38,28 +40,28 @@ export default function LoginPage() {
     if (profileError || !profile) {
       setLoading(false);
       await supabase.auth.signOut();
-      alert('No matching account profile was found. Contact Admin.');
+      alert(t('login.error.noProfile'));
       return;
     }
 
     if (profile.status === 'pending') {
       setLoading(false);
       await supabase.auth.signOut();
-      alert('Your account is pending admin approval.');
+      alert(t('login.error.pending'));
       return;
     }
 
     if (profile.status === 'rejected') {
       setLoading(false);
       await supabase.auth.signOut();
-      alert('Your account registration has been rejected.');
+      alert(t('login.error.rejected'));
       return;
     }
 
     if (profile.status !== 'active') {
       setLoading(false);
       await supabase.auth.signOut();
-      alert('Your account is inactive.');
+      alert(t('login.error.inactive'));
       return;
     }
 
@@ -103,7 +105,7 @@ async function handleSignup(e: React.FormEvent) {
     ) {
 
       throw new Error(
-        "Please fill in all fields."
+        t('login.error.fillAllFields')
       );
 
     }
@@ -112,7 +114,7 @@ async function handleSignup(e: React.FormEvent) {
     if(password.length < 8){
 
       throw new Error(
-        "Password must be at least 8 characters."
+        t('login.error.passwordLength')
       );
 
     }
@@ -151,7 +153,7 @@ async function handleSignup(e: React.FormEvent) {
 
     if(!authData.user)
       throw new Error(
-        "Auth account creation failed."
+        t('login.error.authFailed')
       );
 
 
@@ -302,7 +304,7 @@ async function handleSignup(e: React.FormEvent) {
 
 
     alert(
-      "Account submitted. Waiting for admin approval."
+      t('login.signupSubmitted')
     );
 
 
@@ -351,10 +353,10 @@ async function handleSignup(e: React.FormEvent) {
         <div className="bg-white rounded-2xl shadow-lg p-8 border border-[rgba(40,67,66,0.1)]">
           <div className="text-center mb-8">
             <h1 className="text-3xl text-[#284342] mb-2">
-              JEP Image Makeup Academy
+              {t('login.title')}
             </h1>
             <p className="text-[#6b6b6b]">
-              Academy Management & Administration System
+              {t('login.subtitle')}
             </p>
           </div>
 
@@ -366,7 +368,7 @@ async function handleSignup(e: React.FormEvent) {
                 mode === 'login' ? 'bg-[#284342] text-[#e9da95]' : 'text-[#284342]'
               }`}
             >
-              Sign In
+              {t('login.signIn')}
             </button>
 
 
@@ -381,18 +383,18 @@ async function handleSignup(e: React.FormEvent) {
                 mode === 'signup' ? 'bg-[#284342] text-[#e9da95]' : 'text-[#284342]'
               }`}
             >
-              Sign Up
+              {t('login.signUp')}
             </button>
           </div>
 
           <form onSubmit={mode === 'login' ? handleLogin : handleSignup} className="space-y-5">
             {mode === 'signup' && (
               <div>
-                <label className="block text-sm mb-2 text-[#284342]">Full Name</label>
+                <label className="block text-sm mb-2 text-[#284342]">{t('login.fullName')}</label>
                 <input
                   value={fullName}
                   onChange={(e) => setFullName(e.target.value)}
-                  placeholder="Your full name"
+                  placeholder={t('login.fullNamePlaceholder')}
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
                   required
                 />
@@ -400,24 +402,24 @@ async function handleSignup(e: React.FormEvent) {
             )}
 
             <div>
-              <label className="block text-sm mb-2 text-[#284342]">Email Address</label>
+              <label className="block text-sm mb-2 text-[#284342]">{t('login.email')}</label>
               <input
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="your.email@example.com"
+                placeholder={t('login.emailPlaceholder')}
                 className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
                 required
               />
             </div>
 
             <div>
-              <label className="block text-sm mb-2 text-[#284342]">Password</label>
+              <label className="block text-sm mb-2 text-[#284342]">{t('login.password')}</label>
               <input
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                placeholder="Password"
+                placeholder={t('login.password')}
                 className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
                 required
               />
@@ -443,7 +445,7 @@ async function handleSignup(e: React.FormEvent) {
 
             >
 
-            Forgot Password?
+            {t('login.forgotPassword')}
 
             </button>
 
@@ -453,33 +455,33 @@ async function handleSignup(e: React.FormEvent) {
 
             {mode === 'signup' && (
               <div>
-                <label className="block text-sm mb-2 text-[#284342]">Register As</label>
+                <label className="block text-sm mb-2 text-[#284342]">{t('login.registerAs')}</label>
                 <select
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
                 >
-                  <option value="student">Student</option>
-                  <option value="teacher">Teacher</option>
-                  <option value="assistant_teacher">Assistant Teacher</option>
-                  <option value="finance">Finance Staff</option>
-                  <option value="internal_sales">Internal Sales</option>
-                  <option value="external_sales">External Sales</option>
-                  <option value="parent">Parent / Guardian</option>
-                  <option value="admin">Admin</option>
+                  <option value="student">{t('login.role.student')}</option>
+                  <option value="teacher">{t('login.role.teacher')}</option>
+                  <option value="assistant_teacher">{t('login.role.assistantTeacher')}</option>
+                  <option value="finance">{t('login.role.finance')}</option>
+                  <option value="internal_sales">{t('login.role.internalSales')}</option>
+                  <option value="external_sales">{t('login.role.externalSales')}</option>
+                  <option value="parent">{t('login.role.parent')}</option>
+                  <option value="admin">{t('login.role.admin')}</option>
                 </select>
               </div>
             )}
 
             {mode === 'signup' && role === 'student' && (
               <div className="p-3 rounded-lg bg-[#e9da95]/20 text-sm text-[#284342]">
-                Student sign-up will continue to the student registration form.
+                {t('login.studentSignupNote')}
               </div>
             )}
 
             {mode === 'signup' && role !== 'student' && (
               <div className="p-3 rounded-lg bg-[#e9da95]/20 text-sm text-[#284342]">
-                Staff accounts require admin approval before login.
+                {t('login.staffSignupNote')}
               </div>
             )}
 
@@ -489,18 +491,18 @@ async function handleSignup(e: React.FormEvent) {
               className="w-full py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] disabled:opacity-50"
             >
               {loading
-                ? 'Processing...'
+                ? t('common.processing')
                 : mode === 'login'
-                ? 'Sign In'
+                ? t('login.signIn')
                 : role === 'student'
-                ? 'Continue Registration'
-                : 'Submit for Approval'}
+                ? t('login.continueRegistration')
+                : t('login.submitForApproval')}
             </button>
           </form>
         </div>
 
         <p className="text-center mt-6 text-sm text-[#6b6b6b]">
-          © 2026 JEP Image Makeup Academy. All rights reserved.
+          {t('login.copyright')}
         </p>
       </div>
     </div>

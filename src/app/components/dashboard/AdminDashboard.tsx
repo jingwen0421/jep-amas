@@ -14,14 +14,7 @@ import {
   PartyPopper,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-
-interface DashboardCard {
-  title: string;
-  value: string | number;
-  subtitle: string;
-  icon: React.ReactNode;
-  color: string;
-}
+import { useLanguage } from '../../context/LanguageContext';
 
 interface TodayClass {
   id: string;
@@ -32,9 +25,11 @@ interface TodayClass {
   students: number;
 }
 
+type ActionType = 'registration' | 'portfolio' | 'event' | 'outstanding';
+
 interface ActionItem {
   id: string;
-  title: string;
+  type: ActionType;
   description: string;
   link: string;
   icon: React.ReactNode;
@@ -50,27 +45,28 @@ interface RecentStudent {
 
 interface Activity {
   id: string;
-  message: string;
-  module: string;
+  log: any;
   time: string;
 }
 
 export default function AdminDashboard() {
+  const { t } = useLanguage();
   const [userRole, setUserRole] = useState('admin');
   const [loading, setLoading] = useState(true);
 
-  const [cards, setCards] = useState<DashboardCard[]>([]);
+  const [stats, setStats] = useState({
+    activeStudents: 0,
+    totalExpected: 0,
+    totalPaid: 0,
+    outstandingFees: 0,
+    collectionRate: 0,
+    todayLessonsCount: 0,
+    totalLessons: 0,
+  });
   const [todaysClasses, setTodaysClasses] = useState<TodayClass[]>([]);
   const [pendingActions, setPendingActions] = useState<ActionItem[]>([]);
   const [recentStudents, setRecentStudents] = useState<RecentStudent[]>([]);
   const [activities, setActivities] = useState<Activity[]>([]);
-
-  const [revenueSnapshot, setRevenueSnapshot] = useState({
-    expected: 0,
-    paid: 0,
-    outstanding: 0,
-    collectionRate: 0,
-  });
 
   useEffect(() => {
     const role = localStorage.getItem('userRole') || 'admin';
@@ -220,51 +216,23 @@ export default function AdminDashboard() {
     const collectionRate =
       totalExpected > 0 ? Math.round((totalPaid / totalExpected) * 100) : 0;
 
-    setRevenueSnapshot({
-      expected: totalExpected,
-      paid: totalPaid,
-      outstanding: outstandingFees,
+    setStats({
+      activeStudents,
+      totalExpected,
+      totalPaid,
+      outstandingFees,
       collectionRate,
+      todayLessonsCount: todayLessons.length,
+      totalLessons: lessons.length,
     });
-
-    setCards([
-      {
-        title: 'Active Students',
-        value: activeStudents,
-        subtitle: 'Currently active learners',
-        icon: <Users size={24} />,
-        color: '#284342',
-      },
-      {
-        title: 'Revenue Collected',
-        value: `RM ${totalPaid.toLocaleString()}`,
-        subtitle: `${collectionRate}% collection rate`,
-        icon: <DollarSign size={24} />,
-        color: '#2d8659',
-      },
-      {
-        title: 'Outstanding Fees',
-        value: `RM ${outstandingFees.toLocaleString()}`,
-        subtitle: 'Remaining unpaid balance',
-        icon: <CreditCard size={24} />,
-        color: '#d4183d',
-      },
-      {
-        title: "Today's Classes",
-        value: todayLessons.length,
-        subtitle: `${lessons.length} total scheduled lessons`,
-        icon: <Calendar size={24} />,
-        color: '#6b8e8d',
-      },
-    ]);
 
     const actions: ActionItem[] = [];
 
     (applicationsRes.data || []).forEach((app: any) => {
       actions.push({
         id: `app-${app.id}`,
-        title: 'Registration Approval Needed',
-        description: `${getStudentName(app.students)} • ${getApplicationCourse(app)}`,
+        type: 'registration',
+        description: `${getStudentName(app.students, t)} • ${getApplicationCourse(app)}`,
         link: '/app/students/approval',
         icon: <UserPlus size={18} />,
         color: 'text-[#d4183d]',
@@ -274,8 +242,8 @@ export default function AdminDashboard() {
     (portfolioRes.data || []).forEach((item: any) => {
       actions.push({
         id: `portfolio-${item.id}`,
-        title: 'Portfolio Awaiting Review',
-        description: `${getStudentName(item.students)} • ${item.title || 'Portfolio Submission'}`,
+        type: 'portfolio',
+        description: `${getStudentName(item.students, t)} • ${item.title || t('dashboard.portfolioSubmissionFallback')}`,
         link: '/app/portfolio/feedback',
         icon: <MessageSquare size={18} />,
         color: 'text-blue-700',
@@ -289,8 +257,8 @@ export default function AdminDashboard() {
 
       actions.push({
         id: `event-${occurrence.id}`,
-        title: 'Upcoming Event',
-        description: `${eventInfo?.title || 'Academy Event'} • ${formatDateTime(occurrence.starts_at)}`,
+        type: 'event',
+        description: `${eventInfo?.title || t('dashboard.academyEventFallback')} • ${formatDateTime(occurrence.starts_at)}`,
         link: '/app/events',
         icon: <PartyPopper size={18} />,
         color: 'text-purple-700',
@@ -300,8 +268,10 @@ export default function AdminDashboard() {
     if (outstandingFees > 0) {
       actions.push({
         id: 'outstanding-fees',
-        title: 'Outstanding Payments',
-        description: `RM ${outstandingFees.toLocaleString()} still unpaid`,
+        type: 'outstanding',
+        description: t('dashboard.action.outstandingDesc', {
+          amount: `RM ${outstandingFees.toLocaleString()}`,
+        }),
         link: '/app/payments/outstanding',
         icon: <CreditCard size={18} />,
         color: 'text-[#d4183d]',
@@ -323,7 +293,7 @@ export default function AdminDashboard() {
           course:
             lesson.class_batches?.courses?.course_name ||
             lesson.lesson_title ||
-            'Class',
+            t('dashboard.fallback.class'),
           teacher: getTeacherName(lesson.teachers),
           room: lesson.classrooms?.room_name || '-',
           students: activeEnrollments.length,
@@ -339,7 +309,7 @@ export default function AdminDashboard() {
 
         return {
           id: student?.id || enrollment.id,
-          name: student?.full_name || 'Unnamed Student',
+          name: student?.full_name || t('dashboard.fallback.unnamedStudent'),
           course: course?.course_name || '-',
           date: enrollment.created_at
             ? new Date(enrollment.created_at).toISOString().slice(0, 10)
@@ -351,8 +321,7 @@ export default function AdminDashboard() {
     setActivities(
       (auditRes.data || []).map((log: any) => ({
         id: log.id,
-        message: getReadableActivity(log),
-        module: log.module || '-',
+        log,
         time: log.created_at ? new Date(log.created_at).toLocaleString() : '-',
       }))
     );
@@ -362,45 +331,70 @@ export default function AdminDashboard() {
 
   const roleTitle =
     userRole === 'owner'
-      ? 'Owner Dashboard'
+      ? t('dashboard.title.owner')
       : userRole === 'super_admin'
-      ? 'Super Admin Dashboard'
-      : 'Admin Dashboard';
+      ? t('dashboard.title.superAdmin')
+      : t('dashboard.title.admin');
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl text-[#284342] mb-2">{roleTitle}</h1>
         <p className="text-[#6b6b6b]">
-          Welcome back to JEP Image Makeup Academy
+          {t('dashboard.welcome')}
         </p>
       </div>
 
       {loading && (
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
-          Loading dashboard...
+          {t('dashboard.loading')}
         </div>
       )}
 
       {!loading && (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {cards.map((card) => (
-              <DashboardStatCard key={card.title} card={card} />
-            ))}
+            <DashboardStatCard
+              title={t('dashboard.card.activeStudents')}
+              value={stats.activeStudents}
+              subtitle={t('dashboard.card.activeStudentsSub')}
+              icon={<Users size={24} />}
+              color="#284342"
+            />
+            <DashboardStatCard
+              title={t('dashboard.card.revenue')}
+              value={`RM ${stats.totalPaid.toLocaleString()}`}
+              subtitle={t('dashboard.card.revenueSub', { rate: stats.collectionRate })}
+              icon={<DollarSign size={24} />}
+              color="#2d8659"
+            />
+            <DashboardStatCard
+              title={t('dashboard.card.outstanding')}
+              value={`RM ${stats.outstandingFees.toLocaleString()}`}
+              subtitle={t('dashboard.card.outstandingSub')}
+              icon={<CreditCard size={24} />}
+              color="#d4183d"
+            />
+            <DashboardStatCard
+              title={t('dashboard.card.todayClasses')}
+              value={stats.todayLessonsCount}
+              subtitle={t('dashboard.card.todayClassesSub', { count: stats.totalLessons })}
+              icon={<Calendar size={24} />}
+              color="#6b8e8d"
+            />
           </div>
 
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] lg:col-span-2">
               <div className="flex items-center gap-2 mb-6">
                 <AlertCircle size={20} className="text-[#d4183d]" />
-                <h2 className="text-xl text-[#284342]">Pending Actions</h2>
+                <h2 className="text-xl text-[#284342]">{t('dashboard.pendingActions')}</h2>
               </div>
 
               <div className="space-y-3">
                 {pendingActions.length === 0 && (
                   <p className="text-sm text-[#6b6b6b]">
-                    No urgent actions right now.
+                    {t('dashboard.noUrgentActions')}
                   </p>
                 )}
 
@@ -412,46 +406,46 @@ export default function AdminDashboard() {
                   >
                     <div className={`${item.color} mt-0.5`}>{item.icon}</div>
                     <div className="flex-1">
-                      <p className="text-sm text-[#284342]">{item.title}</p>
+                      <p className="text-sm text-[#284342]">{t(`dashboard.action.${item.type}`)}</p>
                       <p className="text-xs text-[#6b6b6b] mt-1">
                         {item.description}
                       </p>
                     </div>
-                    <span className="text-xs text-[#284342]">Open</span>
+                    <span className="text-xs text-[#284342]">{t('dashboard.open')}</span>
                   </Link>
                 ))}
               </div>
             </div>
 
             <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-              <h2 className="text-xl text-[#284342] mb-6">Revenue Snapshot</h2>
+              <h2 className="text-xl text-[#284342] mb-6">{t('dashboard.revenueSnapshot')}</h2>
 
               <div className="space-y-4">
                 <RevenueLine
-                  label="Total Expected"
-                  value={`RM ${revenueSnapshot.expected.toLocaleString()}`}
+                  label={t('dashboard.totalExpected')}
+                  value={`RM ${stats.totalExpected.toLocaleString()}`}
                   color="text-[#284342]"
                 />
                 <RevenueLine
-                  label="Paid"
-                  value={`RM ${revenueSnapshot.paid.toLocaleString()}`}
+                  label={t('dashboard.paid')}
+                  value={`RM ${stats.totalPaid.toLocaleString()}`}
                   color="text-green-700"
                 />
                 <RevenueLine
-                  label="Outstanding"
-                  value={`RM ${revenueSnapshot.outstanding.toLocaleString()}`}
+                  label={t('dashboard.outstanding')}
+                  value={`RM ${stats.outstandingFees.toLocaleString()}`}
                   color="text-[#d4183d]"
                 />
                 <RevenueLine
-                  label="Collection Rate"
-                  value={`${revenueSnapshot.collectionRate}%`}
+                  label={t('dashboard.collectionRate')}
+                  value={`${stats.collectionRate}%`}
                   color="text-[#284342]"
                 />
 
                 <div className="w-full h-3 bg-[#f8f8f6] rounded-full overflow-hidden">
                   <div
                     className="h-full bg-[#284342]"
-                    style={{ width: `${revenueSnapshot.collectionRate}%` }}
+                    style={{ width: `${stats.collectionRate}%` }}
                   />
                 </div>
               </div>
@@ -460,13 +454,13 @@ export default function AdminDashboard() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <DashboardPanel
-              title="Today's Classes"
-              actionLabel="View Calendar"
+              title={t('dashboard.todaysClasses')}
+              actionLabel={t('dashboard.viewCalendar')}
               actionLink="/app/calendar"
             >
               <div className="space-y-4">
                 {todaysClasses.length === 0 && (
-                  <p className="text-sm text-[#6b6b6b]">No classes today.</p>
+                  <p className="text-sm text-[#6b6b6b]">{t('dashboard.noClassesToday')}</p>
                 )}
 
                 {todaysClasses.map((cls) => (
@@ -484,7 +478,7 @@ export default function AdminDashboard() {
                         {cls.course}
                       </h3>
                       <p className="text-xs text-[#6b6b6b]">
-                        {cls.teacher} • {cls.room} • {cls.students} active students
+                        {cls.teacher} • {cls.room} • {cls.students} {t('dashboard.activeStudentsSuffix')}
                       </p>
                     </div>
                   </div>
@@ -493,13 +487,13 @@ export default function AdminDashboard() {
             </DashboardPanel>
 
             <DashboardPanel
-              title="Recent Students"
-              actionLabel="View Students"
+              title={t('dashboard.recentStudents')}
+              actionLabel={t('dashboard.viewStudents')}
               actionLink="/app/students/list"
             >
               <div className="space-y-3">
                 {recentStudents.length === 0 && (
-                  <p className="text-sm text-[#6b6b6b]">No recent students.</p>
+                  <p className="text-sm text-[#6b6b6b]">{t('dashboard.noRecentStudents')}</p>
                 )}
 
                 {recentStudents.map((student) => (
@@ -522,13 +516,13 @@ export default function AdminDashboard() {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <DashboardPanel
-              title="Recent Activities"
-              actionLabel="View Logs"
+              title={t('dashboard.recentActivities')}
+              actionLabel={t('dashboard.viewLogs')}
               actionLink="/app/audit"
             >
               <div className="space-y-3">
                 {activities.length === 0 && (
-                  <p className="text-sm text-[#6b6b6b]">No recent activities.</p>
+                  <p className="text-sm text-[#6b6b6b]">{t('dashboard.noRecentActivities')}</p>
                 )}
 
                 {activities.map((activity) => (
@@ -538,10 +532,10 @@ export default function AdminDashboard() {
                   >
                     <div className="flex items-start justify-between mb-1">
                       <p className="text-sm text-[#284342]">
-                        {activity.message}
+                        {getReadableActivity(activity.log, t)}
                       </p>
                       <span className="text-xs text-[#6b6b6b]">
-                        {activity.module}
+                        {activity.log.module || '-'}
                       </span>
                     </div>
                     <p className="text-xs text-[#6b6b6b] mt-2">
@@ -553,16 +547,16 @@ export default function AdminDashboard() {
             </DashboardPanel>
 
             <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-              <h2 className="text-xl text-[#284342] mb-4">Quick Actions</h2>
+              <h2 className="text-xl text-[#284342] mb-4">{t('dashboard.quickActions')}</h2>
 
               <div className="grid grid-cols-2 gap-4">
-                <QuickAction to="/app/students/registration" icon={<Users size={24} />} label="New Student" />
-                <QuickAction to="/app/students/approval" icon={<AlertCircle size={24} />} label="Review Applications" />
-                <QuickAction to="/app/payments/installments" icon={<DollarSign size={24} />} label="Record Payment" />
-                <QuickAction to="/app/attendance/daily" icon={<CheckCircle2 size={24} />} label="Take Attendance" />
-                <QuickAction to="/app/portfolio/feedback" icon={<MessageSquare size={24} />} label="Review Portfolio" />
-                <QuickAction to="/app/events" icon={<PartyPopper size={24} />} label="Manage Events" />
-                <QuickAction to="/app/reports" icon={<FileText size={24} />} label="Reports" />
+                <QuickAction to="/app/students/registration" icon={<Users size={24} />} label={t('dashboard.quickAction.newStudent')} />
+                <QuickAction to="/app/students/approval" icon={<AlertCircle size={24} />} label={t('dashboard.quickAction.reviewApplications')} />
+                <QuickAction to="/app/payments/installments" icon={<DollarSign size={24} />} label={t('dashboard.quickAction.recordPayment')} />
+                <QuickAction to="/app/attendance/daily" icon={<CheckCircle2 size={24} />} label={t('dashboard.quickAction.takeAttendance')} />
+                <QuickAction to="/app/portfolio/feedback" icon={<MessageSquare size={24} />} label={t('dashboard.quickAction.reviewPortfolio')} />
+                <QuickAction to="/app/events" icon={<PartyPopper size={24} />} label={t('dashboard.quickAction.manageEvents')} />
+                <QuickAction to="/app/reports" icon={<FileText size={24} />} label={t('dashboard.quickAction.reports')} />
               </div>
             </div>
           </div>
@@ -572,19 +566,31 @@ export default function AdminDashboard() {
   );
 }
 
-function DashboardStatCard({ card }: { card: DashboardCard }) {
+function DashboardStatCard({
+  title,
+  value,
+  subtitle,
+  icon,
+  color,
+}: {
+  title: string;
+  value: string | number;
+  subtitle: string;
+  icon: React.ReactNode;
+  color: string;
+}) {
   return (
     <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] hover:shadow-lg transition-shadow">
       <div
         className="p-3 rounded-lg inline-block mb-4"
-        style={{ backgroundColor: `${card.color}15` }}
+        style={{ backgroundColor: `${color}15` }}
       >
-        <div style={{ color: card.color }}>{card.icon}</div>
+        <div style={{ color }}>{icon}</div>
       </div>
 
-      <h3 className="text-sm text-[#6b6b6b] mb-1">{card.title}</h3>
-      <p className="text-2xl text-[#284342]">{card.value}</p>
-      <p className="text-xs text-[#6b6b6b] mt-2">{card.subtitle}</p>
+      <h3 className="text-sm text-[#6b6b6b] mb-1">{title}</h3>
+      <p className="text-2xl text-[#284342]">{value}</p>
+      <p className="text-xs text-[#6b6b6b] mt-2">{subtitle}</p>
     </div>
   );
 }
@@ -667,10 +673,9 @@ function getTeacherName(teacher: any) {
   return user?.full_name || actualTeacher?.specialization || '-';
 }
 
-function getStudentName(student: any) {
-  if (!student) return 'Unnamed Student';
+function getStudentName(student: any, t: (key: string) => string) {
   const actualStudent = getSingle(student);
-  return actualStudent?.full_name || 'Unnamed Student';
+  return actualStudent?.full_name || t('dashboard.fallback.unnamedStudent');
 }
 
 function getApplicationCourse(app: any) {
@@ -686,44 +691,57 @@ function formatDateTime(value: string) {
   return new Date(value).toLocaleString();
 }
 
-function getReadableActivity(log: any) {
+function getReadableActivity(log: any, t: (key: string, params?: Record<string, string | number>) => string) {
   const action = log.action || 'System action';
   const module = log.module || 'System';
   const newData = log.new_data || {};
 
   if (action === 'Portfolio Submitted') {
-    return `${newData.title || 'Portfolio'} was submitted`;
+    return t('dashboard.activity.portfolioSubmitted', {
+      title: newData.title || t('dashboard.fallback.portfolio'),
+    });
   }
 
   if (action === 'Portfolio Approved') {
-    return `${newData.assignment || 'Portfolio'} approved for ${newData.student || 'student'}`;
+    return t('dashboard.activity.portfolioApproved', {
+      assignment: newData.assignment || t('dashboard.fallback.portfolio'),
+      student: newData.student || t('dashboard.fallback.student'),
+    });
   }
 
   if (action === 'Portfolio Revision Requested') {
-    return `Revision requested for ${newData.assignment || 'portfolio submission'}`;
+    return t('dashboard.activity.portfolioRevision', {
+      assignment: newData.assignment || t('dashboard.fallback.assignment'),
+    });
   }
 
   if (action === 'Document Uploaded') {
-    return `${newData.file_name || 'Document'} uploaded`;
+    return t('dashboard.activity.documentUploaded', {
+      file: newData.file_name || t('dashboard.fallback.document'),
+    });
   }
 
   if (action === 'Completion Certificate Issued') {
-    return `Completion certificate issued to ${newData.student || 'student'}`;
+    return t('dashboard.activity.completionCertIssued', {
+      student: newData.student || t('dashboard.fallback.student'),
+    });
   }
 
   if (action === 'Full Attendance Certificate Issued') {
-    return `Full attendance certificate issued to ${newData.student || 'student'}`;
+    return t('dashboard.activity.attendanceCertIssued', {
+      student: newData.student || t('dashboard.fallback.student'),
+    });
   }
 
-  if (action === 'Logged In') return 'User logged in';
-  if (action === 'Updated Settings') return 'Academy settings updated';
-  if (action === 'Viewed User Management') return 'User management viewed';
+  if (action === 'Logged In') return t('dashboard.activity.loggedIn');
+  if (action === 'Updated Settings') return t('dashboard.activity.settingsUpdated');
+  if (action === 'Viewed User Management') return t('dashboard.activity.userMgmtViewed');
 
-  if (module === 'Payments') return 'Payment record updated';
-  if (module === 'Attendance') return 'Attendance record updated';
-  if (module === 'Portfolio') return 'Portfolio activity recorded';
-  if (module === 'Certificates') return 'Certificate activity recorded';
-  if (module === 'Student Management') return 'Student record updated';
+  if (module === 'Payments') return t('dashboard.activity.paymentUpdated');
+  if (module === 'Attendance') return t('dashboard.activity.attendanceUpdated');
+  if (module === 'Portfolio') return t('dashboard.activity.portfolioActivity');
+  if (module === 'Certificates') return t('dashboard.activity.certificateActivity');
+  if (module === 'Student Management') return t('dashboard.activity.studentUpdated');
 
   return action;
 }

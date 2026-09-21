@@ -1,6 +1,9 @@
+import { useLanguage } from '../../context/LanguageContext';
+
 interface BusinessInsight {
-  title: string;
-  description: string;
+  titleKey: string;
+  descriptionKey: string;
+  descriptionParams?: Record<string, string | number>;
 }
 
 export default function BusinessInsights({
@@ -8,11 +11,13 @@ export default function BusinessInsights({
 }: {
   insights: BusinessInsight[];
 }) {
+  const { t } = useLanguage();
+
   return (
     <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
 
       <h2 className="text-xl text-[#284342] mb-6">
-        Business Insights
+        {t('reports.insights.title')}
       </h2>
 
       <div className="space-y-4">
@@ -20,16 +25,16 @@ export default function BusinessInsights({
         {insights.map((item) => (
 
           <div
-            key={item.title}
+            key={item.titleKey}
             className="rounded-lg bg-[#f8f8f6] p-4"
           >
 
             <h3 className="text-[#284342]">
-              {item.title}
+              {t(item.titleKey)}
             </h3>
 
             <p className="text-sm text-[#6b6b6b] mt-2">
-              {item.description}
+              {t(item.descriptionKey, item.descriptionParams)}
             </p>
 
           </div>

@@ -5,6 +5,7 @@ import { router } from "./app/routes";
 
 import "./styles/index.css";
 import { LanguageProvider } from './app/context/LanguageContext';
+import { ConfirmDialogProvider } from './app/context/ConfirmDialogContext';
 
 
 ReactDOM.createRoot(
@@ -15,7 +16,11 @@ ReactDOM.createRoot(
 
     <LanguageProvider>
 
-      <RouterProvider router={router}/>
+      <ConfirmDialogProvider>
+
+        <RouterProvider router={router}/>
+
+      </ConfirmDialogProvider>
 
     </LanguageProvider>
 

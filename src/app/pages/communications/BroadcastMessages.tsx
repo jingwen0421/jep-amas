@@ -9,6 +9,12 @@ import {
   queueWhatsAppMessage,
 } from '../../services/communicationService';
 import { createNotification } from '../../services/notificationService';
+import { useLanguage } from '../../context/LanguageContext';
+
+const NO_ACCOUNT_ERROR = '__no_account_on_file__';
+const NO_NOTIFICATION_ERROR = '__failed_to_create_notification__';
+const NO_EMAIL_ERROR = '__no_email_on_file__';
+const NO_PHONE_ERROR = '__no_phone_on_file__';
 
 type RecipientGroup = 'all_students' | 'all_teachers' | 'course' | 'batch';
 type Channel = 'in_app' | 'email' | 'whatsapp';
@@ -31,6 +37,7 @@ interface SendResult {
 }
 
 export default function BroadcastMessages() {
+  const { t } = useLanguage();
   const [group, setGroup] = useState<RecipientGroup>('all_students');
   const [courses, setCourses] = useState<CourseOption[]>([]);
   const [batches, setBatches] = useState<BatchOption[]>([]);
@@ -93,22 +100,22 @@ export default function BroadcastMessages() {
     setResults(null);
 
     if (channels.size === 0) {
-      setFormError('Pick at least one channel.');
+      setFormError(t('broadcast.error.pickChannel'));
       return;
     }
 
     if (channels.has('email') && !subject.trim()) {
-      setFormError('Email needs a subject line.');
+      setFormError(t('broadcast.error.emailSubjectRequired'));
       return;
     }
 
     if (!message.trim()) {
-      setFormError('Message cannot be empty.');
+      setFormError(t('broadcast.error.messageRequired'));
       return;
     }
 
     if ((group === 'course' || group === 'batch') && !refId) {
-      setFormError('Choose which course or batch to message.');
+      setFormError(t('broadcast.error.chooseCourseOrBatch'));
       return;
     }
 
@@ -117,7 +124,7 @@ export default function BroadcastMessages() {
 
     if (recipients.length === 0) {
       setSending(false);
-      setFormError('No recipients found for this selection.');
+      setFormError(t('broadcast.error.noRecipients'));
       return;
     }
 
@@ -137,11 +144,11 @@ export default function BroadcastMessages() {
 
       if (channel === 'in_app') {
         if (!recipient.userId) {
-          outcome = { recipient: recipient.name, channel, success: false, error: 'No account on file' };
+          outcome = { recipient: recipient.name, channel, success: false, error: NO_ACCOUNT_ERROR };
         } else {
           const note = await createNotification({
             userId: recipient.userId,
-            title: subject.trim() || 'Academy Announcement',
+            title: subject.trim() || t('broadcast.defaultAnnouncementTitle'),
             message: message.trim(),
             channel: 'in_app',
             deliveryStatus: 'sent',
@@ -150,11 +157,11 @@ export default function BroadcastMessages() {
             priority: 'normal',
             relatedModule: 'Communications',
           });
-          outcome = { recipient: recipient.name, channel, success: !!note, error: note ? undefined : 'Failed to create notification' };
+          outcome = { recipient: recipient.name, channel, success: !!note, error: note ? undefined : NO_NOTIFICATION_ERROR };
         }
       } else if (channel === 'email') {
         if (!recipient.email) {
-          outcome = { recipient: recipient.name, channel, success: false, error: 'No email on file' };
+          outcome = { recipient: recipient.name, channel, success: false, error: NO_EMAIL_ERROR };
         } else {
           const result = await sendEmail({
             to: recipient.email,
@@ -168,7 +175,7 @@ export default function BroadcastMessages() {
         }
       } else {
         if (!recipient.phone) {
-          outcome = { recipient: recipient.name, channel, success: false, error: 'No phone on file' };
+          outcome = { recipient: recipient.name, channel, success: false, error: NO_PHONE_ERROR };
         } else {
           const result = await queueWhatsAppMessage({
             to: recipient.phone,
@@ -195,24 +202,24 @@ export default function BroadcastMessages() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl text-[#284342]">Broadcast Messages</h1>
+        <h1 className="text-3xl text-[#284342]">{t('broadcast.title')}</h1>
         <p className="text-[#6b6b6b] mt-1">
-          Send one message to a group — in-app, email, and/or WhatsApp (queued)
+          {t('broadcast.subtitle')}
         </p>
       </div>
 
       <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] space-y-5">
         <div>
-          <label className="block text-sm text-[#284342] mb-2">Recipients</label>
+          <label className="block text-sm text-[#284342] mb-2">{t('broadcast.recipients')}</label>
           <select
             value={group}
             onChange={(e) => setGroup(e.target.value as RecipientGroup)}
             className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
           >
-            <option value="all_students">All Active Students</option>
-            <option value="all_teachers">All Teachers</option>
-            <option value="course">Students in a Course</option>
-            <option value="batch">Students in a Batch</option>
+            <option value="all_students">{t('broadcast.group.allStudents')}</option>
+            <option value="all_teachers">{t('broadcast.group.allTeachers')}</option>
+            <option value="course">{t('broadcast.group.studentsInCourse')}</option>
+            <option value="batch">{t('broadcast.group.studentsInBatch')}</option>
           </select>
 
           {group === 'course' && (
@@ -221,7 +228,7 @@ export default function BroadcastMessages() {
               onChange={(e) => setRefId(e.target.value)}
               className="w-full mt-2 px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
             >
-              <option value="">Select a course...</option>
+              <option value="">{t('broadcast.selectCourse')}</option>
               {courses.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.course_name}
@@ -236,7 +243,7 @@ export default function BroadcastMessages() {
               onChange={(e) => setRefId(e.target.value)}
               className="w-full mt-2 px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
             >
-              <option value="">Select a batch...</option>
+              <option value="">{t('broadcast.selectBatch')}</option>
               {batches.map((b) => (
                 <option key={b.id} value={b.id}>
                   {b.batch_name}
@@ -251,34 +258,34 @@ export default function BroadcastMessages() {
             className="mt-3 text-sm text-[#284342] hover:underline disabled:opacity-50 flex items-center gap-1.5"
           >
             <Users size={14} />
-            {loadingPreview ? 'Counting...' : 'Preview recipient count'}
+            {loadingPreview ? t('broadcast.counting') : t('broadcast.previewCount')}
           </button>
 
           {previewRecipients !== null && (
             <p className="text-sm text-[#6b6b6b] mt-1">
-              {previewRecipients.length} recipient{previewRecipients.length === 1 ? '' : 's'} match this selection.
+              {t('broadcast.matchCount', { count: previewRecipients.length })}
             </p>
           )}
         </div>
 
         <div>
-          <label className="block text-sm text-[#284342] mb-2">Channels</label>
+          <label className="block text-sm text-[#284342] mb-2">{t('broadcast.channels')}</label>
           <div className="flex gap-3 flex-wrap">
             <ChannelToggle
               icon={<Bell size={16} />}
-              label="In-App"
+              label={t('broadcast.channel.inApp')}
               active={channels.has('in_app')}
               onClick={() => toggleChannel('in_app')}
             />
             <ChannelToggle
               icon={<Mail size={16} />}
-              label="Email"
+              label={t('broadcast.channel.email')}
               active={channels.has('email')}
               onClick={() => toggleChannel('email')}
             />
             <ChannelToggle
               icon={<MessageSquare size={16} />}
-              label="WhatsApp (queued)"
+              label={t('broadcast.channel.whatsappQueued')}
               active={channels.has('whatsapp')}
               onClick={() => toggleChannel('whatsapp')}
             />
@@ -287,23 +294,23 @@ export default function BroadcastMessages() {
 
         {channels.has('email') && (
           <div>
-            <label className="block text-sm text-[#284342] mb-2">Subject (used for email)</label>
+            <label className="block text-sm text-[#284342] mb-2">{t('broadcast.subjectLabel')}</label>
             <input
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
-              placeholder="e.g., New Course Announcement"
+              placeholder={t('broadcast.subjectPlaceholder')}
               className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
             />
           </div>
         )}
 
         <div>
-          <label className="block text-sm text-[#284342] mb-2">Message</label>
+          <label className="block text-sm text-[#284342] mb-2">{t('emailComms.message')}</label>
           <textarea
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             rows={6}
-            placeholder="Type the message to send to everyone in the selected group..."
+            placeholder={t('broadcast.messagePlaceholder')}
             className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
           />
         </div>
@@ -317,7 +324,7 @@ export default function BroadcastMessages() {
         {sending && (
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-[#6b6b6b]">Sending...</span>
+              <span className="text-xs text-[#6b6b6b]">{t('broadcast.sending')}</span>
               <span className="text-xs text-[#284342]">
                 {progress.done} / {progress.total}
               </span>
@@ -337,16 +344,16 @@ export default function BroadcastMessages() {
           className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2 disabled:opacity-50"
         >
           <Send size={20} />
-          {sending ? 'Sending...' : 'Send Broadcast'}
+          {sending ? t('broadcast.sending') : t('broadcast.sendBroadcast')}
         </button>
       </div>
 
       {results && (
         <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
           <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)] flex items-center justify-between">
-            <h2 className="text-lg text-[#284342]">Broadcast Result</h2>
+            <h2 className="text-lg text-[#284342]">{t('broadcast.result')}</h2>
             <p className="text-sm text-[#6b6b6b]">
-              {successCount} sent • {failCount} failed
+              {t('broadcast.resultSummary', { sent: successCount, failed: failCount })}
             </p>
           </div>
 
@@ -361,26 +368,26 @@ export default function BroadcastMessages() {
                   )}
                   <span className="text-sm text-[#284342]">{r.recipient}</span>
                   <span className="text-xs px-2 py-0.5 rounded-full bg-[#f8f8f6] text-[#6b6b6b] capitalize">
-                    {r.channel === 'in_app' ? 'In-App' : r.channel}
+                    {r.channel === 'in_app' ? t('broadcast.channel.inApp') : r.channel}
                   </span>
                 </div>
-                {r.error && <span className="text-xs text-red-600">{r.error}</span>}
+                {r.error && <span className="text-xs text-red-600">{translateBroadcastError(r.error, t)}</span>}
               </div>
             ))}
           </div>
 
           <div className="p-4 bg-[#f8f8f6] border-t border-[rgba(40,67,66,0.1)] text-xs text-[#6b6b6b]">
-            Full history lives in{' '}
+            {t('broadcast.fullHistoryPrefix')}{' '}
             <Link to="/app/communications/email" className="text-[#284342] hover:underline">
-              Email Communications
+              {t('emailComms.title')}
             </Link>
             ,{' '}
             <Link to="/app/communications/whatsapp" className="text-[#284342] hover:underline">
-              WhatsApp Communications
+              {t('whatsappComms.title')}
             </Link>
-            , and{' '}
+            , {t('broadcast.and')}{' '}
             <Link to="/app/notifications" className="text-[#284342] hover:underline">
-              Notifications
+              {t('notifications.title')}
             </Link>
             .
           </div>
@@ -388,6 +395,14 @@ export default function BroadcastMessages() {
       )}
     </div>
   );
+}
+
+function translateBroadcastError(error: string, t: (key: string) => string) {
+  if (error === NO_ACCOUNT_ERROR) return t('broadcast.error.noAccountOnFile');
+  if (error === NO_NOTIFICATION_ERROR) return t('broadcast.error.notificationFailed');
+  if (error === NO_EMAIL_ERROR) return t('broadcast.error.noEmailOnFile');
+  if (error === NO_PHONE_ERROR) return t('broadcast.error.noPhoneOnFile');
+  return error;
 }
 
 function ChannelToggle({

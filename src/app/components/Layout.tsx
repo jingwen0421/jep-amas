@@ -33,6 +33,7 @@ import { supabase } from '../lib/supabase';
 import { getCurrentUser } from '../utils/session';
 
 interface NavItem {
+  id: string;
   label: string;
   path?: string;
   icon: React.ReactNode;
@@ -40,6 +41,7 @@ interface NavItem {
 }
 
 interface NavSection {
+  id: string;
   title: string;
   items: NavItem[];
 }
@@ -47,7 +49,7 @@ interface NavSection {
 export default function Layout() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { language, setLanguage } = useLanguage();
+  const { language, setLanguage, t } = useLanguage();
 
   const [expandedItems, setExpandedItems] = useState<string[]>([]);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -96,165 +98,189 @@ export default function Layout() {
 
   const navigationSections: NavSection[] = [
     {
-      title: 'General',
+      id: 'general',
+      title: t('section.general'),
       items: [
         {
-          label: 'Dashboard',
+          id: 'dashboard',
+          label: t('nav.dashboard'),
           path: '/app/dashboard',
           icon: <LayoutDashboard size={20} />,
         },
         {
-          label: 'Notifications',
+          id: 'notifications',
+          label: t('nav.notifications'),
           path: '/app/notifications',
           icon: notificationIcon,
         },
       ],
     },
     {
-      title: 'Academic',
+      id: 'scheduling',
+      title: t('section.scheduling'),
       items: [
         {
-          label: 'Calendar',
+          id: 'calendar',
+          label: t('nav.calendar'),
           path: '/app/calendar',
           icon: <CalendarDays size={20} />,
         },
         {
-          label: 'Reschedule Requests',
+          id: 'reschedule-requests',
+          label: t('nav.rescheduleRequests'),
           path: '/app/reschedule-requests',
           icon: <RefreshCw size={20} />,
         },
         {
-          label: 'Students',
-          icon: <Users size={20} />,
-          children: [
-            { label: 'Student List', path: '/app/students/list', icon: null },
-            { label: 'Registration', path: '/app/students/registration', icon: null },
-            { label: 'Approval', path: '/app/students/approval', icon: null },
-            { label: 'Progress', path: '/app/students/progress', icon: null },
-          ],
-        },
-        {
-          label: 'Courses',
-          icon: <BookOpen size={20} />,
-          children: [
-            { label: 'Categories', path: '/app/courses/categories', icon: null },
-            { label: 'Courses', path: '/app/courses/list', icon: null },
-            { label: 'Class Batches', path: '/app/courses/batches', icon: null },
-            { label: 'Course Modules', path: '/app/courses/lessons', icon: null },
-          ],
-        },
-        {
-          label: 'Events',
+          id: 'events',
+          label: t('nav.events'),
           path: '/app/events',
           icon: <PartyPopper size={20} />,
         },
         {
-          label: 'Classes',
+          id: 'classes',
+          label: t('nav.classes'),
           icon: <Calendar size={20} />,
           children: [
-            { label: 'Scheduling', path: '/app/classes/scheduling', icon: null },
-            { label: 'Classroom Allocation', path: '/app/classes/allocation', icon: null },
-            { label: 'Teacher Availability', path: '/app/appointments/availability', icon: null },
+            { id: 'classes-scheduling', label: t('nav.scheduling'), path: '/app/classes/scheduling', icon: null },
+            { id: 'classes-allocation', label: t('nav.classroomAllocation'), path: '/app/classes/allocation', icon: null },
+            { id: 'classes-teacher-availability', label: t('nav.teacherAvailability'), path: '/app/appointments/availability', icon: null },
           ],
         },
         {
-          label: 'Attendance',
+          id: 'attendance',
+          label: t('nav.attendance'),
           icon: <ClipboardCheck size={20} />,
           children: [
-            { label: 'Daily Attendance', path: '/app/attendance/daily', icon: null },
-            { label: 'Makeup Classes', path: '/app/attendance/makeup', icon: null },
-            { label: 'Reports', path: '/app/attendance/reports', icon: null },
+            { id: 'attendance-daily', label: t('nav.dailyAttendance'), path: '/app/attendance/daily', icon: null },
+            { id: 'attendance-makeup', label: t('nav.makeupClasses'), path: '/app/attendance/makeup', icon: null },
+            { id: 'attendance-reports', label: t('nav.attendanceReports'), path: '/app/attendance/reports', icon: null },
+          ],
+        },
+      ],
+    },
+    {
+      id: 'students-section',
+      title: t('section.students'),
+      items: [
+        {
+          id: 'students',
+          label: t('nav.students'),
+          icon: <Users size={20} />,
+          children: [
+            { id: 'students-list', label: t('nav.studentList'), path: '/app/students/list', icon: null },
+            { id: 'students-registration', label: t('nav.registration'), path: '/app/students/registration', icon: null },
+            { id: 'students-approval', label: t('nav.approval'), path: '/app/students/approval', icon: null },
+            { id: 'students-progress', label: t('nav.progress'), path: '/app/students/progress', icon: null },
           ],
         },
         {
-          label: 'Portfolio',
+          id: 'portfolio',
+          label: t('nav.portfolio'),
           icon: <Briefcase size={20} />,
           children: [
-            { label: 'Gallery', path: '/app/portfolio/gallery', icon: null },
-            { label: 'Submissions', path: '/app/portfolio/submissions', icon: null },
-            { label: 'Feedback', path: '/app/portfolio/feedback', icon: null },
+            { id: 'portfolio-gallery', label: t('nav.gallery'), path: '/app/portfolio/gallery', icon: null },
+            { id: 'portfolio-submissions', label: t('nav.submissions'), path: '/app/portfolio/submissions', icon: null },
+            { id: 'portfolio-feedback', label: t('nav.feedback'), path: '/app/portfolio/feedback', icon: null },
           ],
         },
         {
-          label: 'Certificates',
+          id: 'certificates',
+          label: t('nav.certificates'),
           icon: <Award size={20} />,
           children: [
-            { label: 'Completion', path: '/app/certificates/completion', icon: null },
-            { label: 'Full Attendance', path: '/app/certificates/attendance', icon: null },
+            { id: 'certificates-completion', label: t('nav.completion'), path: '/app/certificates/completion', icon: null },
+            { id: 'certificates-attendance', label: t('nav.fullAttendance'), path: '/app/certificates/attendance', icon: null },
           ],
         },
       ],
     },
     {
-      title: 'Finance',
+      id: 'courses-section',
+      title: t('section.courses'),
+      items: [
+        { id: 'courses-categories', label: t('nav.categories'), path: '/app/courses/categories', icon: <BookOpen size={20} /> },
+        { id: 'courses-list', label: t('nav.courseList'), path: '/app/courses/list', icon: <BookOpen size={20} /> },
+        { id: 'courses-batches', label: t('nav.classBatches'), path: '/app/courses/batches', icon: <BookOpen size={20} /> },
+        { id: 'courses-lessons', label: t('nav.courseModules'), path: '/app/courses/lessons', icon: <BookOpen size={20} /> },
+      ],
+    },
+    {
+      id: 'finance',
+      title: t('section.finance'),
       items: [
         {
-          label: 'Payments',
+          id: 'payments',
+          label: t('nav.payments'),
           icon: <CreditCard size={20} />,
           children: [
-            { label: 'Payment Plans', path: '/app/payments/plans', icon: null },
-            { label: 'Installments', path: '/app/payments/installments', icon: null },
-            { label: 'Receipts', path: '/app/payments/receipts', icon: null },
-            { label: 'Outstanding Balances', path: '/app/payments/outstanding', icon: null },
+            { id: 'payments-plans', label: t('nav.paymentPlans'), path: '/app/payments/plans', icon: null },
+            { id: 'payments-installments', label: t('nav.installments'), path: '/app/payments/installments', icon: null },
+            { id: 'payments-receipts', label: t('nav.receipts'), path: '/app/payments/receipts', icon: null },
+            { id: 'payments-outstanding', label: t('nav.outstandingBalances'), path: '/app/payments/outstanding', icon: null },
           ],
         },
       ],
     },
     {
-      title: 'Sales',
+      id: 'sales',
+      title: t('section.sales'),
       items: [
         {
-          label: 'Sales CRM',
+          id: 'crm',
+          label: t('nav.salesCrm'),
           path: '/app/crm',
           icon: <Briefcase size={20} />,
         },
       ],
     },
     {
-      title: 'Communication',
+      id: 'communication',
+      title: t('section.communication'),
       items: [
-        {
-          label: 'Communication',
-          icon: <MessageSquare size={20} />,
-          children: [
-            { label: 'WhatsApp', path: '/app/communications/whatsapp', icon: null },
-            { label: 'Email', path: '/app/communications/email', icon: null },
-            { label: 'Broadcast', path: '/app/communications/broadcast', icon: null },
-            { label: 'Templates', path: '/app/communications/templates', icon: null },
-          ],
-        },
-        {
-          label: 'Documents',
-          path: '/app/documents',
-          icon: <FolderOpen size={20} />,
-        },
+        { id: 'comms-whatsapp', label: t('nav.whatsapp'), path: '/app/communications/whatsapp', icon: <MessageSquare size={20} /> },
+        { id: 'comms-email', label: t('nav.email'), path: '/app/communications/email', icon: <MessageSquare size={20} /> },
+        { id: 'comms-broadcast', label: t('nav.broadcast'), path: '/app/communications/broadcast', icon: <MessageSquare size={20} /> },
+        { id: 'comms-templates', label: t('nav.templates'), path: '/app/communications/templates', icon: <MessageSquare size={20} /> },
       ],
     },
     {
-      title: 'Administration',
+      id: 'administration',
+      title: t('section.administration'),
       items: [
         {
-          label: 'Survey & Feedback',
+          id: 'documents',
+          label: t('nav.documents'),
+          path: '/app/documents',
+          icon: <FolderOpen size={20} />,
+        },
+        {
+          id: 'survey',
+          label: t('nav.surveyFeedback'),
           path: '/app/survey',
           icon: <BarChart3 size={20} />,
         },
         {
-          label: 'Reports',
+          id: 'reports',
+          label: t('nav.reports'),
           path: '/app/reports',
           icon: <BarChart3 size={20} />,
         },
         {
-          label: 'User Management',
+          id: 'users',
+          label: t('nav.userManagement'),
           path: '/app/users',
           icon: <Shield size={20} />,
         },
         {
-          label: 'Audit Logs',
+          id: 'audit',
+          label: t('nav.auditLogs'),
           path: '/app/audit',
           icon: <History size={20} />,
         },
         {
-          label: 'Settings',
+          id: 'settings',
+          label: t('nav.settings'),
           path: '/app/settings',
           icon: <SettingsIcon size={20} />,
         },
@@ -269,16 +295,16 @@ export default function Layout() {
         item.children?.some((child) => location.pathname === child.path)
       );
 
-    if (activeParent && !expandedItems.includes(activeParent.label)) {
-      setExpandedItems((prev) => [...prev, activeParent.label]);
+    if (activeParent && !expandedItems.includes(activeParent.id)) {
+      setExpandedItems((prev) => [...prev, activeParent.id]);
     }
   }, [location.pathname]);
 
-  function toggleExpanded(label: string) {
+  function toggleExpanded(id: string) {
     setExpandedItems((prev) =>
-      prev.includes(label)
-        ? prev.filter((item) => item !== label)
-        : [...prev, label]
+      prev.includes(id)
+        ? prev.filter((item) => item !== id)
+        : [...prev, id]
     );
   }
 
@@ -338,9 +364,9 @@ export default function Layout() {
         <div className="p-6 border-b border-[rgba(233,218,149,0.2)]">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl text-[#e9da95]">JEP Academy</h1>
+              <h1 className="text-xl text-[#e9da95]">{t('app.name')}</h1>
               <p className="text-xs text-[#e9da95]/70 mt-1">
-                Management System
+                {t('app.tagline')}
               </p>
             </div>
 
@@ -355,18 +381,18 @@ export default function Layout() {
 
         <nav className="flex-1 overflow-y-auto p-4 space-y-5">
           {filteredNavigationSections.map((section) => (
-            <div key={section.title}>
+            <div key={section.id}>
               <p className="px-3 mb-2 text-[11px] uppercase tracking-widest text-[#e9da95]/45">
                 {section.title}
               </p>
 
               <div className="space-y-1">
                 {section.items.map((item) => (
-                  <div key={item.label}>
+                  <div key={item.id}>
                     {item.children ? (
                       <div>
                         <button
-                          onClick={() => toggleExpanded(item.label)}
+                          onClick={() => toggleExpanded(item.id)}
                           className="w-full flex items-center justify-between px-3 py-2 rounded-lg text-[#e9da95] hover:bg-[rgba(233,218,149,0.15)] transition-colors"
                         >
                           <div className="flex items-center gap-3">
@@ -374,18 +400,18 @@ export default function Layout() {
                             <span className="text-sm">{item.label}</span>
                           </div>
 
-                          {expandedItems.includes(item.label) ? (
+                          {expandedItems.includes(item.id) ? (
                             <ChevronDown size={16} />
                           ) : (
                             <ChevronRight size={16} />
                           )}
                         </button>
 
-                        {expandedItems.includes(item.label) && (
+                        {expandedItems.includes(item.id) && (
                           <div className="ml-8 mt-1 space-y-1">
                             {item.children.map((child) => (
                               <Link
-                                key={child.label}
+                                key={child.id}
                                 to={child.path!}
                                 onClick={() => setIsMobileMenuOpen(false)}
                                 className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
@@ -433,7 +459,7 @@ export default function Layout() {
               </p>
 
               <p className="text-xs text-[#e9da95]/70 truncate">
-                {formatRoleLabel(userRole)} •{' '}
+                {roleLabel(userRole, t)} •{' '}
                 {localStorage.getItem('userEmail') || '-'}
               </p>
             </div>
@@ -444,7 +470,7 @@ export default function Layout() {
             className="w-full flex items-center gap-3 px-3 py-2 rounded-lg text-[#e9da95]/70 hover:bg-[rgba(233,218,149,0.1)] hover:text-[#e9da95] transition-colors"
           >
             <LogOut size={20} />
-            <span className="text-sm">Sign Out</span>
+            <span className="text-sm">{t('app.signOut')}</span>
           </button>
         </div>
       </aside>
@@ -533,4 +559,20 @@ function formatRoleLabel(role: string) {
     .replace(/_/g, ' ')
     .replace(/-/g, ' ')
     .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+const ROLE_KEY_MAP: Record<string, string> = {
+  student: 'login.role.student',
+  teacher: 'login.role.teacher',
+  assistant_teacher: 'login.role.assistantTeacher',
+  finance: 'login.role.finance',
+  internal_sales: 'login.role.internalSales',
+  external_sales: 'login.role.externalSales',
+  parent: 'login.role.parent',
+  admin: 'login.role.admin',
+};
+
+function roleLabel(role: string, t: (key: string) => string) {
+  const key = ROLE_KEY_MAP[role];
+  return key ? t(key) : formatRoleLabel(role);
 }

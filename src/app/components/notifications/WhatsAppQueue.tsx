@@ -1,4 +1,5 @@
 import { MessageCircle, CheckCircle2 } from 'lucide-react';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface NotificationItem {
   id: string;
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function WhatsAppQueue({ notifications, onMarkSent }: Props) {
+  const { t } = useLanguage();
   const queue = notifications.filter(
     (item) =>
       item.channel === 'whatsapp' &&
@@ -34,21 +36,21 @@ export default function WhatsAppQueue({ notifications, onMarkSent }: Props) {
     <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h2 className="text-lg text-[#284342]">WhatsApp Reminder Queue</h2>
+          <h2 className="text-lg text-[#284342]">{t('notifications.whatsappQueue.title')}</h2>
           <p className="text-sm text-[#6b6b6b] mt-1">
-            Pending reminders waiting to be sent manually
+            {t('notifications.whatsappQueue.subtitle')}
           </p>
         </div>
 
         <span className="text-sm px-3 py-1 rounded-full bg-green-100 text-green-700">
-          {queue.length} pending
+          {t('notifications.whatsappQueue.pendingCount', { count: queue.length })}
         </span>
       </div>
 
       <div className="space-y-3">
         {queue.length === 0 && (
           <p className="text-sm text-[#6b6b6b]">
-            No pending WhatsApp reminders.
+            {t('notifications.whatsappQueue.empty')}
           </p>
         )}
 
@@ -72,7 +74,7 @@ export default function WhatsAppQueue({ notifications, onMarkSent }: Props) {
               <button
                 onClick={() => openWhatsApp(item.message, item.contact_phone)}
                 className="p-2 rounded-lg hover:bg-green-50"
-                title={item.contact_phone ? `Open WhatsApp for ${item.contact_phone}` : 'Open WhatsApp'}
+                title={item.contact_phone ? t('notifications.whatsappQueue.openFor', { phone: item.contact_phone }) : t('notifications.openWhatsapp')}
               >
                 <MessageCircle size={18} className="text-green-700" />
               </button>
@@ -80,7 +82,7 @@ export default function WhatsAppQueue({ notifications, onMarkSent }: Props) {
               <button
                 onClick={() => onMarkSent(item.id)}
                 className="p-2 rounded-lg hover:bg-[#e9da95]/20"
-                title="Mark Sent"
+                title={t('notifications.whatsappQueue.markSent')}
               >
                 <CheckCircle2 size={18} className="text-[#284342]" />
               </button>

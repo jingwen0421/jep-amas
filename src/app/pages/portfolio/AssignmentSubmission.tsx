@@ -12,6 +12,7 @@ import { supabase } from '../../lib/supabase';
 import { getCurrentUser } from '../../utils/session';
 import { getCurrentStudentId } from '../../utils/studentAccess';
 import { syncPortfolioItem } from '../../services/driveSyncService';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface Assignment {
   id: string;
@@ -41,6 +42,7 @@ interface LessonOption {
 
 export default function AssignmentSubmission() {
   const currentUser = getCurrentUser();
+  const { t } = useLanguage();
 
   const isStudentView = currentUser.role === 'student';
   const isAssistantTeacher = currentUser.role === 'assistant_teacher';
@@ -150,7 +152,7 @@ export default function AssignmentSubmission() {
       return {
         id: item.id,
         studentId: item.student_id || '',
-        student: getStudentName(item.students),
+        student: getStudentName(item.students, t),
         title: item.title || '-',
         course: getCourseName(item.lessons),
         dueDate: item.lessons?.lesson_datetime
@@ -211,7 +213,7 @@ export default function AssignmentSubmission() {
       const studentId = await getCurrentStudentId();
 
       if (!studentId) {
-        alert('Student profile not found. Please complete student registration first.');
+        alert(t('portfolio.submission.profileNotFound'));
         return;
       }
 
@@ -231,7 +233,7 @@ export default function AssignmentSubmission() {
       const studentId = await getCurrentStudentId();
 
       if (!studentId) {
-        alert('Student profile not found. Please complete student registration first.');
+        alert(t('portfolio.submission.profileNotFound'));
         return;
       }
 
@@ -239,7 +241,7 @@ export default function AssignmentSubmission() {
     }
 
     if (!finalStudentId || !formData.lessonId || !formData.title || !file) {
-      alert('Please complete all required fields and upload a file.');
+      alert(t('portfolio.submission.errorMissingFields'));
       return;
     }
 
@@ -258,7 +260,7 @@ export default function AssignmentSubmission() {
 
     if (uploadError) {
       setUploading(false);
-      alert(`Upload failed: ${uploadError.message}`);
+      alert(t('portfolio.submission.errorUploadFailed', { message: uploadError.message }));
       return;
     }
 
@@ -283,7 +285,7 @@ export default function AssignmentSubmission() {
 
     if (insertError) {
       setUploading(false);
-      alert(`Failed to save submission: ${insertError.message}`);
+      alert(t('portfolio.submission.errorSaveFailed', { message: insertError.message }));
       return;
     }
 
@@ -321,8 +323,8 @@ export default function AssignmentSubmission() {
 
     alert(
       isStudentView
-        ? 'Your portfolio submission has been uploaded.'
-        : 'Portfolio submission has been uploaded.'
+        ? t('portfolio.submission.uploadedStudent')
+        : t('portfolio.submission.uploaded')
     );
   }
 
@@ -334,7 +336,7 @@ export default function AssignmentSubmission() {
   if (loading) {
     return (
       <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
-        Loading portfolio submissions...
+        {t('portfolio.submission.loading')}
       </div>
     );
   }
@@ -343,14 +345,14 @@ export default function AssignmentSubmission() {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="text-3xl text-[#284342]">My Portfolio</h1>
+          <h1 className="text-3xl text-[#284342]">{t('portfolio.submission.titleStudent')}</h1>
           <p className="text-[#6b6b6b] mt-1">
-            Submit and track your own portfolio work.
+            {t('portfolio.submission.subtitleStudentSimple')}
           </p>
         </div>
 
         <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-6 text-yellow-800">
-          Your student profile was not found. Please complete your student registration first or wait for admin approval.
+          {t('portfolio.submission.profileNotFoundLong')}
         </div>
       </div>
     );
@@ -361,14 +363,14 @@ export default function AssignmentSubmission() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl text-[#284342]">
-            {isStudentView ? 'My Portfolio' : 'Portfolio Submissions'}
+            {isStudentView ? t('portfolio.submission.titleStudent') : t('portfolio.submission.title')}
           </h1>
           <p className="text-[#6b6b6b] mt-1">
             {isStudentView
-              ? 'Upload your work and view teacher feedback.'
+              ? t('portfolio.submission.subtitleStudent')
               : isAssistantTeacher
-              ? 'View student portfolio submissions.'
-              : 'View, submit and track portfolio review status.'}
+              ? t('portfolio.submission.subtitleAssistant')
+              : t('portfolio.submission.subtitle')}
           </p>
         </div>
 
@@ -378,33 +380,33 @@ export default function AssignmentSubmission() {
             className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
           >
             <Upload size={18} />
-            {isStudentView ? 'Upload Work' : 'Submit Portfolio'}
+            {isStudentView ? t('portfolio.submission.uploadWork') : t('portfolio.submission.submitPortfolio')}
           </button>
         )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <SummaryCard
-          label={isStudentView ? 'My Submissions' : 'Total Submissions'}
+          label={isStudentView ? t('portfolio.submission.mySubmissions') : t('portfolio.submission.totalSubmissions')}
           value={total}
           color="text-[#284342]"
         />
-        <SummaryCard label="Pending" value={pending} color="text-yellow-700" />
-        <SummaryCard label="Submitted" value={submitted} color="text-blue-700" />
-        <SummaryCard label="Reviewed" value={graded} color="text-green-700" />
+        <SummaryCard label={t('common.pending')} value={pending} color="text-yellow-700" />
+        <SummaryCard label={t('portfolio.submission.submitted')} value={submitted} color="text-blue-700" />
+        <SummaryCard label={t('portfolio.feedback.reviewed')} value={graded} color="text-green-700" />
       </div>
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
           <h2 className="text-lg text-[#284342]">
-            {isStudentView ? 'My Submissions' : 'Student Submissions'}
+            {isStudentView ? t('portfolio.submission.mySubmissions') : t('portfolio.feedback.studentSubmissions')}
           </h2>
         </div>
 
         <div className="divide-y divide-[rgba(40,67,66,0.1)]">
           {assignments.length === 0 && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              No portfolio submissions found.
+              {t('portfolio.submission.empty')}
             </div>
           )}
 
@@ -416,7 +418,7 @@ export default function AssignmentSubmission() {
               <div className="flex items-center gap-3 mb-2">
                 <FileText size={20} className="text-[#284342]" />
                 <h3 className="text-lg text-[#284342]">{assignment.title}</h3>
-                <StatusBadge status={assignment.status} />
+                <StatusBadge status={assignment.status} t={t} />
               </div>
 
               {!isStudentView && (
@@ -431,7 +433,7 @@ export default function AssignmentSubmission() {
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <Info
                   icon={<Calendar size={14} />}
-                  label="Lesson Date"
+                  label={t('portfolio.submission.lessonDate')}
                   value={assignment.dueDate}
                   color="text-[#284342]"
                 />
@@ -439,7 +441,7 @@ export default function AssignmentSubmission() {
                 {assignment.submittedDate && (
                   <Info
                     icon={<CheckCircle2 size={14} />}
-                    label="Submitted"
+                    label={t('portfolio.feedback.submitted')}
                     value={assignment.submittedDate}
                     color="text-green-700"
                   />
@@ -448,7 +450,7 @@ export default function AssignmentSubmission() {
                 {assignment.score !== undefined && (
                   <Info
                     icon={<Clock size={14} />}
-                    label="Score"
+                    label={t('portfolio.feedback.score')}
                     value={`${assignment.score}%`}
                     color="text-[#284342]"
                   />
@@ -458,7 +460,7 @@ export default function AssignmentSubmission() {
               {assignment.feedback && (
                 <div className="mt-3 p-3 bg-green-50 rounded-lg">
                   <p className="text-xs text-[#6b6b6b] mb-1">
-                    Teacher Feedback:
+                    {t('portfolio.submission.teacherFeedbackColon')}
                   </p>
                   <p className="text-sm text-green-700">
                     {assignment.feedback}
@@ -472,13 +474,13 @@ export default function AssignmentSubmission() {
                     onClick={() => window.open(assignment.fileUrl, '_blank')}
                     className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm"
                   >
-                    View Submission
+                    {t('portfolio.submission.viewSubmission')}
                   </button>
                 )}
 
                 {!isStudentView && !isAssistantTeacher && (
                   <span className="text-xs text-[#6b6b6b]">
-                    Review and feedback are handled in the feedback module.
+                    {t('portfolio.submission.handledInFeedbackModule')}
                   </span>
                 )}
               </div>
@@ -492,7 +494,7 @@ export default function AssignmentSubmission() {
           <div className="bg-white rounded-xl max-w-2xl w-full p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl text-[#284342]">
-                {isStudentView ? 'Upload Portfolio Work' : 'Submit Portfolio'}
+                {isStudentView ? t('portfolio.submission.uploadModalTitle') : t('portfolio.submission.submitPortfolio')}
               </h2>
               <button onClick={() => setShowModal(false)}>
                 <X size={20} className="text-[#284342]" />
@@ -502,7 +504,7 @@ export default function AssignmentSubmission() {
             <div className="space-y-4">
               {canSelectStudent && (
                 <SelectField
-                  label="Student"
+                  label={t('portfolio.feedback.student')}
                   value={formData.studentId}
                   onChange={(value) =>
                     setFormData((prev) => ({ ...prev, studentId: value }))
@@ -511,6 +513,7 @@ export default function AssignmentSubmission() {
                     value: s.id,
                     label: s.full_name,
                   }))}
+                  t={t}
                 />
               )}
 
@@ -519,7 +522,7 @@ export default function AssignmentSubmission() {
                   <User size={20} className="text-[#284342]" />
                   <div>
                     <p className="text-sm text-[#284342]">
-                      Uploading as: {currentUser.name}
+                      {t('portfolio.submission.uploadingAs', { name: currentUser.name })}
                     </p>
                     <p className="text-xs text-[#6b6b6b]">
                       {currentUser.email}
@@ -529,7 +532,7 @@ export default function AssignmentSubmission() {
               )}
 
               <SelectField
-                label="Lesson / Assignment"
+                label={t('portfolio.submission.lessonAssignment')}
                 value={formData.lessonId}
                 onChange={(value) =>
                   setFormData((prev) => ({ ...prev, lessonId: value }))
@@ -538,11 +541,12 @@ export default function AssignmentSubmission() {
                   value: lesson.id,
                   label: `${lesson.lesson_title} - ${getCourseName(lesson)}`,
                 }))}
+                t={t}
               />
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Submission Title
+                  {t('portfolio.submission.submissionTitle')}
                 </label>
                 <input
                   value={formData.title}
@@ -553,13 +557,13 @@ export default function AssignmentSubmission() {
                     }))
                   }
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
-                  placeholder="e.g. Bridal Makeup Portfolio"
+                  placeholder={t('portfolio.submission.titlePlaceholder')}
                 />
               </div>
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Description
+                  {t('courses.categories.field.description')}
                 </label>
                 <textarea
                   rows={3}
@@ -571,13 +575,13 @@ export default function AssignmentSubmission() {
                     }))
                   }
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
-                  placeholder="Short description of submission"
+                  placeholder={t('portfolio.submission.descriptionPlaceholder')}
                 />
               </div>
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Upload File
+                  {t('portfolio.submission.uploadFile')}
                 </label>
                 <input
                   type="file"
@@ -586,7 +590,7 @@ export default function AssignmentSubmission() {
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
                 />
                 <p className="text-xs text-[#6b6b6b] mt-2">
-                  Accepted formats: JPG, PNG, WEBP, PDF.
+                  {t('portfolio.submission.acceptedFormats')}
                 </p>
               </div>
             </div>
@@ -596,7 +600,7 @@ export default function AssignmentSubmission() {
                 onClick={() => setShowModal(false)}
                 className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342]"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
 
               <button
@@ -604,7 +608,7 @@ export default function AssignmentSubmission() {
                 disabled={uploading}
                 className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg disabled:opacity-60"
               >
-                {uploading ? 'Submitting...' : 'Submit'}
+                {uploading ? t('portfolio.submission.submitting') : t('portfolio.submission.submit')}
               </button>
             </div>
           </div>
@@ -621,10 +625,10 @@ function mapPortfolioStatus(status: string): Assignment['status'] {
   return 'Pending';
 }
 
-function getStudentName(student: any) {
-  if (!student) return 'Unnamed Student';
-  if (Array.isArray(student)) return student[0]?.full_name || 'Unnamed Student';
-  return student.full_name || 'Unnamed Student';
+function getStudentName(student: any, t: (key: string) => string) {
+  if (!student) return t('dashboard.fallback.unnamedStudent');
+  if (Array.isArray(student)) return student[0]?.full_name || t('dashboard.fallback.unnamedStudent');
+  return student.full_name || t('dashboard.fallback.unnamedStudent');
 }
 
 function getCourseName(lesson: any) {
@@ -660,7 +664,13 @@ function SummaryCard({
   );
 }
 
-function StatusBadge({ status }: { status: Assignment['status'] }) {
+function StatusBadge({
+  status,
+  t,
+}: {
+  status: Assignment['status'];
+  t: (key: string) => string;
+}) {
   const className =
     status === 'Graded'
       ? 'bg-green-100 text-green-700'
@@ -670,9 +680,18 @@ function StatusBadge({ status }: { status: Assignment['status'] }) {
       ? 'bg-red-100 text-red-700'
       : 'bg-yellow-100 text-yellow-700';
 
+  const label =
+    status === 'Graded'
+      ? t('portfolio.feedback.reviewed')
+      : status === 'Submitted'
+      ? t('portfolio.submission.submitted')
+      : status === 'Overdue'
+      ? t('payments.installments.overdue')
+      : t('common.pending');
+
   return (
     <span className={`text-xs px-3 py-1 rounded-full ${className}`}>
-      {status}
+      {label}
     </span>
   );
 }
@@ -704,11 +723,13 @@ function SelectField({
   value,
   onChange,
   options,
+  t,
 }: {
   label: string;
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   return (
     <div>
@@ -718,7 +739,7 @@ function SelectField({
         onChange={(e) => onChange(e.target.value)}
         className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)]"
       >
-        <option value="">Select {label}</option>
+        <option value="">{t('portfolio.submission.selectPrefix', { label })}</option>
         {options.map((option) => (
           <option key={option.value} value={option.value}>
             {option.label}

@@ -4,7 +4,8 @@
   "version": "0.0.1",
   "type": "module",
   "scripts": {
-    "build": "vite build",
+    "build": "node scripts/check-i18n-parity.mjs && vite build",
+    "check:i18n": "node scripts/check-i18n-parity.mjs",
     "dev": "vite"
   },
   "dependencies": {

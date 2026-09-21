@@ -35,6 +35,7 @@ import TeamSection from "./components/TeamSection";
 import CommissionSettingSection 
 from "./components/CommissionSettingSection";
 import { supabase } from "../../lib/supabase";
+import { useLanguage } from "../../context/LanguageContext";
 
 
 
@@ -58,6 +59,7 @@ type Tab =
 
 
 export default function CRMPage(){
+const { t } = useLanguage();
 const [currentUser,setCurrentUser]=useState<any>(null);
 
 
@@ -369,7 +371,7 @@ text-[#284342]
 text-lg
 ">
 
-Loading CRM...
+{t('crm.page.loading')}
 
 </div>
 
@@ -407,7 +409,7 @@ font-semibold
 text-[#284342]
 ">
 
-Sales CRM
+{t('crm.page.title')}
 
 </h1>
 
@@ -418,7 +420,7 @@ text-gray-500
 mt-1
 ">
 
-Manage leads, deals and sales performance
+{t('crm.page.subtitle')}
 
 </p>
 
@@ -446,13 +448,13 @@ w-full
 {
 
 [
-["dashboard","Dashboard"],
+["dashboard",t('crm.page.tabDashboard')],
 
-["leads","Leads"],
+["leads",t('crm.page.tabLeads')],
 
-["deals","Deals"],
+["deals",t('crm.page.tabDeals')],
 
-["team","Team"],
+["team",t('crm.page.tabTeam')],
 
 ...(
 [
@@ -461,7 +463,7 @@ w-full
 ].includes(currentUser?.role)
 ?
 [
-["commission","Commission"]
+["commission",t('crm.page.tabCommission')]
 ]
 :
 [])
@@ -534,6 +536,8 @@ data={dashboard}
 deals={deals}
 
 leads={leads}
+
+t={t}
 
 />
 
@@ -678,7 +682,9 @@ data,
 
 deals,
 
-leads
+leads,
+
+t
 
 }:any){
 
@@ -741,7 +747,7 @@ gap-5
 
 <MetricCard
 
-title="Total Leads"
+title={t('crm.dashboard.totalLeads')}
 
 value={data.totalLeads}
 
@@ -755,7 +761,7 @@ icon={<Users size={22}/>}
 
 <MetricCard
 
-title="Active Leads"
+title={t('crm.dashboard.activeLeads')}
 
 value={data.activeLeads}
 
@@ -771,7 +777,7 @@ icon={<Target size={22}/>}
 
 <MetricCard
 
-title="Converted Deals"
+title={t('crm.dashboard.convertedDeals')}
 
 value={data.convertedDeals}
 
@@ -787,7 +793,7 @@ icon={<Briefcase size={22}/>}
 
 <MetricCard
 
-title="Pipeline Value"
+title={t('crm.dashboard.pipelineValue')}
 
 value={
 
@@ -803,7 +809,7 @@ icon={<Briefcase size={22}/>}
 
 <MetricCard
 
-title="Collected Revenue"
+title={t('crm.dashboard.collectedRevenue')}
 
 value={
 
@@ -819,7 +825,7 @@ icon={<DollarSign size={22}/>}
 
 <MetricCard
 
-title="Commission"
+title={t('crm.dashboard.commission')}
 
 value={
 
@@ -836,7 +842,7 @@ icon={<TrendingUp size={22}/>}
 
 <MetricCard
 
-title="Conversion"
+title={t('crm.dashboard.conversion')}
 
 value={`${conversion}%`}
 
@@ -886,7 +892,7 @@ text-[#284342]
 mb-5
 ">
 
-Recent Deals
+{t('crm.dashboard.recentDeals')}
 
 </h2>
 
@@ -997,7 +1003,7 @@ text-[#284342]
 mb-5
 ">
 
-Lead Pipeline
+{t('crm.dashboard.leadPipeline')}
 
 </h2>
 
@@ -1041,7 +1047,7 @@ border-b
 
 <span>
 
-{status}
+{crmLeadStatusLabel(status, t)}
 
 </span>
 
@@ -1111,6 +1117,25 @@ x.status===status
 
 
 
+
+function crmLeadStatusLabel(status: string, t: (key: string) => string) {
+  switch (status) {
+    case 'New':
+      return t('crm.status.new');
+    case 'Contacted':
+      return t('crm.status.contacted');
+    case 'Interested':
+      return t('crm.status.interested');
+    case 'Demo Scheduled':
+      return t('crm.status.demoScheduled');
+    case 'Converted':
+      return t('crm.status.converted');
+    case 'Lost':
+      return t('crm.status.lost');
+    default:
+      return status;
+  }
+}
 
 function MetricCard({
 

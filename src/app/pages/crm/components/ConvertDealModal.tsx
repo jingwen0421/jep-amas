@@ -7,6 +7,7 @@ import {
 createDeal,
 updateLead
 } from "../../../services/crmService";
+import { useLanguage } from "../../../context/LanguageContext";
 
 
 
@@ -22,7 +23,7 @@ refresh
 
 }:any){
 
-
+const { t } = useLanguage();
 
 const [
 
@@ -180,7 +181,7 @@ font-semibold
 text-[#284342]
 ">
 
-Convert Lead to Deal
+{t('crm.convertDeal.title')}
 
 </h2>
 
@@ -192,7 +193,7 @@ Convert Lead to Deal
 
 <label className="form-label">
 
-Customer
+{t('crm.convertDeal.customer')}
 
 </label>
 
@@ -219,7 +220,7 @@ p-3
 
 <label className="form-label">
 
-Course
+{t('payments.installments.colCourse')}
 
 </label>
 
@@ -251,7 +252,7 @@ setCourse(e.target.value)
 
 <label className="form-label">
 
-Course Type
+{t('crm.convertDeal.courseType')}
 
 </label>
 
@@ -290,7 +291,7 @@ gap-4
 
 <label className="form-label">
 
-List Price (RM)
+{t('crm.convertDeal.listPrice')}
 
 </label>
 
@@ -324,7 +325,7 @@ Number(e.target.value)
 
 <label className="form-label">
 
-Discount (%)
+{t('crm.convertDeal.discount')}
 
 </label>
 
@@ -366,7 +367,7 @@ rounded-xl
 p-4
 ">
 
-Final Price:
+{t('crm.convertDeal.finalPrice')}
 
 <b>
 
@@ -394,7 +395,7 @@ className="btn-primary"
 
 >
 
-Create Deal
+{t('crm.convertDeal.createDeal')}
 
 </button>
 
@@ -414,7 +415,7 @@ py-3
 
 >
 
-Cancel
+{t('common.cancel')}
 
 </button>
 

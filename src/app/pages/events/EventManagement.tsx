@@ -17,19 +17,33 @@ import {
 import { supabase } from '../../lib/supabase';
 import { getCurrentUser } from '../../utils/session';
 import { getCurrentStudentId } from '../../utils/studentAccess';
+import { useLanguage } from '../../context/LanguageContext';
+import { useConfirm } from '../../context/ConfirmDialogContext';
 
 const EVENT_KIND_OPTIONS = [
-  { value: 'trial_class', label: 'Trial Class' },
-  { value: 'consultation', label: '1-on-1 Consultation' },
-  { value: 'workshop', label: 'Workshop' },
-  { value: 'seminar', label: 'Seminar' },
-  { value: 'open_house', label: 'Open House' },
-  { value: 'showcase', label: 'Showcase' },
-  { value: 'other', label: 'Other' },
+  { value: 'trial_class', labelKey: 'eventManagement.kind.trialClass' },
+  { value: 'consultation', labelKey: 'eventManagement.kind.consultation' },
+  { value: 'workshop', labelKey: 'eventManagement.kind.workshop' },
+  { value: 'seminar', labelKey: 'eventManagement.kind.seminar' },
+  { value: 'open_house', labelKey: 'eventManagement.kind.openHouse' },
+  { value: 'showcase', labelKey: 'eventManagement.kind.showcase' },
+  { value: 'other', labelKey: 'eventManagement.kind.other' },
 ];
 
-function eventKindLabel(kind: string) {
-  return EVENT_KIND_OPTIONS.find((k) => k.value === kind)?.label || kind;
+function eventKindLabel(kind: string, t: (key: string) => string) {
+  const opt = EVENT_KIND_OPTIONS.find((k) => k.value === kind);
+  return opt ? t(opt.labelKey) : kind;
+}
+
+const EVENT_STATUS_KEYS: Record<string, string> = {
+  scheduled: 'eventManagement.status.scheduled',
+  cancelled: 'eventManagement.status.cancelled',
+  completed: 'eventManagement.status.completed',
+};
+
+function eventStatusLabel(status: string, t: (key: string) => string) {
+  const key = EVENT_STATUS_KEYS[status];
+  return key ? t(key) : status;
 }
 
 interface StaffTag {
@@ -105,6 +119,8 @@ const emptyForm = {
 };
 
 export default function EventManagement() {
+  const { t } = useLanguage();
+  const confirmDialog = useConfirm();
   const [searchParams, setSearchParams] = useSearchParams();
   const currentUser = getCurrentUser();
 
@@ -207,7 +223,7 @@ export default function EventManagement() {
       return {
         id: occ.id,
         eventId: occ.event_id,
-        title: ev?.title || 'Academy Event',
+        title: ev?.title || t('eventManagement.fallback.academyEvent'),
         description: ev?.description || '',
         eventKind: ev?.event_kind || 'other',
         date: start ? start.toISOString().slice(0, 10) : '',
@@ -215,7 +231,9 @@ export default function EventManagement() {
         endTime: end ? end.toTimeString().slice(0, 5) : '-',
         venueId: occ.venue_id || null,
         venueName:
-          occ.venue_name || getSingle(occ.classrooms)?.room_name || 'No venue set',
+          occ.venue_name ||
+          getSingle(occ.classrooms)?.room_name ||
+          t('eventManagement.field.noVenueSet'),
         isOtherVenue: !!occ.venue_name && !occ.venue_id,
         capacity: occ.capacity,
         price: Number(occ.price || 0),
@@ -226,7 +244,7 @@ export default function EventManagement() {
         externalRegistrationUrl: occ.external_registration_url || '',
         staff: (occ.event_staff || []).map((s: any) => ({
           id: s.user_id,
-          name: getSingle(s.users)?.full_name || 'Staff',
+          name: getSingle(s.users)?.full_name || t('eventManagement.fallback.staff'),
           role: s.role || '',
         })),
         registrants: (occ.event_registrations || [])
@@ -234,8 +252,8 @@ export default function EventManagement() {
           .map((r: any) => ({
             id: r.id,
             name: r.student_id
-              ? getSingle(r.students)?.full_name || 'Student'
-              : r.guest_name || 'Guest',
+              ? getSingle(r.students)?.full_name || t('eventManagement.fallback.student')
+              : r.guest_name || t('eventManagement.fallback.guest'),
             status: r.status,
             isGuest: !r.student_id,
           })),
@@ -376,12 +394,12 @@ export default function EventManagement() {
     setFormError(null);
 
     if (!form.title.trim()) {
-      setFormError('Give the event a title.');
+      setFormError(t('eventManagement.error.titleRequired'));
       return;
     }
 
     if (!form.date || !form.startTime || !form.endTime) {
-      setFormError('Please select a date, start time, and end time.');
+      setFormError(t('eventManagement.error.dateTimeRequired'));
       return;
     }
 
@@ -389,19 +407,19 @@ export default function EventManagement() {
     const endsAt = `${form.date}T${form.endTime}:00`;
 
     if (endsAt <= startsAt) {
-      setFormError('End time must be later than start time.');
+      setFormError(t('eventManagement.error.endTimeAfterStart'));
       return;
     }
 
     if (form.venueId === OTHER_VENUE && !form.venueOther.trim()) {
-      setFormError('Enter the venue name.');
+      setFormError(t('eventManagement.error.venueNameRequired'));
       return;
     }
 
     if (form.registrationOpen && form.registrationDeadline) {
       const deadlineIso = new Date(form.registrationDeadline).toISOString();
       if (deadlineIso <= new Date().toISOString() && !editingOccurrenceId) {
-        setFormError('Registration deadline must be in the future.');
+        setFormError(t('eventManagement.error.deadlineFuture'));
         return;
       }
     }
@@ -519,7 +537,9 @@ export default function EventManagement() {
         toAdd.map((userId) => ({ event_occurrence_id: occurrenceId, user_id: userId }))
       );
       if (addError) {
-        setFormError(`Event saved, but staff assignment failed: ${addError.message}`);
+        setFormError(
+          t('eventManagement.error.staffAssignFailed', { error: addError.message })
+        );
         setSaving(false);
         fetchEvents();
         return;
@@ -533,7 +553,9 @@ export default function EventManagement() {
         .in('id', toRemove.map((row: any) => row.id));
 
       if (removeError) {
-        setFormError(`Event saved, but removing staff failed: ${removeError.message}`);
+        setFormError(
+          t('eventManagement.error.staffRemoveFailed', { error: removeError.message })
+        );
         setSaving(false);
         fetchEvents();
         return;
@@ -546,7 +568,12 @@ export default function EventManagement() {
   }
 
   async function cancelEvent(occ: EventOccurrence) {
-    if (!confirm(`Cancel "${occ.title}" on ${occ.date}? This frees up any staff locked to it.`)) {
+    if (
+      !(await confirmDialog(
+        t('eventManagement.confirm.cancelEvent', { title: occ.title, date: occ.date }),
+        { variant: 'danger', confirmLabel: t('eventManagement.action.cancelEvent') }
+      ))
+    ) {
       return;
     }
 
@@ -556,7 +583,7 @@ export default function EventManagement() {
       .eq('id', occ.id);
 
     if (error) {
-      alert(`Failed to cancel event: ${error.message}`);
+      alert(t('eventManagement.alert.cancelFailed', { error: error.message }));
       return;
     }
 
@@ -611,7 +638,7 @@ export default function EventManagement() {
     if (!editingOccurrenceId) return;
 
     if (!guestForm.name.trim()) {
-      setFormError('Enter a name for the guest registrant.');
+      setFormError(t('eventManagement.error.guestNameRequired'));
       return;
     }
 
@@ -648,7 +675,7 @@ export default function EventManagement() {
     const studentId = await getCurrentStudentId();
 
     if (!studentId) {
-      alert('Unable to identify your student profile.');
+      alert(t('eventManagement.alert.noStudentProfile'));
       setSigningUpId(null);
       return;
     }
@@ -662,7 +689,7 @@ export default function EventManagement() {
     setSigningUpId(null);
 
     if (error) {
-      alert(`Failed to sign up: ${error.message}`);
+      alert(t('eventManagement.alert.signUpFailed', { error: error.message }));
       return;
     }
 
@@ -679,7 +706,7 @@ export default function EventManagement() {
       .eq('id', registrantId);
 
     if (error) {
-      alert(`Failed to remove registrant: ${error.message}`);
+      alert(t('eventManagement.alert.removeRegistrantFailed', { error: error.message }));
       return;
     }
 
@@ -691,13 +718,13 @@ export default function EventManagement() {
     <div className="space-y-6">
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h1 className="text-3xl text-[#284342]">Events</h1>
+          <h1 className="text-3xl text-[#284342]">{t('eventManagement.title')}</h1>
           <p className="text-[#6b6b6b] mt-1">
             {isStudentView
-              ? 'Events you\'re registered for, plus any open for sign-up.'
+              ? t('eventManagement.subtitle.student')
               : isLeadership
-              ? 'Every event across the academy — workshops, open houses, trial classes and 1-on-1 consultations.'
-              : "Events you're involved in organizing."}
+              ? t('eventManagement.subtitle.leadership')
+              : t('eventManagement.subtitle.staff')}
           </p>
         </div>
 
@@ -707,14 +734,14 @@ export default function EventManagement() {
             className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
           >
             <Plus size={20} />
-            Add Event
+            {t('eventManagement.addEvent')}
           </button>
         )}
       </div>
 
       {!isStudentView && !isLeadership && (
         <div className="bg-white rounded-xl p-4 border border-[rgba(40,67,66,0.1)] flex items-center gap-3">
-          <span className="text-sm text-[#284342]">Show:</span>
+          <span className="text-sm text-[#284342]">{t('eventManagement.scope.label')}</span>
           <button
             onClick={() => setScope('mine')}
             className={`px-4 py-2 rounded-lg text-sm transition-colors ${
@@ -723,7 +750,7 @@ export default function EventManagement() {
                 : 'bg-white text-[#284342] border border-[rgba(40,67,66,0.2)]'
             }`}
           >
-            I'm Organizing
+            {t('eventManagement.scope.mine')}
           </button>
           <button
             onClick={() => setScope('all')}
@@ -733,26 +760,26 @@ export default function EventManagement() {
                 : 'bg-white text-[#284342] border border-[rgba(40,67,66,0.2)]'
             }`}
           >
-            All Events
+            {t('eventManagement.scope.all')}
           </button>
         </div>
       )}
 
       {loading && (
         <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
-          Loading events...
+          {t('eventManagement.loading')}
         </div>
       )}
 
       {!loading && (
         <>
           <EventSection
-            title="Upcoming"
+            title={t('eventManagement.section.upcoming')}
             events={upcomingEvents}
             emptyMessage={
               isStudentView
-                ? "You're not registered for any events, and nothing is open for sign-up right now."
-                : 'No upcoming events.'
+                ? t('eventManagement.empty.studentNone')
+                : t('eventManagement.empty.noUpcoming')
             }
             canManage={canManage}
             onEdit={openEditModal}
@@ -766,7 +793,7 @@ export default function EventManagement() {
 
           {pastEvents.length > 0 && (
             <EventSection
-              title="Past & Cancelled"
+              title={t('eventManagement.section.pastCancelled')}
               events={pastEvents}
               emptyMessage=""
               canManage={canManage}
@@ -788,7 +815,9 @@ export default function EventManagement() {
           <div className="bg-white rounded-xl max-w-2xl w-full p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl text-[#284342]">
-                {editingOccurrenceId ? 'Edit Event' : 'Add Event'}
+                {editingOccurrenceId
+                  ? t('eventManagement.modal.editTitle')
+                  : t('eventManagement.modal.addTitle')}
               </h2>
               <button onClick={closeModal} className="text-[#6b6b6b] hover:text-[#284342]">
                 <X size={20} />
@@ -797,18 +826,18 @@ export default function EventManagement() {
 
             <div className="space-y-4">
               <div>
-                <label className="block text-sm text-[#284342] mb-2">Title</label>
+                <label className="block text-sm text-[#284342] mb-2">{t('eventManagement.field.title')}</label>
                 <input
                   value={form.title}
                   onChange={(e) => setForm((prev) => ({ ...prev, title: e.target.value }))}
-                  placeholder="e.g., Trial Class — Bridal Makeup, Open House"
+                  placeholder={t('eventManagement.field.titlePlaceholder')}
                   className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm text-[#284342] mb-2">Event Type</label>
+                  <label className="block text-sm text-[#284342] mb-2">{t('eventManagement.field.eventType')}</label>
                   <select
                     value={form.eventKind}
                     onChange={(e) => setForm((prev) => ({ ...prev, eventKind: e.target.value }))}
@@ -816,26 +845,26 @@ export default function EventManagement() {
                   >
                     {EVENT_KIND_OPTIONS.map((opt) => (
                       <option key={opt.value} value={opt.value}>
-                        {opt.label}
+                        {t(opt.labelKey)}
                       </option>
                     ))}
                   </select>
                 </div>
 
                 <div>
-                  <label className="block text-sm text-[#284342] mb-2">Venue</label>
+                  <label className="block text-sm text-[#284342] mb-2">{t('eventManagement.field.venue')}</label>
                   <select
                     value={form.venueId}
                     onChange={(e) => setForm((prev) => ({ ...prev, venueId: e.target.value }))}
                     className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                   >
-                    <option value="">No venue set</option>
+                    <option value="">{t('eventManagement.field.noVenueSet')}</option>
                     {venues.map((v) => (
                       <option key={v.id} value={v.id}>
                         {v.room_name}
                       </option>
                     ))}
-                    <option value={OTHER_VENUE}>Other (enter manually)</option>
+                    <option value={OTHER_VENUE}>{t('eventManagement.field.otherVenue')}</option>
                   </select>
                   {form.venueId === OTHER_VENUE && (
                     <input
@@ -843,7 +872,7 @@ export default function EventManagement() {
                       onChange={(e) =>
                         setForm((prev) => ({ ...prev, venueOther: e.target.value }))
                       }
-                      placeholder="e.g., Client's home, Sunway Convention Centre"
+                      placeholder={t('eventManagement.field.venueOtherPlaceholder')}
                       className="w-full mt-2 px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                     />
                   )}
@@ -852,7 +881,7 @@ export default function EventManagement() {
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm text-[#284342] mb-2">Date</label>
+                  <label className="block text-sm text-[#284342] mb-2">{t('eventManagement.field.date')}</label>
                   <input
                     type="date"
                     value={form.date}
@@ -861,7 +890,7 @@ export default function EventManagement() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-[#284342] mb-2">Start Time</label>
+                  <label className="block text-sm text-[#284342] mb-2">{t('eventManagement.field.startTime')}</label>
                   <input
                     type="time"
                     value={form.startTime}
@@ -870,7 +899,7 @@ export default function EventManagement() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-[#284342] mb-2">End Time</label>
+                  <label className="block text-sm text-[#284342] mb-2">{t('eventManagement.field.endTime')}</label>
                   <input
                     type="time"
                     value={form.endTime}
@@ -882,14 +911,14 @@ export default function EventManagement() {
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Staff Involved{' '}
+                  {t('eventManagement.field.staffInvolved')}{' '}
                   <span className="text-xs text-[#6b6b6b] font-normal">
-                    (any teacher added here has this time locked on their availability)
+                    {t('eventManagement.field.staffInvolvedHint')}
                   </span>
                 </label>
                 <div className="flex flex-wrap gap-2 p-3 rounded-lg border border-[rgba(40,67,66,0.15)] bg-[#f8f8f6] max-h-40 overflow-y-auto">
                   {staffOptions.length === 0 && (
-                    <p className="text-xs text-[#6b6b6b]">Loading staff...</p>
+                    <p className="text-xs text-[#6b6b6b]">{t('eventManagement.field.loadingStaff')}</p>
                   )}
                   {staffOptions.map((staff) => {
                     const selected = selectedStaffIds.has(staff.id);
@@ -914,7 +943,7 @@ export default function EventManagement() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm text-[#284342] mb-2">
-                    Capacity (optional)
+                    {t('eventManagement.field.capacity')}
                   </label>
                   <input
                     type="number"
@@ -925,7 +954,7 @@ export default function EventManagement() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm text-[#284342] mb-2">Price (optional)</label>
+                  <label className="block text-sm text-[#284342] mb-2">{t('eventManagement.field.price')}</label>
                   <input
                     type="number"
                     min="0"
@@ -948,14 +977,14 @@ export default function EventManagement() {
                     className="w-4 h-4 accent-[#284342]"
                   />
                   <span className="text-sm text-[#284342]">
-                    Open registration — let students sign themselves up
+                    {t('eventManagement.field.openRegistration')}
                   </span>
                 </label>
 
                 {form.registrationOpen && (
                   <div>
                     <label className="block text-sm text-[#284342] mb-2">
-                      Registration Deadline (optional)
+                      {t('eventManagement.field.registrationDeadline')}
                     </label>
                     <input
                       type="datetime-local"
@@ -966,8 +995,7 @@ export default function EventManagement() {
                       className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                     />
                     <p className="text-[11px] text-[#6b6b6b] mt-1.5">
-                      Leave blank to keep registration open until you close it manually.
-                      Staff can still add registrants directly at any time.
+                      {t('eventManagement.field.registrationDeadlineHint')}
                     </p>
                   </div>
                 )}
@@ -987,14 +1015,14 @@ export default function EventManagement() {
                     className="w-4 h-4 accent-[#284342]"
                   />
                   <span className="text-sm text-[#284342]">
-                    Allow external signup — anyone with the link can register, no login needed
+                    {t('eventManagement.field.allowExternalSignup')}
                   </span>
                 </label>
 
                 {form.publicRegistrationEnabled && editingOccurrenceId && (
                   <div>
                     <label className="block text-sm text-[#284342] mb-2">
-                      Shareable signup link
+                      {t('eventManagement.field.shareableLink')}
                     </label>
                     <div className="flex items-center gap-2">
                       <input
@@ -1012,7 +1040,7 @@ export default function EventManagement() {
                         className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-white transition-colors flex items-center gap-1.5 text-sm shrink-0"
                       >
                         <Copy size={14} />
-                        Copy
+                        {t('eventManagement.action.copy')}
                       </button>
                     </div>
                   </div>
@@ -1020,33 +1048,32 @@ export default function EventManagement() {
 
                 {form.publicRegistrationEnabled && !editingOccurrenceId && (
                   <p className="text-[11px] text-[#6b6b6b]">
-                    Save the event first — the signup link becomes available once it exists.
+                    {t('eventManagement.field.saveFirstHint')}
                   </p>
                 )}
 
                 <div>
                   <label className="block text-sm text-[#284342] mb-2 flex items-center gap-1.5">
                     <Link2 size={13} />
-                    External registration link (optional)
+                    {t('eventManagement.field.externalRegistrationLink')}
                   </label>
                   <input
                     value={form.externalRegistrationUrl}
                     onChange={(e) =>
                       setForm((prev) => ({ ...prev, externalRegistrationUrl: e.target.value }))
                     }
-                    placeholder="https://partner-company.com/signup"
+                    placeholder={t('eventManagement.field.externalUrlPlaceholder')}
                     className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
                   />
                   <p className="text-[11px] text-[#6b6b6b] mt-1.5">
-                    If a partner is running registration on their own platform, paste their
-                    link here for reference. Signups made there aren't tracked in this system.
+                    {t('eventManagement.field.externalUrlHint')}
                   </p>
                 </div>
               </div>
 
               <div>
                 <label className="block text-sm text-[#284342] mb-2">
-                  Description (optional)
+                  {t('eventManagement.field.description')}
                 </label>
                 <textarea
                   value={form.description}
@@ -1059,10 +1086,16 @@ export default function EventManagement() {
               {editingOccurrenceId && (
                 <div className="p-4 bg-[#f8f8f6] rounded-lg border border-[rgba(40,67,66,0.1)] space-y-3">
                   <div className="flex items-center justify-between">
-                    <p className="text-sm text-[#284342]">Registrants</p>
+                    <p className="text-sm text-[#284342]">{t('eventManagement.registrants.title')}</p>
                     <span className="text-xs text-[#6b6b6b]">
-                      {registrants.length}
-                      {form.capacity ? ` / ${form.capacity}` : ''} registered
+                      {form.capacity
+                        ? t('eventManagement.registrants.summaryWithCapacity', {
+                            count: registrants.length,
+                            capacity: form.capacity,
+                          })
+                        : t('eventManagement.registrants.summaryNoCapacity', {
+                            count: registrants.length,
+                          })}
                     </span>
                   </div>
 
@@ -1086,14 +1119,13 @@ export default function EventManagement() {
 
                   {form.capacity && registrants.length >= Number(form.capacity) && (
                     <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-                      Capacity reached — self-serve and public signup are now closed. You can
-                      still add registrants manually below if needed.
+                      {t('eventManagement.registrants.capacityReached')}
                     </p>
                   )}
 
                   <div className="flex flex-wrap gap-2">
                     {registrants.length === 0 && (
-                      <p className="text-xs text-[#6b6b6b]">No one registered yet.</p>
+                      <p className="text-xs text-[#6b6b6b]">{t('eventManagement.registrants.none')}</p>
                     )}
                     {registrants.map((r) => (
                       <span
@@ -1101,7 +1133,7 @@ export default function EventManagement() {
                         className="inline-flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-full bg-white border border-[rgba(40,67,66,0.15)] text-[#284342]"
                       >
                         {r.name}
-                        {r.isGuest && <span className="text-[#6b6b6b]">(guest)</span>}
+                        {r.isGuest && <span className="text-[#6b6b6b]">{t('eventManagement.registrants.guestTag')}</span>}
                         <button
                           onClick={() => removeRegistrant(r.id)}
                           className="text-[#6b6b6b] hover:text-red-700"
@@ -1120,7 +1152,7 @@ export default function EventManagement() {
                     <input
                       value={studentSearch}
                       onChange={(e) => searchStudents(e.target.value)}
-                      placeholder="Add an existing student by name..."
+                      placeholder={t('eventManagement.registrants.searchPlaceholder')}
                       className="w-full pl-8 pr-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342] text-sm"
                     />
                     {studentResults.length > 0 && (
@@ -1144,13 +1176,13 @@ export default function EventManagement() {
                     <input
                       value={guestForm.name}
                       onChange={(e) => setGuestForm((prev) => ({ ...prev, name: e.target.value }))}
-                      placeholder="Guest / lead name"
+                      placeholder={t('eventManagement.registrants.guestNamePlaceholder')}
                       className="px-3 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342] text-sm"
                     />
                     <input
                       value={guestForm.phone}
                       onChange={(e) => setGuestForm((prev) => ({ ...prev, phone: e.target.value }))}
-                      placeholder="Phone (optional)"
+                      placeholder={t('eventManagement.registrants.guestPhonePlaceholder')}
                       className="px-3 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342] text-sm"
                     />
                     <button
@@ -1159,12 +1191,11 @@ export default function EventManagement() {
                       className="px-3 py-2 rounded-lg bg-[#284342] text-[#e9da95] text-sm hover:bg-[#1a2f2e] transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
                     >
                       <UserPlus size={14} />
-                      Add Guest
+                      {t('eventManagement.registrants.addGuest')}
                     </button>
                   </div>
                   <p className="text-[11px] text-[#6b6b6b]">
-                    Use "Guest / lead" for a prospective student who isn't in the system yet —
-                    handy for trial classes booked with a new lead.
+                    {t('eventManagement.registrants.guestHint')}
                   </p>
                 </div>
               )}
@@ -1181,14 +1212,18 @@ export default function EventManagement() {
                 onClick={closeModal}
                 className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
               >
-                Cancel
+                {t('eventManagement.action.cancel')}
               </button>
               <button
                 onClick={saveEvent}
                 disabled={saving}
                 className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors disabled:opacity-50"
               >
-                {saving ? 'Saving...' : editingOccurrenceId ? 'Save Changes' : 'Add Event'}
+                {saving
+                  ? t('eventManagement.action.saving')
+                  : editingOccurrenceId
+                  ? t('eventManagement.action.saveChanges')
+                  : t('eventManagement.addEvent')}
               </button>
             </div>
           </div>
@@ -1212,6 +1247,7 @@ function RegistrantsModal({
   occ: EventOccurrence;
   onClose: () => void;
 }) {
+  const { t } = useLanguage();
   const full = occ.capacity != null && occ.registrants.length >= occ.capacity;
 
   return (
@@ -1219,7 +1255,7 @@ function RegistrantsModal({
       <div className="bg-white rounded-xl max-w-md w-full p-6 max-h-[85vh] overflow-y-auto">
         <div className="flex items-center justify-between mb-4">
           <div>
-            <h2 className="text-xl text-[#284342]">Registrants</h2>
+            <h2 className="text-xl text-[#284342]">{t('eventManagement.registrantsModal.title')}</h2>
             <p className="text-sm text-[#6b6b6b] mt-1">{occ.title}</p>
           </div>
           <button onClick={onClose} className="text-[#6b6b6b] hover:text-[#284342]">
@@ -1229,12 +1265,18 @@ function RegistrantsModal({
 
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm text-[#284342]">
-            {occ.registrants.length}
-            {occ.capacity ? ` / ${occ.capacity}` : ''} registered
+            {occ.capacity
+              ? t('eventManagement.registrants.summaryWithCapacity', {
+                  count: occ.registrants.length,
+                  capacity: occ.capacity,
+                })
+              : t('eventManagement.registrants.summaryNoCapacity', {
+                  count: occ.registrants.length,
+                })}
           </span>
           {full && (
             <span className="text-xs px-2.5 py-1 rounded-full bg-amber-100 text-amber-700">
-              Full
+              {t('eventManagement.registrantsModal.full')}
             </span>
           )}
         </div>
@@ -1252,7 +1294,7 @@ function RegistrantsModal({
 
         <div className="space-y-2">
           {occ.registrants.length === 0 && (
-            <p className="text-sm text-[#6b6b6b] py-4 text-center">No one registered yet.</p>
+            <p className="text-sm text-[#6b6b6b] py-4 text-center">{t('eventManagement.registrants.none')}</p>
           )}
 
           {occ.registrants.map((r) => (
@@ -1263,7 +1305,7 @@ function RegistrantsModal({
               <span className="text-sm text-[#284342]">{r.name}</span>
               {r.isGuest && (
                 <span className="text-xs px-2 py-0.5 rounded-full bg-white border border-[rgba(40,67,66,0.15)] text-[#6b6b6b]">
-                  Guest
+                  {t('eventManagement.registrantsModal.guestBadge')}
                 </span>
               )}
             </div>
@@ -1274,7 +1316,7 @@ function RegistrantsModal({
           onClick={onClose}
           className="w-full mt-6 px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
         >
-          Close
+          {t('eventManagement.registrantsModal.close')}
         </button>
       </div>
     </div>
@@ -1308,6 +1350,7 @@ function EventSection({
   onViewRegistrants: (occ: EventOccurrence) => void;
   muted?: boolean;
 }) {
+  const { t } = useLanguage();
   return (
     <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
       <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
@@ -1329,7 +1372,7 @@ function EventSection({
                 <div className="flex items-center gap-3 mb-2 flex-wrap">
                   <h3 className="text-lg text-[#284342]">{occ.title}</h3>
                   <span className="text-xs px-3 py-1 rounded-full bg-purple-100 text-purple-700">
-                    {eventKindLabel(occ.eventKind)}
+                    {eventKindLabel(occ.eventKind, t)}
                   </span>
                   <span
                     className={`text-xs px-3 py-1 rounded-full ${
@@ -1340,29 +1383,29 @@ function EventSection({
                         : 'bg-blue-100 text-blue-700'
                     }`}
                   >
-                    {occ.status}
+                    {eventStatusLabel(occ.status, t)}
                   </span>
                   {occ.status === 'scheduled' && <RegistrationBadge occ={occ} />}
                 </div>
 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-                  <Info icon={<Calendar size={14} />} label="Date" value={occ.date} />
+                  <Info icon={<Calendar size={14} />} label={t('eventManagement.info.date')} value={occ.date} />
                   <Info
                     icon={<Clock size={14} />}
-                    label="Time"
+                    label={t('eventManagement.info.time')}
                     value={`${occ.startTime} - ${occ.endTime}`}
                   />
-                  <Info icon={<MapPin size={14} />} label="Venue" value={occ.venueName} />
+                  <Info icon={<MapPin size={14} />} label={t('eventManagement.info.venue')} value={occ.venueName} />
                   <Info
                     icon={<Users size={14} />}
-                    label="Registered"
+                    label={t('eventManagement.info.registered')}
                     value={`${occ.registrants.length}${occ.capacity ? ` / ${occ.capacity}` : ''}`}
                   />
                 </div>
 
                 {occ.staff.length > 0 && (
                   <div className="flex flex-wrap items-center gap-2 mt-3">
-                    <span className="text-xs text-[#6b6b6b]">Staff:</span>
+                    <span className="text-xs text-[#6b6b6b]">{t('eventManagement.staffLabel')}</span>
                     {occ.staff.map((s) => (
                       <span
                         key={s.id}
@@ -1382,22 +1425,28 @@ function EventSection({
                   onClick={() => onEdit(occ)}
                   className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm"
                 >
-                  Edit
+                  {t('eventManagement.action.edit')}
                 </button>
                 <button
                   onClick={() => onCancel(occ)}
                   className="px-4 py-2 rounded-lg border border-red-200 text-red-700 hover:bg-red-50 transition-colors text-sm flex items-center gap-1.5"
                 >
                   <Trash2 size={14} />
-                  Cancel Event
+                  {t('eventManagement.action.cancelEvent')}
                 </button>
                 <button
                   onClick={() => onViewRegistrants(occ)}
                   className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm flex items-center gap-1.5"
                 >
                   <Users size={14} />
-                  Registrants ({occ.registrants.length}
-                  {occ.capacity ? `/${occ.capacity}` : ''})
+                  {occ.capacity
+                    ? t('eventManagement.registrants.buttonWithCapacity', {
+                        count: occ.registrants.length,
+                        capacity: occ.capacity,
+                      })
+                    : t('eventManagement.registrants.buttonNoCapacity', {
+                        count: occ.registrants.length,
+                      })}
                 </button>
               </div>
             )}
@@ -1409,7 +1458,7 @@ function EventSection({
                   className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm flex items-center gap-1.5"
                 >
                   <Users size={14} />
-                  View Registrants
+                  {t('eventManagement.action.viewRegistrants')}
                 </button>
               </div>
             )}
@@ -1419,7 +1468,7 @@ function EventSection({
                 {studentEventIds.has(occ.id) ? (
                   <span className="inline-flex items-center gap-1.5 text-sm text-green-700">
                     <ClipboardCheck size={16} />
-                    You're registered
+                    {t('eventManagement.student.registered')}
                   </span>
                 ) : isRegistrationOpenNow(occ) && !isEventFull(occ) ? (
                   <button
@@ -1427,12 +1476,14 @@ function EventSection({
                     disabled={signingUpId === occ.id}
                     className="px-4 py-2 rounded-lg bg-[#284342] text-[#e9da95] hover:bg-[#1a2f2e] transition-colors text-sm disabled:opacity-50"
                   >
-                    {signingUpId === occ.id ? 'Signing up...' : 'Sign Up'}
+                    {signingUpId === occ.id
+                      ? t('eventManagement.student.signingUp')
+                      : t('eventManagement.student.signUp')}
                   </button>
                 ) : isEventFull(occ) ? (
-                  <span className="text-sm text-[#6b6b6b]">Event is full.</span>
+                  <span className="text-sm text-[#6b6b6b]">{t('eventManagement.student.full')}</span>
                 ) : (
-                  <span className="text-sm text-[#6b6b6b]">Registration is closed.</span>
+                  <span className="text-sm text-[#6b6b6b]">{t('eventManagement.student.closed')}</span>
                 )}
               </div>
             )}
@@ -1444,10 +1495,12 @@ function EventSection({
 }
 
 function RegistrationBadge({ occ }: { occ: EventOccurrence }) {
+  const { t } = useLanguage();
+
   if (!occ.registrationOpen) {
     return (
       <span className="text-xs px-3 py-1 rounded-full bg-[#f8f8f6] text-[#6b6b6b] border border-[rgba(40,67,66,0.1)]">
-        Registration Closed
+        {t('eventManagement.badge.closed')}
       </span>
     );
   }
@@ -1455,7 +1508,7 @@ function RegistrationBadge({ occ }: { occ: EventOccurrence }) {
   if (isEventFull(occ)) {
     return (
       <span className="text-xs px-3 py-1 rounded-full bg-amber-100 text-amber-700">
-        Full
+        {t('eventManagement.badge.full')}
       </span>
     );
   }
@@ -1463,7 +1516,7 @@ function RegistrationBadge({ occ }: { occ: EventOccurrence }) {
   if (!isRegistrationOpenNow(occ)) {
     return (
       <span className="text-xs px-3 py-1 rounded-full bg-[#f8f8f6] text-[#6b6b6b] border border-[rgba(40,67,66,0.1)]">
-        Registration Closed
+        {t('eventManagement.badge.closed')}
       </span>
     );
   }
@@ -1471,8 +1524,10 @@ function RegistrationBadge({ occ }: { occ: EventOccurrence }) {
   return (
     <span className="text-xs px-3 py-1 rounded-full bg-green-100 text-green-700">
       {occ.registrationDeadline
-        ? `Open until ${new Date(occ.registrationDeadline).toLocaleDateString()}`
-        : 'Open Registration'}
+        ? t('eventManagement.badge.openUntil', {
+            date: new Date(occ.registrationDeadline).toLocaleDateString(),
+          })
+        : t('eventManagement.badge.open')}
     </span>
   );
 }

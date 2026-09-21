@@ -3,12 +3,23 @@ import { Clock, Calendar, XCircle, Plus, Trash2 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { getCurrentUser } from '../../utils/session';
 import { getCurrentTeacherId } from '../../utils/teacherAccess';
+import { useLanguage } from '../../context/LanguageContext';
+
+const WEEKDAY_KEYS = [
+  'sunday',
+  'monday',
+  'tuesday',
+  'wednesday',
+  'thursday',
+  'friday',
+  'saturday',
+];
 
 interface TimeSlot {
   id: string;
-  day: string;
+  dayKey: string;
   time: string;
-  reason: string;
+  reason: string | null;
 }
 
 interface TeacherSchedule {
@@ -25,6 +36,7 @@ interface MySlot {
 }
 
 export default function TeacherAvailability() {
+  const { t } = useLanguage();
   const currentUser = getCurrentUser();
   const isTeacherView =
     currentUser.role === 'teacher' || currentUser.role === 'assistant_teacher';
@@ -78,17 +90,17 @@ export default function TeacherAvailability() {
     const grouped: Record<string, TimeSlot[]> = {};
 
     (data || []).forEach((slot: any) => {
-      const teacherName = getTeacherName(slot.teachers);
+      const teacherName = getTeacherName(slot.teachers, t);
       const date = new Date(slot.available_date);
-      const day = date.toLocaleDateString('en-US', { weekday: 'long' });
+      const dayKey = WEEKDAY_KEYS[date.getDay()];
 
       if (!grouped[teacherName]) grouped[teacherName] = [];
 
       grouped[teacherName].push({
         id: slot.id,
-        day,
+        dayKey,
         time: `${slot.start_time?.slice(0, 5)} - ${slot.end_time?.slice(0, 5)}`,
-        reason: slot.reason || 'Unavailable',
+        reason: slot.reason || null,
       });
     });
 
@@ -133,17 +145,17 @@ export default function TeacherAvailability() {
     setAddError(null);
 
     if (!myTeacherId) {
-      setAddError('Unable to identify your teacher profile.');
+      setAddError(t('teacherAvailability.error.noTeacherProfile'));
       return;
     }
 
     if (!newSlot.date || !newSlot.startTime || !newSlot.endTime) {
-      setAddError('Pick a date, start time, and end time.');
+      setAddError(t('teacherAvailability.error.pickDateTimes'));
       return;
     }
 
     if (newSlot.endTime <= newSlot.startTime) {
-      setAddError('End time must be after start time.');
+      setAddError(t('teacherAvailability.error.endAfterStart'));
       return;
     }
 
@@ -202,24 +214,24 @@ export default function TeacherAvailability() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl text-[#284342]">Teacher Availability</h1>
+        <h1 className="text-3xl text-[#284342]">{t('teacherAvailability.title')}</h1>
         <p className="text-[#6b6b6b] mt-1">
           {isTeacherView
-            ? "You're assumed open for scheduling by default — only add a time here if you WON'T be available (outstation on another job, a personal appointment, etc). This is what admin checks when scheduling classes and appointments."
-            : "Teachers are open for scheduling by default. This shows the times they've marked themselves unavailable."}
+            ? t('teacherAvailability.subtitle.teacher')
+            : t('teacherAvailability.subtitle.admin')}
         </p>
       </div>
 
       {isTeacherView && (
         <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
           <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
-            <h2 className="text-lg text-[#284342]">Mark Yourself Unavailable</h2>
+            <h2 className="text-lg text-[#284342]">{t('teacherAvailability.markUnavailable.title')}</h2>
           </div>
 
           <div className="p-6 space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
               <div>
-                <label className="block text-xs text-[#6b6b6b] mb-1">Date</label>
+                <label className="block text-xs text-[#6b6b6b] mb-1">{t('teacherAvailability.field.date')}</label>
                 <input
                   type="date"
                   value={newSlot.date}
@@ -232,7 +244,7 @@ export default function TeacherAvailability() {
 
               <div>
                 <label className="block text-xs text-[#6b6b6b] mb-1">
-                  Start Time
+                  {t('teacherAvailability.field.startTime')}
                 </label>
                 <input
                   type="time"
@@ -246,7 +258,7 @@ export default function TeacherAvailability() {
 
               <div>
                 <label className="block text-xs text-[#6b6b6b] mb-1">
-                  End Time
+                  {t('teacherAvailability.field.endTime')}
                 </label>
                 <input
                   type="time"
@@ -264,20 +276,20 @@ export default function TeacherAvailability() {
                 className="px-4 py-2 rounded-lg bg-[#284342] text-[#e9da95] hover:bg-[#1a2f2e] transition-colors text-sm flex items-center justify-center gap-2 disabled:opacity-50"
               >
                 <Plus size={16} />
-                {adding ? 'Adding...' : 'Mark Unavailable'}
+                {adding ? t('teacherAvailability.adding') : t('teacherAvailability.markUnavailableButton')}
               </button>
             </div>
 
             <div>
               <label className="block text-xs text-[#6b6b6b] mb-1">
-                Reason (optional)
+                {t('teacherAvailability.field.reasonOptional')}
               </label>
               <input
                 value={newSlot.reason}
                 onChange={(e) =>
                   setNewSlot((prev) => ({ ...prev, reason: e.target.value }))
                 }
-                placeholder="e.g., Outstation for a makeup job, Personal appointment"
+                placeholder={t('teacherAvailability.field.reasonPlaceholder')}
                 className="w-full px-3 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
               />
             </div>
@@ -291,13 +303,13 @@ export default function TeacherAvailability() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               {mySlotsLoading && (
                 <p className="text-sm text-[#6b6b6b] col-span-full">
-                  Loading your unavailable times...
+                  {t('teacherAvailability.loadingMySlots')}
                 </p>
               )}
 
               {!mySlotsLoading && mySlots.length === 0 && (
                 <p className="text-sm text-[#6b6b6b] col-span-full">
-                  You're open for scheduling — no unavailable times marked.
+                  {t('teacherAvailability.noMySlots')}
                 </p>
               )}
 
@@ -328,7 +340,7 @@ export default function TeacherAvailability() {
                       onClick={() => deleteSlot(slot.id)}
                       disabled={deletingSlotId === slot.id}
                       className="p-2 rounded-lg text-red-700 hover:bg-red-50 transition-colors disabled:opacity-50"
-                      title="Remove this — you'll be open for scheduling again"
+                      title={t('teacherAvailability.removeSlotTitle')}
                     >
                       <Trash2 size={16} />
                     </button>
@@ -340,15 +352,15 @@ export default function TeacherAvailability() {
       )}
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        <SummaryCard label="Total Teachers" value={totalTeachers} color="text-[#284342]" />
+        <SummaryCard label={t('teacherAvailability.summary.totalTeachers')} value={totalTeachers} color="text-[#284342]" />
         <SummaryCard
-          label="Unavailable Windows (All Teachers)"
+          label={t('teacherAvailability.summary.unavailableWindows')}
           value={totalBlockedWindows}
           color="text-red-700"
         />
         {isTeacherView && (
           <SummaryCard
-            label="My Upcoming Unavailable Times"
+            label={t('teacherAvailability.summary.myUpcoming')}
             value={upcomingMyBlocks}
             color="text-amber-700"
           />
@@ -358,14 +370,13 @@ export default function TeacherAvailability() {
       <div className="space-y-6">
         {loading && (
           <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
-            Loading teacher availability...
+            {t('teacherAvailability.loadingAvailability')}
           </div>
         )}
 
         {!loading && teachers.length === 0 && (
           <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)] text-[#6b6b6b]">
-            No teachers have marked any unavailable times — everyone's open for
-            scheduling.
+            {t('teacherAvailability.noneUnavailable')}
           </div>
         )}
 
@@ -392,7 +403,7 @@ export default function TeacherAvailability() {
                         <div className="flex items-center gap-2">
                           <Calendar size={16} className="text-[#284342]" />
                           <span className="text-sm text-[#284342]">
-                            {slot.day}
+                            {t(`teacherAvailability.weekday.${slot.dayKey}`)}
                           </span>
                         </div>
 
@@ -407,7 +418,7 @@ export default function TeacherAvailability() {
                       </div>
 
                       <span className="text-xs px-3 py-1 rounded-full inline-block bg-red-100 text-red-700">
-                        {slot.reason}
+                        {slot.reason || t('teacherAvailability.status.unavailable')}
                       </span>
                     </div>
                   ))}
@@ -437,13 +448,17 @@ function SummaryCard({
   );
 }
 
-function getTeacherName(teacher: any) {
-  if (!teacher) return 'Unnamed Teacher';
+function getTeacherName(teacher: any, t: (key: string) => string) {
+  if (!teacher) return t('teacherAvailability.unnamedTeacher');
 
   const actualTeacher = Array.isArray(teacher) ? teacher[0] : teacher;
   const user = Array.isArray(actualTeacher?.users)
     ? actualTeacher.users[0]
     : actualTeacher?.users;
 
-  return user?.full_name || actualTeacher?.specialization || 'Unnamed Teacher';
+  return (
+    user?.full_name ||
+    actualTeacher?.specialization ||
+    t('teacherAvailability.unnamedTeacher')
+  );
 }

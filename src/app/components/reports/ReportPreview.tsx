@@ -1,5 +1,6 @@
 import { X, Download, Printer, FileText } from 'lucide-react';
 import type { GeneratedReport } from '../../utils/reportExporter';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface ReportPreviewProps {
   report: GeneratedReport;
@@ -16,6 +17,7 @@ export default function ReportPreview({
   onDownloadExcel,
   onPrint,
 }: ReportPreviewProps) {
+  const { t } = useLanguage();
   const headers = Object.keys(report.rows[0] || {});
 
   return (
@@ -25,7 +27,7 @@ export default function ReportPreview({
           <div>
             <h2 className="text-xl text-[#284342]">{report.title}</h2>
             <p className="text-sm text-[#6b6b6b] mt-1">
-              Generated: {report.generatedAt}
+              {t('reports.preview.generatedLabel', { date: report.generatedAt })}
             </p>
           </div>
 
@@ -69,7 +71,7 @@ export default function ReportPreview({
                       colSpan={headers.length || 1}
                       className="px-4 py-8 text-center text-[#6b6b6b]"
                     >
-                      No data available.
+                      {t('reports.preview.noData')}
                     </td>
                   </tr>
                 )}
@@ -96,7 +98,7 @@ export default function ReportPreview({
             onClick={onClose}
             className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
           >
-            Close
+            {t('reports.preview.close')}
           </button>
 
           <button
@@ -104,7 +106,7 @@ export default function ReportPreview({
             className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
           >
             <Download size={16} />
-            Download PDF
+            {t('reports.preview.downloadPdf')}
           </button>
 
           <button
@@ -112,7 +114,7 @@ export default function ReportPreview({
             className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors flex items-center gap-2"
           >
             <FileText size={16} />
-            Excel
+            {t('reports.preview.excel')}
           </button>
 
           <button
@@ -120,7 +122,7 @@ export default function ReportPreview({
             className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors flex items-center gap-2"
           >
             <Printer size={16} />
-            Print
+            {t('reports.preview.print')}
           </button>
         </div>
       </div>

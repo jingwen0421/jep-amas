@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Mail, Send, Trash2, RefreshCw } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
-import { roles, formatRole } from '../../utils/userHelpers';
+import { roles, translateRole } from '../../utils/userHelpers';
+import { useConfirm } from '../../context/ConfirmDialogContext';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface Invitation {
   id: string;
@@ -12,6 +14,8 @@ interface Invitation {
 }
 
 export default function InvitationCenter() {
+  const { t } = useLanguage();
+  const confirmDialog = useConfirm();
   const [email, setEmail] = useState('');
   const [role, setRole] = useState('teacher');
   const [loading, setLoading] = useState(true);
@@ -42,7 +46,7 @@ export default function InvitationCenter() {
 
   async function sendInvitation() {
     if (!email.trim()) {
-      alert('Please enter an email address.');
+      alert(t('userManagement.invitations.error.emailRequired'));
       return;
     }
 
@@ -56,7 +60,7 @@ export default function InvitationCenter() {
     });
 
     if (error) {
-      alert(`Failed to send invitation: ${error.message}`);
+      alert(t('userManagement.invitations.error.sendFailed', { error: error.message }));
       setSending(false);
       return;
     }
@@ -81,7 +85,10 @@ export default function InvitationCenter() {
   }
 
   async function cancelInvitation(invitation: Invitation) {
-    const confirmed = confirm(`Cancel invitation for ${invitation.email}?`);
+    const confirmed = await confirmDialog(
+      t('userManagement.invitations.confirmCancel', { email: invitation.email }),
+      { variant: 'danger' }
+    );
     if (!confirmed) return;
 
     const { error } = await supabase
@@ -90,7 +97,7 @@ export default function InvitationCenter() {
       .eq('id', invitation.id);
 
     if (error) {
-      alert(`Failed to cancel invitation: ${error.message}`);
+      alert(t('userManagement.invitations.error.cancelFailed', { error: error.message }));
       return;
     }
 
@@ -107,7 +114,7 @@ export default function InvitationCenter() {
       .eq('id', invitation.id);
 
     if (error) {
-      alert(`Failed to resend invitation: ${error.message}`);
+      alert(t('userManagement.invitations.error.resendFailed', { error: error.message }));
       return;
     }
 
@@ -129,13 +136,13 @@ export default function InvitationCenter() {
 
   return (
     <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
-      <h2 className="text-lg text-[#284342] mb-5">Invitation Center</h2>
+      <h2 className="text-lg text-[#284342] mb-5">{t('userManagement.invitations.title')}</h2>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
         <input
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          placeholder="Email address"
+          placeholder={t('userManagement.invitations.emailPlaceholder')}
           className="px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] focus:outline-none focus:ring-2 focus:ring-[#284342]"
         />
 
@@ -146,7 +153,7 @@ export default function InvitationCenter() {
         >
           {roles.map((item) => (
             <option key={item} value={item}>
-              {formatRole(item)}
+              {translateRole(item, t)}
             </option>
           ))}
         </select>
@@ -157,17 +164,17 @@ export default function InvitationCenter() {
           className="bg-[#284342] text-[#e9da95] rounded-lg flex items-center justify-center gap-2 disabled:opacity-60"
         >
           <Send size={18} />
-          {sending ? 'Sending...' : 'Send Invitation'}
+          {sending ? t('userManagement.invitations.sending') : t('userManagement.invitations.sendInvitation')}
         </button>
       </div>
 
       <div className="space-y-3">
         {loading && (
-          <p className="text-sm text-[#6b6b6b]">Loading invitations...</p>
+          <p className="text-sm text-[#6b6b6b]">{t('userManagement.invitations.loading')}</p>
         )}
 
         {!loading && invitations.length === 0 && (
-          <p className="text-sm text-[#6b6b6b]">No invitations found.</p>
+          <p className="text-sm text-[#6b6b6b]">{t('userManagement.invitations.empty')}</p>
         )}
 
         {!loading &&
@@ -183,7 +190,7 @@ export default function InvitationCenter() {
                 </div>
 
                 <p className="text-xs text-[#6b6b6b] mt-2">
-                  {formatRole(invite.role)} •{' '}
+                  {translateRole(invite.role, t)} •{' '}
                   {new Date(invite.invited_at).toLocaleString()}
                 </p>
               </div>
@@ -198,13 +205,13 @@ export default function InvitationCenter() {
                       : 'bg-red-100 text-red-700'
                   }`}
                 >
-                  {formatStatus(invite.status)}
+                  {translateInvitationStatus(invite.status, t)}
                 </span>
 
                 <button
                   onClick={() => resendInvitation(invite)}
                   className="p-2 hover:bg-[#e9da95]/20 rounded-lg"
-                  title="Resend"
+                  title={t('userManagement.invitations.resend')}
                 >
                   <RefreshCw size={16} className="text-[#284342]" />
                 </button>
@@ -212,7 +219,7 @@ export default function InvitationCenter() {
                 <button
                   onClick={() => cancelInvitation(invite)}
                   className="p-2 hover:bg-red-50 rounded-lg"
-                  title="Cancel"
+                  title={t('userManagement.invitations.cancel')}
                 >
                   <Trash2 size={16} className="text-red-600" />
                 </button>
@@ -224,6 +231,9 @@ export default function InvitationCenter() {
   );
 }
 
-function formatStatus(status: string) {
+function translateInvitationStatus(status: string, t: (key: string, params?: Record<string, string | number>) => string) {
+  const key = `userManagement.invitations.status.${String(status || '').toLowerCase()}`;
+  const translated = t(key);
+  if (translated !== key) return translated;
   return status.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase());
 }

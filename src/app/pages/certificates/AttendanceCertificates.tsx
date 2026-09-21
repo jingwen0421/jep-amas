@@ -5,6 +5,7 @@ import jsPDF from 'jspdf';
 import { getCurrentUser } from '../../utils/session';
 import { getCurrentStudentId } from '../../utils/studentAccess';
 import html2canvas from 'html2canvas';
+import { useLanguage } from '../../context/LanguageContext';
 
 interface AttendanceCertificate {
   id: string;
@@ -29,6 +30,7 @@ interface EligibleStudent {
 }
 
 export default function AttendanceCertificates() {
+  const { t } = useLanguage();
   const [certificates, setCertificates] = useState<AttendanceCertificate[]>([]);
   const [eligibleStudents, setEligibleStudents] = useState<EligibleStudent[]>([]);
   const [selectedCert, setSelectedCert] = useState<AttendanceCertificate | null>(null);
@@ -99,7 +101,7 @@ export default function AttendanceCertificates() {
     studentId: cert.student_id || '',
     courseId: cert.course_id || '',
 
-    student: getStudentName(cert.students),
+    student: getStudentName(cert.students, t),
     course: getCourseName(cert.courses, cert.students),
     attendanceRate: getAttendanceRate(cert.students),
     issueDate: cert.issued_date || '-',
@@ -147,7 +149,7 @@ export default function AttendanceCertificates() {
           enrollmentId: enrollment.id,
           studentId: student.id,
           courseId: course.id,
-          student: student.full_name || 'Unnamed Student',
+          student: student.full_name || t('dashboard.fallback.unnamedStudent'),
           course: course.course_name || '-',
           attendanceRate,
         });
@@ -178,7 +180,7 @@ export default function AttendanceCertificates() {
     );
 
     if (!selected) {
-      alert('Please select a student.');
+      alert(t('payments.plans.selectStudent'));
       return;
     }
 
@@ -191,7 +193,7 @@ export default function AttendanceCertificates() {
       .maybeSingle();
 
     if (existing) {
-      alert('This student already has a full attendance certificate for this course.');
+      alert(t('certificates.attendance.alreadyIssued'));
       return;
     }
 
@@ -213,7 +215,7 @@ export default function AttendanceCertificates() {
       .single();
 
     if (error) {
-      alert(`Failed to issue certificate: ${error.message}`);
+      alert(t('certificates.completion.errorIssueFailed', { message: error.message }));
       return;
     }
 
@@ -240,7 +242,7 @@ export default function AttendanceCertificates() {
 
  async function downloadCertificate(cert: AttendanceCertificate) {
   if (!certificateRef.current) {
-    alert('Please preview the certificate first.');
+    alert(t('certificates.completion.previewFirst'));
     return;
   }
   
@@ -282,11 +284,11 @@ export default function AttendanceCertificates() {
     const printWindow = window.open('', '_blank');
 
     if (!printWindow) {
-      alert('Unable to open print window.');
+      alert(t('payments.receipts.errorPrintWindow'));
       return;
     }
 
-    printWindow.document.write(generateCertificateHtml(cert));
+    printWindow.document.write(generateCertificateHtml(cert, t));
     printWindow.document.close();
     printWindow.print();
   }
@@ -300,12 +302,12 @@ export default function AttendanceCertificates() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl text-[#284342]">
-            Full Attendance Certificates
+            {t('certificates.attendance.title')}
           </h1>
           <p className="text-[#6b6b6b] mt-1">
   {isStudentView
-    ? 'View and download your full attendance certificates'
-    : 'Award certificates for students with full attendance'}
+    ? t('certificates.attendance.subtitleStudent')
+    : t('certificates.attendance.subtitle')}
 </p>
         </div>
 
@@ -315,7 +317,7 @@ export default function AttendanceCertificates() {
     className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors flex items-center gap-2"
   >
     <Plus size={18} />
-    Issue Certificate
+    {t('certificates.completion.issueCertificate')}
   </button>
 )}
       </div>
@@ -324,17 +326,17 @@ export default function AttendanceCertificates() {
   <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
     <SummaryCard
       icon={<CheckCircle size={24} className="text-green-700" />}
-      label="Issued"
+      label={t('certificates.completion.issued')}
       value={issued}
     />
     <SummaryCard
       icon={<Award size={24} className="text-blue-700" />}
-      label="Eligible Students"
+      label={t('certificates.completion.eligibleStudents')}
       value={ready}
     />
     <SummaryCard
       icon={<Award size={24} className="text-yellow-700" />}
-      label="Pending"
+      label={t('common.pending')}
       value={pending}
     />
   </div>
@@ -342,20 +344,20 @@ export default function AttendanceCertificates() {
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-lg text-[#284342]">Attendance Certificates</h2>
+          <h2 className="text-lg text-[#284342]">{t('certificates.attendance.title')}</h2>
         </div>
 
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead className="bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
               <tr>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Certificate No.</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Student</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Course</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Attendance Rate</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Issue Date</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Status</th>
-                <th className="px-6 py-4 text-left text-sm text-[#284342]">Actions</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('certificates.completion.certificateNo')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colStudent')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colCourse')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('certificates.attendance.attendanceRate')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('certificates.attendance.issueDate')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colStatus')}</th>
+                <th className="px-6 py-4 text-left text-sm text-[#284342]">{t('payments.installments.colActions')}</th>
               </tr>
             </thead>
 
@@ -363,7 +365,7 @@ export default function AttendanceCertificates() {
               {loading && (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-[#6b6b6b]">
-                    Loading attendance certificates...
+                    {t('certificates.attendance.loading')}
                   </td>
                 </tr>
               )}
@@ -371,7 +373,7 @@ export default function AttendanceCertificates() {
               {!loading && certificates.length === 0 && (
                 <tr>
                   <td colSpan={7} className="px-6 py-8 text-center text-[#6b6b6b]">
-                    No attendance certificates found.
+                    {t('certificates.attendance.empty')}
                   </td>
                 </tr>
               )}
@@ -398,7 +400,7 @@ export default function AttendanceCertificates() {
                     </td>
                     <td className="px-6 py-4">
                       <span className="text-xs px-3 py-1 rounded-full bg-green-100 text-green-700">
-                        {cert.status}
+                        {cert.status === 'Issued' ? t('payments.receipts.statusIssued') : t('certificates.completion.statusReady')}
                       </span>
                     </td>
                     <td className="px-6 py-4">
@@ -406,7 +408,7 @@ export default function AttendanceCertificates() {
                         <button
                           onClick={() => setSelectedCert(cert)}
                           className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                          title="Preview"
+                          title={t('payments.receipts.preview')}
                         >
                           <Eye size={16} className="text-[#284342]" />
                         </button>
@@ -414,7 +416,7 @@ export default function AttendanceCertificates() {
                         <button
                           onClick={() => printCertificate(cert)}
                           className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                          title="Print"
+                          title={t('payments.receipts.print')}
                         >
                           <Printer size={16} className="text-[#284342]" />
                         </button>
@@ -422,7 +424,7 @@ export default function AttendanceCertificates() {
                         <button
                           onClick={() => downloadCertificate(cert)}
                           className="p-2 hover:bg-[#e9da95]/20 rounded-lg transition-colors"
-                          title="Download PDF"
+                          title={t('certificates.completion.downloadPdf')}
                         >
                           <Download size={16} className="text-[#284342]" />
                         </button>
@@ -437,9 +439,9 @@ export default function AttendanceCertificates() {
 
       {certificates[0] && (
         <div className="bg-white rounded-xl p-8 border border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-xl text-[#284342] mb-6">Certificate Preview</h2>
+          <h2 className="text-xl text-[#284342] mb-6">{t('certificates.completion.certificatePreview')}</h2>
           <div ref={certificateRef}>
-            <CertificatePreview cert={certificates[0]} />
+            <CertificatePreview cert={certificates[0]} t={t} />
           </div>
         </div>
       )}
@@ -448,14 +450,14 @@ export default function AttendanceCertificates() {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-xl max-w-5xl w-full max-h-[90vh] overflow-auto">
             <div className="p-6 border-b border-[rgba(40,67,66,0.1)] flex items-center justify-between">
-              <h2 className="text-xl text-[#284342]">Certificate Preview</h2>
+              <h2 className="text-xl text-[#284342]">{t('certificates.completion.certificatePreview')}</h2>
               <button onClick={() => setSelectedCert(null)}>
                 <X size={20} className="text-[#284342]" />
               </button>
             </div>
 
             <div className="p-6">
-              <CertificatePreview cert={selectedCert} />
+              <CertificatePreview cert={selectedCert} t={t} />
             </div>
 
             <div className="p-6 border-t border-[rgba(40,67,66,0.1)] flex items-center gap-3">
@@ -463,14 +465,14 @@ export default function AttendanceCertificates() {
                 onClick={() => setSelectedCert(null)}
                 className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
               >
-                Close
+                {t('payments.receipts.close')}
               </button>
 
               <button
                 onClick={() => downloadCertificate(selectedCert)}
                 className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors"
               >
-                Download PDF
+                {t('certificates.completion.downloadPdf')}
               </button>
             </div>
           </div>
@@ -482,7 +484,7 @@ export default function AttendanceCertificates() {
           <div className="bg-white rounded-xl max-w-xl w-full p-6">
             <div className="flex items-center justify-between mb-6">
               <h2 className="text-xl text-[#284342]">
-                Issue Full Attendance Certificate
+                {t('certificates.attendance.issueModalTitle')}
               </h2>
               <button onClick={() => setShowModal(false)}>
                 <X size={20} className="text-[#284342]" />
@@ -491,14 +493,14 @@ export default function AttendanceCertificates() {
 
             <div>
               <label className="block text-sm text-[#284342] mb-2">
-                Student / Course
+                {t('certificates.completion.studentCourseLabel')}
               </label>
               <select
                 value={selectedEligible}
                 onChange={(e) => setSelectedEligible(e.target.value)}
                 className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
               >
-                <option value="">Select Student</option>
+                <option value="">{t('payments.plans.selectStudentOption')}</option>
                 {eligibleStudents.map((item) => (
                   <option key={item.enrollmentId} value={item.enrollmentId}>
                     {item.student} - {item.course} ({item.attendanceRate}%)
@@ -512,14 +514,14 @@ export default function AttendanceCertificates() {
                 onClick={() => setShowModal(false)}
                 className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
 
               <button
                 onClick={issueAttendanceCertificate}
                 className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors"
               >
-                Issue Certificate
+                {t('certificates.completion.issueCertificate')}
               </button>
             </div>
           </div>
@@ -529,60 +531,60 @@ export default function AttendanceCertificates() {
   );
 }
 
-function CertificatePreview({ cert }: { cert: AttendanceCertificate }) {
+function CertificatePreview({ cert, t }: { cert: AttendanceCertificate; t: (key: string, params?: Record<string, string | number>) => string }) {
   return (
     <div className="certificate border-4 border-[#284342] rounded-lg p-12 text-center bg-gradient-to-br from-white to-[#f8f8f6]">
       <Award size={70} className="mx-auto text-[#e9da95] mb-6" />
 
       <h1 className="text-4xl text-[#284342] mb-4">
-        Full Attendance Certificate
+        {t('certificates.attendance.certificateTitle')}
       </h1>
 
       <div className="w-32 h-1 bg-[#e9da95] mx-auto mb-8" />
 
-      <p className="text-lg text-[#6b6b6b] mb-2">This certifies that</p>
+      <p className="text-lg text-[#6b6b6b] mb-2">{t('certificates.completion.thisCertifiesThat')}</p>
 
       <h2 className="text-3xl text-[#284342] mb-6">{cert.student}</h2>
 
       <p className="text-lg text-[#6b6b6b] mb-2">
-        has achieved full attendance for
+        {t('certificates.attendance.hasAchievedFullAttendance')}
       </p>
 
       <h3 className="text-2xl text-[#284342] mb-8">{cert.course}</h3>
 
       <p className="text-lg text-green-700 mb-6">
-        Attendance Rate: {cert.attendanceRate}%
+        {t('certificates.attendance.attendanceRateLabel', { rate: cert.attendanceRate })}
       </p>
 
       <p className="text-sm text-[#6b6b6b] mb-2">
-        Certificate No: {cert.certificateNumber}
+        {t('certificates.completion.certificateNoLabel', { number: cert.certificateNumber })}
       </p>
 
       <p className="text-sm text-[#6b6b6b] mb-10">
-        Date: {cert.issueDate}
+        {t('certificates.completion.dateLabel', { date: cert.issueDate })}
       </p>
 
       <div className="flex justify-between items-end mt-12">
         <div>
           <div className="w-48 h-px bg-[#284342] mb-2" />
-          <p className="text-sm text-[#6b6b6b]">Director Signature</p>
+          <p className="text-sm text-[#6b6b6b]">{t('certificates.completion.directorSignature')}</p>
         </div>
 
         <div>
           <p className="text-lg text-[#284342]">JEP Image Makeup Academy</p>
-          <p className="text-sm text-[#6b6b6b] mt-2">Official Certificate</p>
+          <p className="text-sm text-[#6b6b6b] mt-2">{t('certificates.completion.officialCertificate')}</p>
         </div>
 
         <div>
           <div className="w-48 h-px bg-[#284342] mb-2" />
-          <p className="text-sm text-[#6b6b6b]">Instructor Signature</p>
+          <p className="text-sm text-[#6b6b6b]">{t('certificates.completion.instructorSignature')}</p>
         </div>
       </div>
     </div>
   );
 }
 
-function generateCertificateHtml(cert: AttendanceCertificate) {
+function generateCertificateHtml(cert: AttendanceCertificate, t: (key: string, params?: Record<string, string | number>) => string) {
   return `
 <!doctype html>
 <html>
@@ -673,36 +675,36 @@ function generateCertificateHtml(cert: AttendanceCertificate) {
   <div class="certificate">
     <div class="award">🏆</div>
 
-    <h1>Full Attendance Certificate</h1>
+    <h1>${t('certificates.attendance.certificateTitle')}</h1>
     <div class="gold-line"></div>
 
-    <p class="muted">This certifies that</p>
+    <p class="muted">${t('certificates.completion.thisCertifiesThat')}</p>
 
     <h2>${cert.student}</h2>
 
-    <p class="muted">has achieved full attendance for</p>
+    <p class="muted">${t('certificates.attendance.hasAchievedFullAttendance')}</p>
 
     <h3>${cert.course}</h3>
 
-    <p class="attendance">Attendance Rate: ${cert.attendanceRate}%</p>
+    <p class="attendance">${t('certificates.attendance.attendanceRateLabel', { rate: cert.attendanceRate })}</p>
 
-    <p class="small">Certificate No: ${cert.certificateNumber}</p>
-    <p class="small">Date: ${cert.issueDate}</p>
+    <p class="small">${t('certificates.completion.certificateNoLabel', { number: cert.certificateNumber })}</p>
+    <p class="small">${t('certificates.completion.dateLabel', { date: cert.issueDate })}</p>
 
     <div class="signatures">
       <div class="signature-box">
         <div class="signature-line"></div>
-        <p class="small">Director Signature</p>
+        <p class="small">${t('certificates.completion.directorSignature')}</p>
       </div>
 
       <div>
         <p class="academy-title">JEP Image Makeup Academy</p>
-        <p class="small">Official Certificate</p>
+        <p class="small">${t('certificates.completion.officialCertificate')}</p>
       </div>
 
       <div class="signature-box">
         <div class="signature-line"></div>
-        <p class="small">Instructor Signature</p>
+        <p class="small">${t('certificates.completion.instructorSignature')}</p>
       </div>
     </div>
   </div>
@@ -760,14 +762,14 @@ function sanitizeColors(element: HTMLElement) {
   });
 }
 
-function getStudentName(student: any) {
-  if (!student) return 'Unnamed Student';
+function getStudentName(student: any, t: (key: string) => string) {
+  if (!student) return t('dashboard.fallback.unnamedStudent');
 
   if (Array.isArray(student)) {
-    return student[0]?.full_name || 'Unnamed Student';
+    return student[0]?.full_name || t('dashboard.fallback.unnamedStudent');
   }
 
-  return student.full_name || 'Unnamed Student';
+  return student.full_name || t('dashboard.fallback.unnamedStudent');
 }
 
 function getCourseName(course: any, student?: any) {

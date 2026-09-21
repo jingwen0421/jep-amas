@@ -5,12 +5,15 @@ import {
   XCircle,
   AlertCircle,
   FileText,
+  Edit,
 } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import {
   notifyStudentRegistrationApproved,
   notifyStudentRegistrationRejected,
 } from '../../services/systemNotificationService';
+import { useLanguage } from '../../context/LanguageContext';
+import { useConfirm } from '../../context/ConfirmDialogContext';
 
 interface PendingRegistration {
   id: string;
@@ -29,16 +32,121 @@ interface PendingRegistration {
   signatureUrl: string;
 }
 
+interface CourseOption {
+  id: string;
+  course_name: string;
+}
+
 export default function RegistrationApproval() {
+  const { t } = useLanguage();
+  const confirmDialog = useConfirm();
   const [selectedApplication, setSelectedApplication] =
     useState<PendingRegistration | null>(null);
+
+  const [editingApplication, setEditingApplication] =
+    useState<PendingRegistration | null>(null);
+  const [editForm, setEditForm] = useState({
+    fullName: '',
+    email: '',
+    phone: '',
+    icPassport: '',
+    emergencyContact: '',
+    courseId: '',
+  });
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [courses, setCourses] = useState<CourseOption[]>([]);
 
   const [applications, setApplications] = useState<PendingRegistration[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     fetchApplications();
+    fetchCourses();
   }, []);
+
+  async function fetchCourses() {
+    const { data, error } = await supabase
+      .from('courses')
+      .select('id, course_name')
+      .order('course_name', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching courses:', error.message);
+      return;
+    }
+
+    setCourses(data || []);
+  }
+
+  function openEditModal(application: PendingRegistration) {
+    setEditingApplication(application);
+    setEditForm({
+      fullName: application.name,
+      email: application.email === '-' ? '' : application.email,
+      phone: application.phone === '-' ? '' : application.phone,
+      icPassport:
+        application.icPassport === '-' ? '' : application.icPassport,
+      emergencyContact:
+        application.emergencyContact === '-'
+          ? ''
+          : application.emergencyContact,
+      courseId: application.courseId,
+    });
+  }
+
+  async function saveEdit() {
+    if (!editingApplication) return;
+
+    if (!editForm.fullName.trim() || !editForm.email.trim()) {
+      alert(t('students.approval.error.fillNameEmail'));
+      return;
+    }
+
+    setSavingEdit(true);
+
+    const { error: studentError } = await supabase
+      .from('students')
+      .update({
+        full_name: editForm.fullName.trim(),
+        email: editForm.email.trim(),
+        phone: editForm.phone.trim(),
+        ic_passport: editForm.icPassport.trim(),
+        emergency_contact_phone: editForm.emergencyContact.trim(),
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', editingApplication.studentDbId);
+
+    if (studentError) {
+      alert(t('students.approval.error.saveFailed', { error: studentError.message }));
+      setSavingEdit(false);
+      return;
+    }
+
+    const { error: appError } = await supabase
+      .from('registration_applications')
+      .update({ course_id: editForm.courseId })
+      .eq('id', editingApplication.applicationId);
+
+    if (appError) {
+      alert(t('students.approval.error.courseUpdateFailed', { error: appError.message }));
+      setSavingEdit(false);
+      return;
+    }
+
+    await createAuditLog(
+      'Edited Registration',
+      'Student Management',
+      editingApplication.studentDbId,
+      {
+        student_name: editForm.fullName.trim(),
+        email: editForm.email.trim(),
+      }
+    );
+
+    setSavingEdit(false);
+    setEditingApplication(null);
+    fetchApplications();
+  }
 
   async function fetchApplications() {
     setLoading(true);
@@ -81,7 +189,7 @@ export default function RegistrationApproval() {
         applicationId: app.id,
         studentDbId: student?.id || app.student_id,
         courseId: app.course_id,
-        name: student?.full_name || 'Unnamed Student',
+        name: student?.full_name || t('students.approval.fallback.unnamedStudent'),
         email: student?.email || '-',
         phone: student?.phone || '-',
         course: course?.course_name || '-',
@@ -101,7 +209,9 @@ export default function RegistrationApproval() {
   }
 
   async function approveApplication(application: PendingRegistration) {
-    const confirmed = confirm(`Approve registration for ${application.name}?`);
+    const confirmed = await confirmDialog(
+      t('students.approval.confirm.approve', { name: application.name })
+    );
     if (!confirmed) return;
 
     const userId = await getUserIdByEmail(application.email);
@@ -115,7 +225,7 @@ export default function RegistrationApproval() {
       .eq('id', application.applicationId);
 
     if (appError) {
-      alert(`Failed to approve application: ${appError.message}`);
+      alert(t('students.approval.error.approveFailed', { error: appError.message }));
       return;
     }
 
@@ -129,7 +239,7 @@ export default function RegistrationApproval() {
 
     if (studentError) {
       alert(
-        `Application approved, but failed to activate student: ${studentError.message}`
+        t('students.approval.error.activateStudentFailed', { error: studentError.message })
       );
       return;
     }
@@ -145,7 +255,7 @@ export default function RegistrationApproval() {
 
       if (userError) {
         alert(
-          `Student approved, but failed to activate login account: ${userError.message}`
+          t('students.approval.error.activateLoginFailed', { error: userError.message })
         );
         return;
       }
@@ -178,7 +288,10 @@ export default function RegistrationApproval() {
   }
 
   async function rejectApplication(application: PendingRegistration) {
-    const confirmed = confirm(`Reject registration for ${application.name}?`);
+    const confirmed = await confirmDialog(
+      t('students.approval.confirm.reject', { name: application.name }),
+      { variant: 'danger' }
+    );
     if (!confirmed) return;
 
     const userId = await getUserIdByEmail(application.email);
@@ -192,7 +305,7 @@ export default function RegistrationApproval() {
       .eq('id', application.applicationId);
 
     if (appError) {
-      alert(`Failed to reject application: ${appError.message}`);
+      alert(t('students.approval.error.rejectFailed', { error: appError.message }));
       return;
     }
 
@@ -206,7 +319,7 @@ export default function RegistrationApproval() {
 
     if (studentError) {
       alert(
-        `Application rejected, but failed to update student: ${studentError.message}`
+        t('students.approval.error.rejectStudentUpdateFailed', { error: studentError.message })
       );
       return;
     }
@@ -222,7 +335,7 @@ export default function RegistrationApproval() {
 
       if (userError) {
         alert(
-          `Application rejected, but failed to reject login account: ${userError.message}`
+          t('students.approval.error.rejectLoginFailed', { error: userError.message })
         );
         return;
       }
@@ -249,7 +362,9 @@ export default function RegistrationApproval() {
   }
 
   async function requestMoreInfo(application: PendingRegistration) {
-    const confirmed = confirm(`Request more information from ${application.name}?`);
+    const confirmed = await confirmDialog(
+      t('students.approval.confirm.moreInfo', { name: application.name })
+    );
     if (!confirmed) return;
 
     const userId = await getUserIdByEmail(application.email);
@@ -263,7 +378,7 @@ export default function RegistrationApproval() {
       .eq('id', application.applicationId);
 
     if (error) {
-      alert(`Failed to request more info: ${error.message}`);
+      alert(t('students.approval.error.moreInfoFailed', { error: error.message }));
       return;
     }
 
@@ -317,9 +432,7 @@ export default function RegistrationApproval() {
     }
 
     if (!batch) {
-      alert(
-        'Application approved, but no class batch was found for this course. Please create a class batch before generating payment plan.'
-      );
+      alert(t('students.approval.error.noBatchFound'));
       return '';
     }
 
@@ -335,7 +448,7 @@ export default function RegistrationApproval() {
       .single();
 
     if (enrollmentError) {
-      alert(`Failed to create enrollment: ${enrollmentError.message}`);
+      alert(t('students.approval.error.enrollmentCreateFailed', { error: enrollmentError.message }));
       return '';
     }
 
@@ -369,9 +482,7 @@ export default function RegistrationApproval() {
     const totalFee = Number(course?.course_fee || 0);
 
     if (!totalFee || totalFee <= 0) {
-      alert(
-        'Application approved and enrollment created, but course fee is missing. Please create the payment plan manually.'
-      );
+      alert(t('students.approval.error.feeMissing'));
       return;
     }
 
@@ -393,7 +504,7 @@ export default function RegistrationApproval() {
 
     if (planError) {
       alert(
-        `Enrollment created, but failed to create payment plan: ${planError.message}`
+        t('students.approval.error.planCreateFailed', { error: planError.message })
       );
       return;
     }
@@ -411,7 +522,7 @@ export default function RegistrationApproval() {
 
     if (installmentError) {
       alert(
-        `Payment plan created, but failed to create installment: ${installmentError.message}`
+        t('students.approval.error.installmentCreateFailed', { error: installmentError.message })
       );
       return;
     }
@@ -480,34 +591,34 @@ export default function RegistrationApproval() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl text-[#284342]">Registration Approval</h1>
+        <h1 className="text-3xl text-[#284342]">{t('students.approval.title')}</h1>
         <p className="text-[#6b6b6b] mt-1">
-          Review and approve student registration applications
+          {t('students.approval.subtitle')}
         </p>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         <SummaryCard
-          label="Pending Review"
+          label={t('students.approval.summary.pendingReview')}
           value={pendingApplications.length}
           color="text-yellow-700"
           icon={<AlertCircle size={24} className="text-yellow-700" />}
         />
 
         <SummaryCard
-          label="Approved"
+          label={t('students.approval.summary.approved')}
           value={approvedCount}
           color="text-green-700"
         />
 
         <SummaryCard
-          label="Rejected"
+          label={t('students.approval.summary.rejected')}
           value={rejectedCount}
           color="text-red-700"
         />
 
         <SummaryCard
-          label="More Info"
+          label={t('students.approval.summary.moreInfo')}
           value={moreInfoCount}
           color="text-blue-700"
         />
@@ -515,19 +626,19 @@ export default function RegistrationApproval() {
 
       <div className="bg-white rounded-xl border border-[rgba(40,67,66,0.1)] overflow-hidden">
         <div className="p-4 bg-[#f8f8f6] border-b border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-lg text-[#284342]">Pending Applications</h2>
+          <h2 className="text-lg text-[#284342]">{t('students.approval.pendingApplications')}</h2>
         </div>
 
         <div className="divide-y divide-[rgba(40,67,66,0.1)]">
           {loading && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              Loading applications...
+              {t('students.approval.loading')}
             </div>
           )}
 
           {!loading && pendingApplications.length === 0 && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              No pending applications.
+              {t('students.approval.empty')}
             </div>
           )}
 
@@ -537,9 +648,11 @@ export default function RegistrationApproval() {
                 key={application.applicationId}
                 application={application}
                 onView={() => setSelectedApplication(application)}
+                onEdit={() => openEditModal(application)}
                 onApprove={() => approveApplication(application)}
                 onReject={() => rejectApplication(application)}
                 onMoreInfo={() => requestMoreInfo(application)}
+                t={t}
               />
             ))}
         </div>
@@ -549,11 +662,135 @@ export default function RegistrationApproval() {
         <ApplicationModal
           application={selectedApplication}
           onClose={() => setSelectedApplication(null)}
+          onEdit={() => {
+            openEditModal(selectedApplication);
+            setSelectedApplication(null);
+          }}
           onApprove={() => approveApplication(selectedApplication)}
           onReject={() => rejectApplication(selectedApplication)}
           onMoreInfo={() => requestMoreInfo(selectedApplication)}
+          t={t}
         />
       )}
+
+      {editingApplication && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl max-w-lg w-full p-6 max-h-[90vh] overflow-y-auto">
+            <h2 className="text-xl text-[#284342] mb-6">
+              {t('students.approval.editModal.title', { name: editingApplication.name })}
+            </h2>
+
+            <div className="space-y-4">
+              <EditField
+                label={t('students.approval.editModal.fullName')}
+                value={editForm.fullName}
+                onChange={(value) =>
+                  setEditForm((prev) => ({ ...prev, fullName: value }))
+                }
+              />
+
+              <EditField
+                label={t('students.approval.editModal.email')}
+                value={editForm.email}
+                onChange={(value) =>
+                  setEditForm((prev) => ({ ...prev, email: value }))
+                }
+              />
+
+              <div className="grid grid-cols-2 gap-4">
+                <EditField
+                  label={t('students.approval.editModal.phone')}
+                  value={editForm.phone}
+                  onChange={(value) =>
+                    setEditForm((prev) => ({ ...prev, phone: value }))
+                  }
+                />
+
+                <EditField
+                  label={t('students.approval.editModal.icPassport')}
+                  value={editForm.icPassport}
+                  onChange={(value) =>
+                    setEditForm((prev) => ({ ...prev, icPassport: value }))
+                  }
+                />
+              </div>
+
+              <EditField
+                label={t('students.approval.editModal.emergencyContact')}
+                value={editForm.emergencyContact}
+                onChange={(value) =>
+                  setEditForm((prev) => ({
+                    ...prev,
+                    emergencyContact: value,
+                  }))
+                }
+              />
+
+              <div>
+                <label className="block text-sm text-[#284342] mb-2">
+                  {t('students.approval.editModal.course')}
+                </label>
+
+                <select
+                  value={editForm.courseId}
+                  onChange={(e) =>
+                    setEditForm((prev) => ({
+                      ...prev,
+                      courseId: e.target.value,
+                    }))
+                  }
+                  className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+                >
+                  <option value="">{t('students.approval.editModal.selectCourse')}</option>
+                  {courses.map((course) => (
+                    <option key={course.id} value={course.id}>
+                      {course.course_name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3 mt-6">
+              <button
+                onClick={() => setEditingApplication(null)}
+                className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
+              >
+                {t('students.approval.editModal.cancel')}
+              </button>
+
+              <button
+                onClick={saveEdit}
+                disabled={savingEdit}
+                className="px-6 py-3 bg-[#284342] text-[#e9da95] rounded-lg hover:bg-[#1a2f2e] transition-colors disabled:opacity-50"
+              >
+                {savingEdit ? t('students.approval.editModal.saving') : t('students.approval.editModal.save')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function EditField({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  return (
+    <div>
+      <label className="block text-sm text-[#284342] mb-2">{label}</label>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-4 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] bg-white focus:outline-none focus:ring-2 focus:ring-[#284342]"
+      />
     </div>
   );
 }
@@ -561,15 +798,19 @@ export default function RegistrationApproval() {
 function ApplicationCard({
   application,
   onView,
+  onEdit,
   onApprove,
   onReject,
   onMoreInfo,
+  t,
 }: {
   application: PendingRegistration;
   onView: () => void;
+  onEdit: () => void;
   onApprove: () => void;
   onReject: () => void;
   onMoreInfo: () => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   return (
     <div className="p-6 hover:bg-[#f8f8f6] transition-colors">
@@ -578,15 +819,15 @@ function ApplicationCard({
           <div className="flex items-center gap-3 mb-2">
             <h3 className="text-lg text-[#284342]">{application.name}</h3>
             <span className="text-xs px-3 py-1 rounded-full bg-yellow-100 text-yellow-700">
-              Pending Review
+              {t('students.approval.pendingBadge')}
             </span>
           </div>
 
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm mb-3">
-            <Info label="Email" value={application.email} />
-            <Info label="Phone" value={application.phone} />
-            <Info label="Course" value={application.course} />
-            <Info label="Applied Date" value={application.appliedDate} />
+            <Info label={t('students.approval.info.email')} value={application.email} />
+            <Info label={t('students.approval.info.phone')} value={application.phone} />
+            <Info label={t('students.approval.info.course')} value={application.course} />
+            <Info label={t('students.approval.info.appliedDate')} value={application.appliedDate} />
           </div>
         </div>
       </div>
@@ -595,27 +836,34 @@ function ApplicationCard({
         <ActionButton
           onClick={onView}
           icon={<Eye size={16} />}
-          label="View Details"
+          label={t('students.approval.action.viewDetails')}
+          variant="outline"
+        />
+
+        <ActionButton
+          onClick={onEdit}
+          icon={<Edit size={16} />}
+          label={t('students.approval.action.edit')}
           variant="outline"
         />
 
         <ActionButton
           onClick={onApprove}
           icon={<CheckCircle size={16} />}
-          label="Approve"
+          label={t('students.approval.action.approve')}
           variant="green"
         />
 
         <ActionButton
           onClick={onReject}
           icon={<XCircle size={16} />}
-          label="Reject"
+          label={t('students.approval.action.reject')}
           variant="red"
         />
 
         <ActionButton
           onClick={onMoreInfo}
-          label="Request More Info"
+          label={t('students.approval.action.requestMoreInfo')}
           variant="blue"
         />
       </div>
@@ -626,50 +874,56 @@ function ApplicationCard({
 function ApplicationModal({
   application,
   onClose,
+  onEdit,
   onApprove,
   onReject,
   onMoreInfo,
+  t,
 }: {
   application: PendingRegistration;
   onClose: () => void;
+  onEdit: () => void;
   onApprove: () => void;
   onReject: () => void;
   onMoreInfo: () => void;
+  t: (key: string, params?: Record<string, string | number>) => string;
 }) {
   return (
     <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
       <div className="bg-white rounded-xl max-w-4xl w-full max-h-[90vh] overflow-auto">
         <div className="p-6 border-b border-[rgba(40,67,66,0.1)]">
-          <h2 className="text-xl text-[#284342]">Application Details</h2>
+          <h2 className="text-xl text-[#284342]">{t('students.approval.modal.title')}</h2>
         </div>
 
         <div className="p-6 space-y-6">
           <div className="grid grid-cols-2 gap-4">
-            <Info label="Full Name" value={application.name} />
-            <Info label="IC/Passport" value={application.icPassport} />
-            <Info label="Email" value={application.email} />
-            <Info label="Phone" value={application.phone} />
+            <Info label={t('students.approval.modal.fullName')} value={application.name} />
+            <Info label={t('students.approval.modal.icPassport')} value={application.icPassport} />
+            <Info label={t('students.approval.modal.email')} value={application.email} />
+            <Info label={t('students.approval.modal.phone')} value={application.phone} />
             <Info
-              label="Emergency Contact"
+              label={t('students.approval.modal.emergencyContact')}
               value={application.emergencyContact}
             />
-            <Info label="Applied Date" value={application.appliedDate} />
+            <Info label={t('students.approval.modal.appliedDate')} value={application.appliedDate} />
           </div>
 
           <div>
-            <p className="text-xs text-[#6b6b6b] mb-1">Course Applied</p>
+            <p className="text-xs text-[#6b6b6b] mb-1">{t('students.approval.modal.courseApplied')}</p>
             <p className="text-sm text-[#284342]">{application.course}</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <DocumentBox
-              title="IC / Passport Document"
+              title={t('students.approval.doc.icDocument')}
               url={application.icDocumentUrl}
+              t={t}
             />
 
             <DocumentBox
-              title="Digital Signature"
+              title={t('students.approval.doc.signature')}
               url={application.signatureUrl}
+              t={t}
             />
           </div>
         </div>
@@ -679,7 +933,15 @@ function ApplicationModal({
             onClick={onClose}
             className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors"
           >
-            Close
+            {t('students.approval.modal.close')}
+          </button>
+
+          <button
+            onClick={onEdit}
+            className="px-6 py-3 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors flex items-center gap-2"
+          >
+            <Edit size={18} />
+            {t('students.approval.modal.edit')}
           </button>
 
           <button
@@ -687,7 +949,7 @@ function ApplicationModal({
             className="px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center gap-2"
           >
             <CheckCircle size={20} />
-            Approve Application
+            {t('students.approval.modal.approveApplication')}
           </button>
 
           <button
@@ -695,14 +957,14 @@ function ApplicationModal({
             className="px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors flex items-center gap-2"
           >
             <XCircle size={20} />
-            Reject Application
+            {t('students.approval.modal.rejectApplication')}
           </button>
 
           <button
             onClick={onMoreInfo}
             className="px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
           >
-            Request More Info
+            {t('students.approval.modal.requestMoreInfo')}
           </button>
         </div>
       </div>
@@ -710,7 +972,7 @@ function ApplicationModal({
   );
 }
 
-function DocumentBox({ title, url }: { title: string; url: string }) {
+function DocumentBox({ title, url, t }: { title: string; url: string; t: (key: string) => string }) {
   const isImage =
     url.toLowerCase().endsWith('.jpg') ||
     url.toLowerCase().endsWith('.jpeg') ||
@@ -723,7 +985,7 @@ function DocumentBox({ title, url }: { title: string; url: string }) {
 
       {!url && (
         <div className="h-40 bg-[#f8f8f6] rounded-lg flex items-center justify-center text-sm text-[#6b6b6b]">
-          No document uploaded
+          {t('students.approval.doc.noneUploaded')}
         </div>
       )}
 
@@ -738,7 +1000,7 @@ function DocumentBox({ title, url }: { title: string; url: string }) {
       {url && !isImage && (
         <div className="h-40 bg-[#f8f8f6] rounded-lg flex flex-col items-center justify-center text-sm text-[#6b6b6b]">
           <FileText size={36} className="mb-3 text-[#284342]" />
-          <p>Document uploaded</p>
+          <p>{t('students.approval.doc.uploaded')}</p>
         </div>
       )}
 
@@ -749,7 +1011,7 @@ function DocumentBox({ title, url }: { title: string; url: string }) {
           rel="noreferrer"
           className="inline-block mt-3 text-sm text-[#284342] hover:underline"
         >
-          Open Document
+          {t('students.approval.doc.openDocument')}
         </a>
       )}
     </div>

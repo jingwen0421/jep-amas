@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { CalendarClock, Clock, User } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { getCurrentUser } from '../utils/session';
+import { useLanguage } from '../context/LanguageContext';
 
 type ReviewStatus = 'pending' | 'approved' | 'rejected';
 
@@ -22,11 +23,11 @@ interface RescheduleRow {
   studentName: string;
 }
 
-const TABS: { key: 'pending' | 'approved' | 'rejected' | 'all'; label: string }[] = [
-  { key: 'pending', label: 'Pending' },
-  { key: 'approved', label: 'Approved' },
-  { key: 'rejected', label: 'Rejected' },
-  { key: 'all', label: 'All' },
+const TABS: { key: 'pending' | 'approved' | 'rejected' | 'all'; labelKey: string }[] = [
+  { key: 'pending', labelKey: 'unifiedCalendar.status.pending' },
+  { key: 'approved', labelKey: 'unifiedCalendar.status.approved' },
+  { key: 'rejected', labelKey: 'unifiedCalendar.status.rejected' },
+  { key: 'all', labelKey: 'rescheduleRequests.tab.all' },
 ];
 
 const SOURCE_DATETIME_COLUMN: Record<string, string> = {
@@ -36,6 +37,7 @@ const SOURCE_DATETIME_COLUMN: Record<string, string> = {
 };
 
 export default function RescheduleRequests() {
+  const { t } = useLanguage();
   const currentUser = getCurrentUser();
   const canReview = [
     'super_admin',
@@ -104,11 +106,11 @@ export default function RescheduleRequests() {
         calendar_event_id: row.calendar_event_id,
         source_table: event?.source_table || '',
         source_id: event?.source_id || '',
-        event_title: event?.title || 'Scheduled Item',
+        event_title: event?.title || '',
         event_type: event?.event_type || '-',
         starts_at: event?.starts_at || '',
         ends_at: event?.ends_at || '',
-        studentName: student?.full_name || 'Student',
+        studentName: student?.full_name || '',
       };
     });
 
@@ -131,7 +133,7 @@ export default function RescheduleRequests() {
     if ((date && !time) || (!date && time)) {
       setRowError((prev) => ({
         ...prev,
-        [row.id]: 'Provide both a new date and time, or leave both blank.',
+        [row.id]: t('rescheduleRequests.error.provideBothOrNeither'),
       }));
       setActioningId(null);
       return;
@@ -143,7 +145,9 @@ export default function RescheduleRequests() {
       if (!column) {
         setRowError((prev) => ({
           ...prev,
-          [row.id]: `Cannot reschedule items of type "${row.source_table}" from here.`,
+          [row.id]: t('rescheduleRequests.error.unsupportedSourceType', {
+            sourceType: row.source_table,
+          }),
         }));
         setActioningId(null);
         return;
@@ -166,8 +170,7 @@ export default function RescheduleRequests() {
       if (!updatedRows || updatedRows.length === 0) {
         setRowError((prev) => ({
           ...prev,
-          [row.id]:
-            "You don't have permission to reschedule this item directly (it may belong to a different teacher). Approve without a new time, or ask an admin.",
+          [row.id]: t('rescheduleRequests.error.noPermissionToReschedule'),
         }));
         setActioningId(null);
         return;
@@ -225,24 +228,28 @@ export default function RescheduleRequests() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-3xl text-[#284342]">Reschedule Requests</h1>
+        <h1 className="text-3xl text-[#284342]">{t('rescheduleRequests.title')}</h1>
         <p className="text-[#6b6b6b] mt-1">
           {isStudentView
-            ? 'Track the status of your reschedule requests.'
-            : 'Review and action student reschedule requests.'}
+            ? t('rescheduleRequests.subtitle.student')
+            : t('rescheduleRequests.subtitle.reviewer')}
         </p>
       </div>
 
       {!isStudentView && (
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <SummaryCard label="Pending Review" value={pendingCount} color="text-amber-700" />
           <SummaryCard
-            label="Approved"
+            label={t('rescheduleRequests.summary.pendingReview')}
+            value={pendingCount}
+            color="text-amber-700"
+          />
+          <SummaryCard
+            label={t('rescheduleRequests.summary.approved')}
             value={rows.filter((row) => row.status === 'approved').length}
             color="text-green-700"
           />
           <SummaryCard
-            label="Total Requests"
+            label={t('rescheduleRequests.summary.totalRequests')}
             value={rows.length}
             color="text-[#284342]"
           />
@@ -260,7 +267,7 @@ export default function RescheduleRequests() {
                 : 'text-[#284342] border border-[rgba(40,67,66,0.2)] hover:bg-[#f8f8f6]'
             }`}
           >
-            {tab.label}
+            {t(tab.labelKey)}
             {tab.key === 'pending' && pendingCount > 0 && (
               <span className="ml-2 text-xs">({pendingCount})</span>
             )}
@@ -272,13 +279,23 @@ export default function RescheduleRequests() {
         <div className="divide-y divide-[rgba(40,67,66,0.1)]">
           {loading && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              Loading reschedule requests...
+              {t('rescheduleRequests.loading')}
             </div>
           )}
 
           {!loading && filteredRows.length === 0 && (
             <div className="p-6 text-center text-[#6b6b6b]">
-              No {activeTab === 'all' ? '' : activeTab} reschedule requests found.
+              {activeTab === 'all'
+                ? t('rescheduleRequests.empty.all')
+                : t('rescheduleRequests.empty.filtered', {
+                    status: t(
+                      activeTab === 'pending'
+                        ? 'unifiedCalendar.status.pending'
+                        : activeTab === 'approved'
+                        ? 'unifiedCalendar.status.approved'
+                        : 'unifiedCalendar.status.rejected'
+                    ),
+                  })}
             </div>
           )}
 
@@ -288,7 +305,9 @@ export default function RescheduleRequests() {
                 <div className="flex items-start justify-between gap-4 flex-wrap">
                   <div className="flex-1 min-w-[240px]">
                     <div className="flex items-center gap-3 mb-2">
-                      <h3 className="text-lg text-[#284342]">{row.event_title}</h3>
+                      <h3 className="text-lg text-[#284342]">
+                        {row.event_title || t('rescheduleRequests.fallback.scheduledItem')}
+                      </h3>
                       <span
                         className={`text-xs px-3 py-1 rounded-full capitalize ${
                           row.status === 'pending'
@@ -298,7 +317,7 @@ export default function RescheduleRequests() {
                             : 'bg-red-100 text-red-700'
                         }`}
                       >
-                        {row.status}
+                        {t(`unifiedCalendar.status.${row.status}`)}
                       </span>
                     </div>
 
@@ -306,7 +325,7 @@ export default function RescheduleRequests() {
                       {!isStudentView && (
                         <span className="flex items-center gap-1.5">
                           <User size={14} />
-                          {row.studentName}
+                          {row.studentName || t('rescheduleRequests.fallback.student')}
                         </span>
                       )}
 
@@ -320,19 +339,22 @@ export default function RescheduleRequests() {
 
                     {row.reason && (
                       <p className="text-sm text-[#284342] mb-1">
-                        <strong>Reason:</strong> {row.reason}
+                        <strong>{t('rescheduleRequests.field.reason')}:</strong> {row.reason}
                       </p>
                     )}
 
                     {row.preferred_period && (
                       <p className="text-sm text-[#6b6b6b]">
-                        <strong>Preferred:</strong> {row.preferred_period}
+                        <strong>{t('rescheduleRequests.field.preferred')}:</strong>{' '}
+                        {row.preferred_period}
                       </p>
                     )}
 
                     {row.reviewed_at && (
                       <p className="text-xs text-[#6b6b6b] mt-2">
-                        Reviewed {formatDateTime(row.reviewed_at)}
+                        {t('rescheduleRequests.reviewedAt', {
+                          date: formatDateTime(row.reviewed_at),
+                        })}
                       </p>
                     )}
                   </div>
@@ -344,7 +366,7 @@ export default function RescheduleRequests() {
                         disabled={actioningId === row.id}
                         className="px-4 py-2 rounded-lg bg-[#284342] text-[#e9da95] hover:bg-[#1a2f2e] transition-colors text-sm disabled:opacity-50"
                       >
-                        Approve
+                        {t('rescheduleRequests.action.approve')}
                       </button>
 
                       <button
@@ -352,7 +374,9 @@ export default function RescheduleRequests() {
                         disabled={actioningId === row.id}
                         className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-[#f8f8f6] transition-colors text-sm disabled:opacity-50"
                       >
-                        {actioningId === row.id ? 'Working...' : 'Reject'}
+                        {actioningId === row.id
+                          ? t('rescheduleRequests.action.working')
+                          : t('rescheduleRequests.action.reject')}
                       </button>
                     </div>
                   )}
@@ -361,14 +385,13 @@ export default function RescheduleRequests() {
                 {canReview && expandedApproveId === row.id && (
                   <div className="mt-4 p-4 bg-[#f8f8f6] rounded-lg border border-[rgba(40,67,66,0.1)]">
                     <p className="text-sm text-[#284342] mb-3">
-                      Optionally set the new date and time — this updates the schedule
-                      directly. Leave blank to approve without moving it yet.
+                      {t('rescheduleRequests.approveForm.description')}
                     </p>
 
                     <div className="grid grid-cols-2 gap-3">
                       <div>
                         <label className="block text-xs text-[#6b6b6b] mb-1">
-                          New Date
+                          {t('rescheduleRequests.field.newDate')}
                         </label>
                         <input
                           type="date"
@@ -385,7 +408,7 @@ export default function RescheduleRequests() {
 
                       <div>
                         <label className="block text-xs text-[#6b6b6b] mb-1">
-                          New Time
+                          {t('rescheduleRequests.field.newTime')}
                         </label>
                         <input
                           type="time"
@@ -413,14 +436,16 @@ export default function RescheduleRequests() {
                         disabled={actioningId === row.id}
                         className="px-4 py-2 rounded-lg bg-[#284342] text-[#e9da95] hover:bg-[#1a2f2e] transition-colors text-sm disabled:opacity-50"
                       >
-                        {actioningId === row.id ? 'Confirming...' : 'Confirm Approval'}
+                        {actioningId === row.id
+                          ? t('rescheduleRequests.action.confirming')
+                          : t('rescheduleRequests.action.confirmApproval')}
                       </button>
 
                       <button
                         onClick={() => setExpandedApproveId(null)}
                         className="px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] text-[#284342] hover:bg-white transition-colors text-sm"
                       >
-                        Cancel
+                        {t('rescheduleRequests.action.cancel')}
                       </button>
                     </div>
                   </div>
