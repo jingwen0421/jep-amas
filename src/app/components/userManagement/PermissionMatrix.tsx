@@ -46,8 +46,12 @@ const matrix: Record<string, string[]> = {
   ],
   owner: ['Reports', 'Audit Logs', 'Documents'],
   teacher: ['Classes', 'Attendance', 'Portfolio', 'Certificates'],
+  assistant_teacher: ['Attendance', 'Portfolio', 'Documents'],
   finance: ['Payments', 'Reports', 'Documents'],
+  internal_sales: ['Students', 'Payments', 'Reports'],
+  external_sales: ['Students', 'Payments'],
   student: ['Portfolio', 'Certificates', 'Documents'],
+  parent: ['Certificates', 'Payments'],
 };
 
 export default function PermissionMatrix() {

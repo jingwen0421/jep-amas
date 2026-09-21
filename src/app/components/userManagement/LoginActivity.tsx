@@ -6,8 +6,40 @@ interface Props {
   activities: UserActivity[];
 }
 
+// audit_logs.action/module are free-form strings written across the app —
+// only the small, known set that getUserActivities() actually queries for
+// (module in User Management / Authentication / Settings) is mapped here;
+// anything else falls back to the raw text rather than the raw key.
+const ACTION_KEYS: Record<string, string> = {
+  'Logged In': 'userManagement.loginActivity.action.loggedIn',
+  'User Created': 'userManagement.loginActivity.action.userCreated',
+  'User Updated': 'userManagement.loginActivity.action.userUpdated',
+  'User Activated': 'userManagement.loginActivity.action.userActivated',
+  'User Deactivated': 'userManagement.loginActivity.action.userDeactivated',
+  'Account Approved': 'userManagement.loginActivity.action.accountApproved',
+  'Account Rejected': 'userManagement.loginActivity.action.accountRejected',
+  'User Invitation Sent': 'userManagement.loginActivity.action.invitationSent',
+  'User Invitation Resent': 'userManagement.loginActivity.action.invitationResent',
+};
+
+const MODULE_KEYS: Record<string, string> = {
+  Authentication: 'userManagement.loginActivity.module.authentication',
+  'User Management': 'userManagement.loginActivity.module.userManagement',
+  Settings: 'userManagement.loginActivity.module.settings',
+};
+
 export default function LoginActivity({ activities }: Props) {
   const { t } = useLanguage();
+
+  function translateAction(action: string) {
+    const key = ACTION_KEYS[action];
+    return key ? t(key) : action;
+  }
+
+  function translateModule(module: string) {
+    const key = MODULE_KEYS[module];
+    return key ? t(key) : module;
+  }
 
   return (
     <div className="bg-white rounded-xl p-6 border border-[rgba(40,67,66,0.1)]">
@@ -39,11 +71,11 @@ export default function LoginActivity({ activities }: Props) {
 
               <div>
                 <p className="text-sm text-[#284342]">
-                  {activity.action}
+                  {translateAction(activity.action)}
                 </p>
 
                 <p className="text-xs text-[#6b6b6b] mt-1">
-                  {activity.module}
+                  {translateModule(activity.module)}
                 </p>
               </div>
 

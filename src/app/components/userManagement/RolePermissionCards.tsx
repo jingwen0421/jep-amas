@@ -32,17 +32,37 @@ const PERMISSION_KEYS: Record<string, string[]> = {
     'userManagement.permissions.teacher.reviewPortfolios',
     'userManagement.permissions.teacher.giveFeedback',
   ],
+  assistant_teacher: [
+    'userManagement.permissions.assistantTeacher.viewAssignedClasses',
+    'userManagement.permissions.assistantTeacher.takeAttendance',
+    'userManagement.permissions.assistantTeacher.assistPortfolioReview',
+  ],
   finance: [
     'userManagement.permissions.finance.managePayments',
     'userManagement.permissions.finance.recordInstallments',
     'userManagement.permissions.finance.generateReceipts',
     'userManagement.permissions.finance.viewOutstandingBalances',
   ],
+  internal_sales: [
+    'userManagement.permissions.sales.manageLeadsDeals',
+    'userManagement.permissions.sales.viewAssignedStudents',
+    'userManagement.permissions.sales.followUpPayments',
+  ],
+  external_sales: [
+    'userManagement.permissions.sales.manageLeadsDeals',
+    'userManagement.permissions.sales.viewAssignedStudents',
+    'userManagement.permissions.sales.followUpPayments',
+  ],
   student: [
     'userManagement.permissions.student.viewOwnProfile',
     'userManagement.permissions.student.submitPortfolio',
     'userManagement.permissions.student.viewCertificates',
     'userManagement.permissions.student.viewPaymentStatus',
+  ],
+  parent: [
+    'userManagement.permissions.parent.viewChildrenProgress',
+    'userManagement.permissions.parent.viewCertificates',
+    'userManagement.permissions.parent.viewChildrenBalance',
   ],
 };
 
