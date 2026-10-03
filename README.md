@@ -36,7 +36,7 @@ AMAS is a web application built specifically for JEP Image Makeup Academy (Malay
 - ✅ Attendance, makeup classes and reschedule requests
 - 💰 Payment plans, installments, receipts and outstanding balances
 - 🎨 Portfolios, assignment submission and teacher feedback
-- 📆 Teacher consultations and availability
+- 📆 Teacher availability, consultations and trial classes (via Events)
 - 🎟️ Public event sign-up and room rentals
 - 🤝 CRM for internal and external sales
 - 💬 Notification center with WhatsApp and email, reminders and templates
@@ -75,7 +75,7 @@ AMAS is a web application built specifically for JEP Image Makeup Academy (Malay
 | **Certificates** | Completion, Perfect Attendance |
 | **Communications** | WhatsApp, Email, Broadcast, Templates |
 | **CRM** | Leads and sales pipeline for sales roles |
-| **Administration** | User Management (invitations, permission matrix, login activity), Audit Logs |
+| **Administration** | User Management (invitations, permission matrix, login activity), Audit Logs, Settings (Super Admin) |
 
 ---
 
@@ -85,7 +85,7 @@ AMAS is a web application built specifically for JEP Image Makeup Academy (Malay
 |------|----------------|
 | **Super Admin** | Everything, including user management and audit logs |
 | **Owner** | All modules with a business-analytics focus |
-| **Admin** | Day-to-day academy administration |
+| **Admin** | Day-to-day academy administration (no Settings) |
 | **Teacher** | Classes, attendance, appointments, portfolio feedback |
 | **Assistant Teacher** | Supports teachers on classes and attendance |
 | **Finance** | Payments, receipts, outstanding balances |
@@ -94,7 +94,7 @@ AMAS is a web application built specifically for JEP Image Makeup Academy (Malay
 | **Student** | Own courses, assignments, certificates, appointments |
 | **Parent / Guardian** | Child's progress, payments and schedule |
 
-Exact permissions are defined in `src/app/utils/userHelpers.ts` and in the RLS migrations.
+Exact route access is defined in `src/app/utils/permissions.ts` (table in [SITEMAP.md](./SITEMAP.md)) and enforced again by the RLS policies.
 
 ---
 
@@ -213,7 +213,7 @@ Authenticated routes live under `/app`, for example:
 /app/audit                    → Audit Logs
 ```
 
-See [SITEMAP.md](./SITEMAP.md) for the full list (note: it predates the calendar, events, CRM and notification modules).
+See [SITEMAP.md](./SITEMAP.md) for the full list and role access.
 
 ---
 
@@ -223,8 +223,9 @@ See [SITEMAP.md](./SITEMAP.md) for the full list (note: it predates the calendar
 |----------|-------------|
 | `SYSTEM_OVERVIEW.md` | System architecture and module descriptions |
 | `MULTILINGUAL_GUIDE.md` | Working with translations |
-| `SITEMAP.md` | Navigation structure |
-| `PAGES_EXPORT.md`, `pages-manifest.json`, `EXPORT_SUMMARY.txt` | Original page export (earlier version of the system) |
+| `SITEMAP.md` | Routes and role access matrix |
+| `PAGES_EXPORT.md` | Page-by-page file reference |
+| `pages-manifest.json`, `EXPORT_SUMMARY.txt` | Original page export (earlier version; not kept in sync) |
 | `COMPLETED_PAGES.md` | Page completion tracking |
 | `AGENTS.md` / `CLAUDE.md` | Instructions for AI coding agents |
 
