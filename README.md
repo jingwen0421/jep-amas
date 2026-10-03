@@ -1,11 +1,11 @@
-# 🎨 JEP Image Makeup Academy Management System
+# 🎨 JEP Image Makeup Academy Management System (AMAS)
 
-> A comprehensive management system for makeup academy operations, built with React 18, TypeScript, and Tailwind CSS v4.
+> A management system for makeup academy operations, built with React 18, TypeScript, Tailwind CSS v4 and Supabase. Fully bilingual (English / 中文).
 
-![Version](https://img.shields.io/badge/version-1.0.0-blue)
 ![React](https://img.shields.io/badge/React-18-61dafb)
-![TypeScript](https://img.shields.io/badge/TypeScript-5.0-3178c6)
+![TypeScript](https://img.shields.io/badge/TypeScript-5-3178c6)
 ![Tailwind](https://img.shields.io/badge/Tailwind-v4-38bdf8)
+![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20RLS-3ecf8e)
 
 ---
 
@@ -13,255 +13,158 @@
 
 - [Overview](#overview)
 - [Features](#features)
-- [System Statistics](#system-statistics)
-- [Module Overview](#module-overview)
+- [Modules](#modules)
+- [User Roles](#user-roles)
 - [Technology Stack](#technology-stack)
 - [Getting Started](#getting-started)
+- [Internationalization](#internationalization)
+- [Database](#database)
+- [Project Structure](#project-structure)
+- [Routes](#routes)
 - [Documentation](#documentation)
-- [Color Scheme](#color-scheme)
-- [Teachers](#teachers)
-- [User Roles](#user-roles)
+- [Branding](#branding)
 
 ---
 
 ## 🎯 Overview
 
-JEP Image Makeup Academy Management System is a full-featured web application designed to manage all aspects of a makeup academy, including:
+AMAS is a web application built specifically for JEP Image Makeup Academy (Malaysia). It covers:
 
-- 👥 Student enrollment and management
-- 📚 Course catalog and batch scheduling
-- 📅 Class scheduling and room allocation
-- ✅ Attendance tracking and makeup classes
-- 💰 Payment plans and outstanding balances
-- 🎨 Student portfolios and teacher feedback
-- 📆 Teacher consultations and appointments
-- 💬 WhatsApp and email communications
-- 🎓 Certificate generation
-- 📊 Reports and analytics
+- 👥 Student registration, approval and profiles (including class-batch enrolment)
+- 📚 Course catalog (built from the real JEP fee guide), discounts and class batches
+- 📅 A unified calendar, class scheduling, room allocation and conflict detection
+- ✅ Attendance, makeup classes and reschedule requests
+- 💰 Payment plans, installments, receipts and outstanding balances
+- 🎨 Portfolios, assignment submission and teacher feedback
+- 📆 Teacher availability, consultations and trial classes (via Events)
+- 🎟️ Public event sign-up and room rentals
+- 🤝 CRM for internal and external sales
+- 💬 Notification center with WhatsApp and email, reminders and templates
+- 🎓 Completion and perfect-attendance certificates
+- 📊 Reports, analytics, user management and audit logs
 
 ---
 
 ## ✨ Features
 
-### Core Functionality
-- ✅ **Role-Based Access Control** - 6 different user roles with specific permissions
-- ✅ **Responsive Design** - Works on mobile, tablet, and desktop
-- ✅ **Malaysian Localization** - RM currency, Malaysian names, local phone formats
-- ✅ **Real-Time Updates** - Status tracking across all modules
-- ✅ **Search & Filter** - Advanced filtering on all list pages
-- ✅ **Export Capabilities** - PDF and Excel exports where applicable
-
-### Student Management
-- Student enrollment and registration
-- Registration approval workflow
-- Student profiles and progress tracking
-- Document management
-
-### Scheduling & Classes
-- Visual calendar (monthly/weekly views)
-- Automated conflict detection
-- Classroom allocation and equipment tracking
-- Teacher availability management
-
-### Attendance & Assessment
-- Daily attendance marking
-- Makeup class scheduling
-- Attendance reports and analytics
-- Assignment submission and grading
-- Teacher feedback system
-
-### Financial Management
-- Installment payment plans
-- Receipt generation
-- Outstanding balance tracking
-- Payment reminders
-
-### Communications
-- WhatsApp messaging
-- Email campaigns
-- Reusable message templates
-- Broadcast messaging
+- **Role-based access control** – 10 roles, enforced in the UI and by Supabase Row Level Security
+- **Supabase backend** – Postgres data, auth, invitations, forgot/reset password
+- **Bilingual UI** – English and Mandarin with a language switcher
+- **Role-specific dashboards** – Admin, Owner, Teacher, Student, Parent, Finance and Sales
+- **Unified calendar** – classes, appointments, events and room rentals in one place, with sync-conflict handling
+- **Notification center** – filters, manual reminder review, WhatsApp queue and message templates
+- **Exports** – PDF (jsPDF) and Excel (xlsx) for receipts, reports and lists
+- **Consistent UX** – shared confirmation dialogs and actionable empty states
+- **Malaysian localisation** – RM currency and local phone formats
 
 ---
 
-## 📊 System Statistics
+## 🗂️ Modules
 
-| Metric | Count |
+| Module | Pages |
 |--------|-------|
-| **Total Pages** | 39 |
-| **Total Components** | 14 |
-| **Modules** | 12 |
-| **User Roles** | 6 |
-| **Teachers** | 4 |
-| **Routes** | 37+ |
+| **Dashboard & Core** | Role dashboards, Reports, Document Center, Survey/Feedback, Settings, Notification Center |
+| **Students** | List, Registration (public and internal), Approval, Profile, Progress |
+| **Courses** | Categories, Courses, Class Batches, Lessons |
+| **Calendar & Classes** | Unified Calendar, Reschedule Requests, Scheduling, Classroom Allocation |
+| **Attendance** | Daily Attendance, Makeup Classes, Attendance Reports |
+| **Appointments** | Teacher Booking, Availability, Appointment Calendar |
+| **Events** | Event Management, public sign-up page (`/register/:occurrenceId`), room rentals |
+| **Payments** | Plans, Installments, Receipts, Outstanding Balances |
+| **Portfolio** | Assignment Submission, Teacher Feedback, Student Gallery |
+| **Certificates** | Completion, Perfect Attendance |
+| **Communications** | WhatsApp, Email, Broadcast, Templates |
+| **CRM** | Leads and sales pipeline for sales roles |
+| **Administration** | User Management (invitations, permission matrix, login activity), Audit Logs, Settings (Super Admin) |
 
 ---
 
-## 🗂️ Module Overview
+## 👤 User Roles
 
-### 1. 🏠 Dashboard & Core (6 pages)
-- Admin/Owner dashboards with role-specific views
-- User management and role assignment
-- System settings and configuration
-- Audit logs and system reports
+| Role | Typical access |
+|------|----------------|
+| **Super Admin** | Everything, including user management and audit logs |
+| **Owner** | All modules with a business-analytics focus |
+| **Admin** | Day-to-day academy administration (no Settings) |
+| **Teacher** | Classes, attendance, appointments, portfolio feedback |
+| **Assistant Teacher** | Supports teachers on classes and attendance |
+| **Finance** | Payments, receipts, outstanding balances |
+| **Internal Sales** | CRM and student enquiries/registration |
+| **External Sales** | CRM for referred leads |
+| **Student** | Own courses, assignments, certificates, appointments |
+| **Parent / Guardian** | Child's progress, payments and schedule |
 
-### 2. 👥 Students (5 pages)
-- Student list with advanced search
-- Student profiles and progress tracking
-- New student registration
-- Registration approval workflow
-
-### 3. 📚 Courses (4 pages)
-- Course catalog
-- Course categories
-- Class batch management
-- Lesson content management
-
-### 4. 📅 Classes (3 pages)
-- Interactive class calendar
-- Class scheduling with conflict detection
-- Classroom and equipment allocation
-
-### 5. ✅ Attendance (3 pages)
-- Daily attendance tracking
-- Makeup class scheduling
-- Attendance reports and analytics
-
-### 6. 💰 Payments (4 pages)
-- Payment plan templates
-- Installment schedules
-- Receipt generation
-- Outstanding balance tracking
-
-### 7. 🎨 Portfolio (3 pages)
-- Assignment submission portal
-- Teacher grading and feedback
-- Student gallery showcase
-
-### 8. 📆 Appointments (3 pages)
-- Teacher consultation booking
-- Teacher availability schedules
-- Appointment calendar
-
-### 9. 💬 Communications (4 pages)
-- WhatsApp messaging system
-- Email campaign management
-- Message templates
-- Broadcast messaging
-
-### 10. 🎓 Certificates (2 pages)
-- Course completion certificates
-- Perfect attendance certificates
-
-### 11. 📋 Other (2 pages)
-- Student surveys and feedback
-- Centralized document center
+Exact route access is defined in `src/app/utils/permissions.ts` (table in [SITEMAP.md](./SITEMAP.md)) and enforced again by the RLS policies.
 
 ---
 
 ## 🛠️ Technology Stack
 
 ```
-Frontend
-├── React 18              - UI Framework
-├── TypeScript            - Type Safety
-├── React Router v7       - Routing
-├── Tailwind CSS v4       - Styling
-├── Lucide React          - Icons
-└── Vite                  - Build Tool
+Frontend   React 18, TypeScript, Vite, React Router v7
+Styling    Tailwind CSS v4, Radix UI, MUI, Lucide icons
+Backend    Supabase (Postgres, Auth, RLS, migrations)
+Charts     Recharts
+Exports    jsPDF + autotable, xlsx, html2canvas
+Hosting    Vercel (SPA rewrite in vercel.json)
 ```
+
+> Note: the project was bootstrapped from Create Next App, but it is a **Vite** app – `next` is not used.
 
 ---
 
 ## 🚀 Getting Started
 
 ### Prerequisites
-- Node.js 18+ 
-- pnpm (recommended) or npm
+- Node.js 18+
+- npm or pnpm
+- A Supabase project
 
-### Installation
+### Environment
+
+Create a `.env.local` file:
 
 ```bash
-# Install dependencies
-pnpm install
-
-# Start development server
-pnpm dev
-
-# Build for production
-pnpm build
-
-# Preview production build
-pnpm preview
+VITE_SUPABASE_URL=https://<your-project>.supabase.co
+VITE_SUPABASE_ANON_KEY=<your-anon-key>
 ```
 
-### Development
-The app runs on `http://localhost:5173` by default.
+### Commands
+
+```bash
+npm install          # install dependencies
+npm run dev          # start dev server (default http://localhost:5173, auto-picks another port if busy)
+npm run check:i18n   # verify English/Chinese translation key parity
+npm run build        # i18n parity check + production build
+```
 
 ---
 
-## 📚 Documentation
+## 🌐 Internationalization
 
-Comprehensive documentation is available in multiple formats:
-
-| Document | Format | Description |
-|----------|--------|-------------|
-| `PAGES_EXPORT.md` | Markdown | Detailed page documentation with tables |
-| `SITEMAP.md` | Markdown | Navigation structure and route mapping |
-| `pages-manifest.json` | JSON | Machine-readable page metadata |
-| `EXPORT_SUMMARY.txt` | Text | Quick reference summary |
-
-### Quick Links
-- [Complete Pages Export](./PAGES_EXPORT.md)
-- [System Sitemap](./SITEMAP.md)
-- [Pages Manifest](./pages-manifest.json)
-- [Export Summary](./EXPORT_SUMMARY.txt)
+- Translations live in `src/app/i18n/en.ts` and `src/app/i18n/zh.ts` (~2,000 keys).
+- `LanguageContext` provides `t()` and the language switcher.
+- `npm run build` runs `scripts/check-i18n-parity.mjs` and **fails if `en` and `zh` keys drift apart**. Always add a key to both files.
+- See [MULTILINGUAL_GUIDE.md](./MULTILINGUAL_GUIDE.md) for details.
 
 ---
 
-## 🎨 Color Scheme
+## 🗄️ Database
 
-The system uses a consistent color palette inspired by JEP Academy branding:
+SQL migrations are in `supabase/migrations/` and are applied in filename order:
 
-| Color | Hex Code | Usage |
-|-------|----------|-------|
-| **Primary** | `#284342` | Deep green - Headers, buttons, primary text |
-| **Accent** | `#e9da95` | Gold - Button text, highlights, badges |
-| **Background** | `#f8f8f6` | Off-white - Page backgrounds |
-| **Text Primary** | `#284342` | Deep green - Main text |
-| **Text Secondary** | `#6b6b6b` | Gray - Secondary text, labels |
+| Migration | Purpose |
+|-----------|---------|
+| `calendar_centric_foundation` | Core calendar-centric schema |
+| `rls_policies` | Row Level Security for all roles |
+| `add_appointment_calendar_event_type` | Appointment events on the calendar |
+| `backfill_academy_id_and_dedupe_academy` | Academy scoping data fix |
+| `calendar_events_sync` / `calendar_sync_conflicts_admin_dismiss` | Calendar sync and conflict handling |
+| `lesson_participants_and_modules` | Lesson participants and modules |
+| `auto_academy_id_trigger` | Auto-fill `academy_id` |
+| `event_signup_and_room_rentals` | Public event sign-up and room rentals |
 
-### Additional Colors
-- **Success**: Green shades
-- **Warning**: Yellow shades  
-- **Error**: Red shades
-- **Info**: Blue shades
-
----
-
-## 👨‍🏫 Teachers
-
-The system includes four teachers:
-
-1. **Juju Lim**
-2. **Esther**
-3. **Wong Yi Feng**
-4. **Pauline Tang**
-
----
-
-## 👤 User Roles
-
-The system supports six different user roles:
-
-| Role | Access Level | Key Permissions |
-|------|--------------|-----------------|
-| **Super Admin** | Full Access | All modules + user management + audit logs |
-| **Admin** | High Access | Most modules except user management |
-| **Teacher** | Medium Access | Classes, attendance, appointments, feedback |
-| **Finance** | Medium Access | Payments, receipts, outstanding balances |
-| **Student** | Limited Access | Courses, assignments, certificates, appointments |
-| **Owner** | Full Access | All modules with business analytics focus |
+When adding tables, add RLS policies too – missing policies show up as silently empty dashboards for the affected role.
 
 ---
 
@@ -269,121 +172,76 @@ The system supports six different user roles:
 
 ```
 src/
+├── main.tsx                  # Entry point
 ├── app/
-│   ├── pages/              # All page components (39 files)
-│   │   ├── students/       # Student management pages
-│   │   ├── courses/        # Course management pages
-│   │   ├── classes/        # Class scheduling pages
-│   │   ├── attendance/     # Attendance tracking pages
-│   │   ├── payments/       # Payment management pages
-│   │   ├── portfolio/      # Portfolio and feedback pages
-│   │   ├── appointments/   # Appointment booking pages
-│   │   ├── communications/ # Messaging pages
-│   │   ├── certificates/   # Certificate pages
-│   │   └── index.ts        # Central page exports
-│   │
-│   ├── components/         # Reusable components (14 files)
-│   │   └── index.ts        # Central component exports
-│   │
-│   └── App.tsx            # Main application component
-│
-├── styles/
-│   ├── theme.css          # Theme variables and tokens
-│   └── fonts.css          # Font imports
-│
-└── main.tsx               # Application entry point
+│   ├── App.tsx
+│   ├── routes.tsx            # React Router data router
+│   ├── pages/                # Route pages, grouped by module
+│   ├── components/           # Shared and per-module components
+│   │   ├── dashboard/        # Role dashboards
+│   │   ├── payments/ reports/ settings/ notifications/ userManagement/
+│   │   └── ui/               # Shared UI (EmptyState, dialogs, etc.)
+│   ├── context/              # LanguageContext, ConfirmDialogContext
+│   ├── services/             # Supabase data services (payments, CRM, notifications, ...)
+│   ├── i18n/                 # en.ts / zh.ts
+│   ├── lib/                  # Supabase client
+│   ├── hooks/ types/ utils/
+└── styles/                   # Tailwind, theme tokens, fonts
+supabase/migrations/          # Database schema and RLS
+scripts/check-i18n-parity.mjs # Build-time translation guard
 ```
 
 ---
 
-## 🔗 Route Structure
+## 🔗 Routes
 
-All routes follow the pattern: `/app/{module}/{action}`
+Public: `/` (login), `/student-registration`, `/forgot-password`, `/reset-password`, `/register/:occurrenceId`
 
-### Example Routes
+Authenticated routes live under `/app`, for example:
 
 ```
-/app                              → Dashboard
-/app/students/list                → Student List
-/app/students/registration        → New Registration
-/app/classes/calendar             → Class Calendar
-/app/attendance/daily             → Daily Attendance
-/app/payments/receipts            → Payment Receipts
-/app/appointments/booking         → Teacher Booking
-/app/communications/whatsapp      → WhatsApp Messages
+/app/dashboard                → Role dashboard
+/app/students/list            → Student List
+/app/courses/list             → Courses
+/app/calendar                 → Unified Calendar
+/app/attendance/daily         → Daily Attendance
+/app/payments/receipts        → Receipts
+/app/portfolio/submissions    → Assignment Submission
+/app/communications/whatsapp  → WhatsApp
+/app/crm                      → CRM
+/app/users                    → User Management
+/app/audit                    → Audit Logs
 ```
 
-See [SITEMAP.md](./SITEMAP.md) for complete route listing.
+See [SITEMAP.md](./SITEMAP.md) for the full list and role access.
 
 ---
 
-## 📝 Key Features by Page
+## 📚 Documentation
 
-### Dashboard
-- Role-specific metrics (Admin vs Owner views)
-- Today's class schedule
-- Pending approvals
-- Payment reminders
-- Quick action buttons
-
-### Student List
-- Advanced search and filtering
-- Student cards with key information
-- Quick actions (View, Edit, Delete)
-- Export to Excel/PDF
-
-### Class Calendar
-- Monthly and weekly views
-- Interactive date selection
-- Class details on hover
-- Color-coded by course/teacher
-- Today's date highlighting
-
-### Payment Receipts
-- Receipt generation
-- PDF download
-- Email to student
-- Payment history
-- Outstanding balance tracking
+| Document | Description |
+|----------|-------------|
+| `SYSTEM_OVERVIEW.md` | System architecture and module descriptions |
+| `MULTILINGUAL_GUIDE.md` | Working with translations |
+| `SITEMAP.md` | Routes and role access matrix |
+| `PAGES_EXPORT.md` | Page-by-page file reference |
+| `pages-manifest.json`, `EXPORT_SUMMARY.txt` | Original page export (earlier version; not kept in sync) |
+| `COMPLETED_PAGES.md` | Page completion tracking |
+| `AGENTS.md` / `CLAUDE.md` | Instructions for AI coding agents |
 
 ---
 
-## 🎯 Best Practices
+## 🎨 Branding
 
-### Code Style
-- TypeScript for type safety
-- Functional components with hooks
-- Tailwind CSS for styling (no inline styles)
-- Lucide React for icons
-- Consistent naming conventions
-
-### File Organization
-- One component per file
-- PascalCase for component names
-- Organized by module/feature
-- Central export files for easy imports
-
-### UI/UX
-- Responsive design (mobile-first)
-- Consistent color scheme
-- Clear visual hierarchy
-- Accessible forms and inputs
-- Loading states and error handling
+| Color | Hex | Usage |
+|-------|-----|-------|
+| **Primary** | `#284342` | Deep green – headers, buttons, text |
+| **Accent** | `#e9da95` | Gold – highlights, button text, badges |
+| **Background** | `#f8f8f6` | Off-white page background |
+| **Secondary text** | `#6b6b6b` | Labels and secondary text |
 
 ---
 
 ## 📄 License
 
 © 2026 JEP Image Makeup Academy. All rights reserved.
-
----
-
-## 📞 Support
-
-For questions or issues, please refer to the documentation files or contact the development team.
-
----
-
-**Last Updated:** June 2, 2026  
-**Version:** 1.0.0  
-**Status:** ✅ Production Ready

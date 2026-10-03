@@ -1,233 +1,137 @@
 # JEP Image Makeup Academy - System Sitemap
 
+Source of truth: `src/app/routes.tsx` (routes) and `src/app/utils/permissions.ts` (role access).
+
 ## Application Structure
 
 ```
 JEP Academy Management System
 │
-├── 🏠 Dashboard
-│   ├── Admin Dashboard
-│   └── Owner Dashboard
+├── Public (no login)
+│   ├── Login                      /
+│   ├── Student Registration       /student-registration
+│   ├── Forgot Password            /forgot-password
+│   ├── Reset Password             /reset-password
+│   └── Event Sign-up              /register/:occurrenceId
 │
-├── 👥 Students
-│   ├── Student List
-│   ├── Student Registration
-│   └── Registration Approval
-│
-├── 📚 Courses
-│   ├── Course List
-│   └── Class Batches
-│
-├── 📅 Classes
-│   ├── Class Calendar
-│   ├── Class Scheduling
-│   └── Classroom Allocation
-│
-├── ✅ Attendance
-│   ├── Daily Attendance
-│   ├── Makeup Classes
-│   └── Attendance Reports
-│
-├── 💰 Payments
-│   ├── Installment Plans
-│   ├── Payment Receipts
-│   └── Outstanding Balances
-│
-├── 🎨 Portfolio
-│   ├── Assignment Submission
-│   └── Teacher Feedback
-│
-├── 📆 Appointments
-│   ├── Teacher Booking
-│   ├── Teacher Availability
-│   └── Appointment Calendar
-│
-├── 💬 Communications
-│   ├── WhatsApp Communications
-│   ├── Email Communications
-│   └── Message Templates
-│
-├── 🎓 Certificates
-│   ├── Course Certificates
-│   └── Attendance Certificates
-│
-├── 📊 Reports
-│   └── (Reports dashboard)
-│
-├── 📋 Survey & Feedback
-│   └── Student Surveys & Teacher Evaluations
-│
-├── 📁 Document Center
-│   └── Student Document Management
-│
-├── 🔐 User Management
-│   └── System Users & Roles
-│
-├── 📜 Audit Logs
-│   └── System Activity Logs
-│
-└── ⚙️ Settings
-    └── System Configuration
+└── App (/app, login required)
+    ├── 🏠 Dashboard (role-specific)
+    ├── 🔔 Notification Center
+    ├── 👥 Students: List, Registration, Approval, Profile, Progress
+    ├── 📚 Courses: Categories, Courses, Class Batches, Lessons
+    ├── 📅 Calendar: Unified Calendar, Reschedule Requests
+    ├── 🏫 Classes: Scheduling, Classroom Allocation, Teacher Availability
+    ├── 🎟️ Events: Event Management (sessions, trial classes, consultations, room rentals)
+    ├── ✅ Attendance: Daily, Makeup Classes, Reports
+    ├── 💰 Payments: Plans, Installments, Receipts, Outstanding Balances
+    ├── 🎨 Portfolio: Gallery, Assignment Submission, Teacher Feedback
+    ├── 🎓 Certificates: Completion, Perfect Attendance
+    ├── 💬 Communications: WhatsApp, Email, Broadcast, Templates
+    ├── 🤝 CRM: Leads, Deals, Team, Commission Settings
+    ├── 📊 Reports
+    ├── 📋 Survey & Feedback
+    ├── 📁 Document Center
+    ├── 🔐 User Management (users, invitations, permission matrix, login activity)
+    ├── 📜 Audit Logs
+    └── ⚙️ Settings (about, notification settings, message templates)
 ```
 
 ## URL Routes
 
-### Main Navigation
+### Public
+
+| Route | Page |
+|-------|------|
+| `/` | Login |
+| `/student-registration` | Student Registration (public form) |
+| `/forgot-password` | Forgot Password |
+| `/reset-password` | Reset Password |
+| `/register/:occurrenceId` | Public event sign-up |
+
+### Authenticated (`/app/...`)
 
 | Module | Route | Page |
 |--------|-------|------|
-| **Dashboard** | `/app` | Dashboard (Role-based) |
+| **Dashboard** | `/app/dashboard` | Role-based dashboard |
+| | `/app/notifications` | Notification Center |
+| | `/app/access-denied` | Shown when a role lacks access |
 | **Students** | `/app/students/list` | Student List |
 | | `/app/students/registration` | Student Registration |
 | | `/app/students/approval` | Registration Approval |
-| **Courses** | `/app/courses/list` | Course List |
+| | `/app/students/profile/:id` | Student Profile |
+| | `/app/students/progress` | Student Progress |
+| **Courses** | `/app/courses/categories` | Course Categories |
+| | `/app/courses/list` | Courses |
 | | `/app/courses/batches` | Class Batches |
-| **Classes** | `/app/classes/calendar` | Class Calendar |
-| | `/app/classes/scheduling` | Class Scheduling |
+| | `/app/courses/lessons` | Lessons |
+| **Calendar** | `/app/calendar` | Unified Calendar |
+| | `/app/reschedule-requests` | Reschedule Requests |
+| **Classes** | `/app/classes/scheduling` | Class Scheduling |
 | | `/app/classes/allocation` | Classroom Allocation |
+| | `/app/appointments/availability` | Teacher Availability |
+| **Events** | `/app/events` | Event Management |
 | **Attendance** | `/app/attendance/daily` | Daily Attendance |
 | | `/app/attendance/makeup` | Makeup Classes |
 | | `/app/attendance/reports` | Attendance Reports |
-| **Payments** | `/app/payments/installments` | Installment Plans |
-| | `/app/payments/receipts` | Payment Receipts |
+| **Payments** | `/app/payments/plans` | Payment Plans |
+| | `/app/payments/installments` | Installments |
+| | `/app/payments/receipts` | Receipts |
 | | `/app/payments/outstanding` | Outstanding Balances |
-| **Portfolio** | `/app/portfolio/submission` | Assignment Submission |
+| **Portfolio** | `/app/portfolio/gallery` | Student Gallery |
+| | `/app/portfolio/submissions` | Assignment Submission |
 | | `/app/portfolio/feedback` | Teacher Feedback |
-| **Appointments** | `/app/appointments/booking` | Teacher Booking |
-| | `/app/appointments/availability` | Teacher Availability |
-| | `/app/appointments/calendar` | Appointment Calendar |
-| **Communications** | `/app/communications/whatsapp` | WhatsApp Communications |
-| | `/app/communications/email` | Email Communications |
-| | `/app/communications/templates` | Message Templates |
-| **Certificates** | `/app/certificates/course` | Course Certificates |
+| **Certificates** | `/app/certificates/completion` | Completion Certificates |
 | | `/app/certificates/attendance` | Attendance Certificates |
-| **Reports** | `/app/reports` | Reports Dashboard |
-| **Survey** | `/app/survey-feedback` | Survey & Feedback |
-| **Documents** | `/app/document-center` | Document Center |
-| **Users** | `/app/user-management` | User Management |
-| **Audit** | `/app/audit-logs` | Audit Logs |
-| **Settings** | `/app/settings` | System Settings |
+| **Communications** | `/app/communications/whatsapp` | WhatsApp |
+| | `/app/communications/email` | Email |
+| | `/app/communications/broadcast` | Broadcast Messages |
+| | `/app/communications/templates` | Message Templates |
+| **CRM** | `/app/crm` | CRM |
+| **Other** | `/app/survey` | Survey & Feedback |
+| | `/app/reports` | Reports |
+| | `/app/documents` | Document Center |
+| | `/app/users` | User Management |
+| | `/app/audit` | Audit Logs |
+| | `/app/settings` | Settings |
 
-## User Role Access Matrix
+> Teacher booking and the appointment calendar were replaced by **Events** (`/app/events`). `TeacherBooking.tsx` and `AppointmentCalendar.tsx` still exist in `src/app/pages/appointments/` but are not routed.
 
-| Page | Super Admin | Admin | Teacher | Finance | Student | Owner |
-|------|-------------|-------|---------|---------|---------|-------|
-| Dashboard | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| Student List | ✓ | ✓ | ✓ | ✓ | - | ✓ |
-| Registration | ✓ | ✓ | - | - | - | ✓ |
-| Approval | ✓ | ✓ | - | - | - | ✓ |
-| Courses | ✓ | ✓ | ✓ | - | ✓ | ✓ |
-| Class Calendar | ✓ | ✓ | ✓ | - | ✓ | ✓ |
-| Class Scheduling | ✓ | ✓ | - | - | - | ✓ |
-| Classroom Allocation | ✓ | ✓ | - | - | - | ✓ |
-| Daily Attendance | ✓ | ✓ | ✓ | - | - | ✓ |
-| Makeup Classes | ✓ | ✓ | ✓ | - | - | ✓ |
-| Attendance Reports | ✓ | ✓ | ✓ | - | - | ✓ |
-| Installments | ✓ | ✓ | - | ✓ | - | ✓ |
-| Receipts | ✓ | ✓ | - | ✓ | ✓ | ✓ |
-| Outstanding Balances | ✓ | ✓ | - | ✓ | - | ✓ |
-| Assignment Submission | ✓ | - | - | - | ✓ | - |
-| Teacher Feedback | ✓ | - | ✓ | - | - | - |
-| Teacher Booking | ✓ | ✓ | ✓ | - | ✓ | ✓ |
-| Teacher Availability | ✓ | ✓ | ✓ | - | ✓ | ✓ |
-| Appointment Calendar | ✓ | ✓ | ✓ | - | - | ✓ |
-| WhatsApp Comms | ✓ | ✓ | - | - | - | ✓ |
-| Email Comms | ✓ | ✓ | - | - | - | ✓ |
-| Message Templates | ✓ | ✓ | - | - | - | ✓ |
-| Course Certificates | ✓ | ✓ | - | - | ✓ | ✓ |
-| Attendance Certificates | ✓ | ✓ | - | - | ✓ | ✓ |
-| Reports | ✓ | ✓ | - | - | - | ✓ |
-| Survey & Feedback | ✓ | ✓ | ✓ | - | ✓ | ✓ |
-| Document Center | ✓ | ✓ | - | - | ✓ | ✓ |
-| User Management | ✓ | - | - | - | - | ✓ |
-| Audit Logs | ✓ | - | - | - | - | ✓ |
-| Settings | ✓ | ✓ | - | - | - | ✓ |
+## Role Access
 
-## Key Features by Module
+Access is checked by path prefix in `ROLE_ACCESS` (`src/app/utils/permissions.ts`); Supabase RLS enforces it again on the data. Row-level RLS can be narrower than the route access below (for example a student only sees their own records).
 
-### 📊 Dashboard
-- **Admin**: Active students, classes, fees, attendance rate
-- **Owner**: Revenue, enrollments, collections, satisfaction
-- Today's class schedule
-- Pending approvals (Admin only)
-- Payments due this week
-- Quick action buttons
+| Role | Accessible route prefixes |
+|------|---------------------------|
+| **Super Admin** | Everything (`*`), including `/app/settings` |
+| **Admin** | dashboard, notifications, students, courses, calendar, reschedule-requests, classes, attendance, appointments/availability, events, payments, portfolio, certificates, communications, survey, reports, documents, users, audit, crm |
+| **Owner** | dashboard, notifications, reports, payments, documents, users, audit, crm |
+| **Teacher** | dashboard, notifications, calendar, reschedule-requests, classes, attendance, appointments/availability, events, portfolio, certificates, documents |
+| **Assistant Teacher** | dashboard, notifications, calendar, reschedule-requests, attendance/daily, appointments/availability, events, portfolio/gallery, portfolio/submissions, documents |
+| **Student** | dashboard, notifications, calendar, reschedule-requests, events, portfolio/submissions, certificates (completion, attendance), payments (outstanding, plans, installments, receipts) |
+| **Finance** | dashboard, notifications, students/list, payments, reports, documents |
+| **Internal Sales** | dashboard, notifications, students/list, payments/outstanding, reports, crm |
+| **External Sales** | dashboard, notifications, students/list, payments/outstanding, crm |
+| **Parent / Guardian** | dashboard, notifications, certificates (completion, attendance), payments/outstanding |
 
-### 👥 Students
-- **Student List**: Search, filter, student profiles
-- **Registration**: Multi-step enrollment form
-- **Approval**: Review applications, approve/reject/request info
-
-### 📚 Courses
-- **Course List**: Course catalog with details
-- **Class Batches**: Batch management, capacity tracking
-
-### 📅 Classes
-- **Calendar**: Monthly/weekly visual calendar
-- **Scheduling**: Create schedules, conflict detection
-- **Allocation**: Room booking, equipment tracking
-
-### ✅ Attendance
-- **Daily**: Mark present/absent/late
-- **Makeup Classes**: Schedule makeup sessions
-- **Reports**: Attendance analytics by course/student
-
-### 💰 Payments
-- **Installments**: Payment plan schedules
-- **Receipts**: Generate and view receipts
-- **Outstanding**: Track overdue payments, send reminders
-
-### 🎨 Portfolio
-- **Submission**: Upload assignments (Student view)
-- **Feedback**: Grade and provide feedback (Teacher view)
-
-### 📆 Appointments
-- **Booking**: Book teacher consultations
-- **Availability**: View teacher schedules
-- **Calendar**: Appointment overview
-
-### 💬 Communications
-- **WhatsApp**: Send messages, track delivery
-- **Email**: Email campaigns, open rate tracking
-- **Templates**: Reusable message templates
-
-### 🎓 Certificates
-- **Course**: Generate completion certificates
-- **Attendance**: 100% attendance certificates
-
-### 📋 Other Modules
-- **Reports**: System analytics and reports
-- **Survey**: Collect student feedback
-- **Documents**: Centralized document storage
-- **User Management**: User roles and permissions
-- **Audit Logs**: System activity tracking
-- **Settings**: System configuration
-
-## Teachers
-
-1. **Juju Lim**
-2. **Esther**
-3. **Wong Yi Feng**
-4. **Pauline Tang**
+Notes:
+- `/app/settings` is reachable only by Super Admin.
+- Dashboards: Admin, Owner, Teacher, Student, Parent, Finance and Sales each get their own view.
 
 ## Technical Details
 
-- **Framework**: React 18 + TypeScript
-- **Routing**: React Router v7
+- **Framework**: React 18 + TypeScript, Vite
+- **Routing**: React Router v7 (data router)
+- **Backend**: Supabase (Postgres, Auth, RLS)
 - **Styling**: Tailwind CSS v4
-- **Icons**: Lucide React
-- **Build Tool**: Vite
+- **i18n**: English / Mandarin (`src/app/i18n`)
 
-## Color Scheme
+## Brand Colors
 
 - Primary: `#284342` (Deep Green)
 - Accent: `#e9da95` (Gold)
 - Background: `#f8f8f6` (Off-white)
-- Text: `#6b6b6b` (Gray)
-- Success: Green shades
-- Warning: Yellow shades
-- Error: Red shades
+- Secondary text: `#6b6b6b` (Gray)
 
 ---
 
-*Last Updated: June 2, 2026*
+*Last Updated: October 2026*

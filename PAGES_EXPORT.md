@@ -1,240 +1,139 @@
-# JEP Academy - Complete Pages Export
+# JEP Academy - Pages Reference
 
-## Total: 38 Page Files
+All paths are under `src/app/pages/`. Routes are defined in `src/app/routes.tsx` (see [SITEMAP.md](./SITEMAP.md)).
 
----
+## 📊 Top-level pages (13)
 
-## 📊 Dashboard & Core (6 files)
+| File | Route | Purpose |
+|------|-------|---------|
+| `Dashboard.tsx` | `/app/dashboard` | Role-based dashboard (views in `components/dashboard/`) |
+| `LoginPage.tsx` | `/` | Login |
+| `ForgotPassword.tsx` | `/forgot-password` | Request password reset |
+| `ResetPassword.tsx` | `/reset-password` | Set a new password |
+| `AccessDenied.tsx` | `/app/access-denied` | Shown when a role cannot open a route |
+| `NotificationCenter.tsx` | `/app/notifications` | Notifications, reminder review, WhatsApp queue |
+| `RescheduleRequests.tsx` | `/app/reschedule-requests` | Review class reschedule requests |
+| `Reports.tsx` | `/app/reports` | Reports and analytics |
+| `SurveyFeedback.tsx` | `/app/survey` | Surveys and evaluations |
+| `DocumentCenter.tsx` | `/app/documents` | Document storage |
+| `UserManagement.tsx` | `/app/users` | Users, invitations, permissions |
+| `AuditLogs.tsx` | `/app/audit` | System activity logs |
+| `Settings.tsx` | `/app/settings` | System settings (Super Admin) |
 
-| # | File Name | Path | Purpose |
-|---|-----------|------|---------|
-| 1 | Dashboard.tsx | `/src/app/pages/Dashboard.tsx` | Main dashboard (Admin/Owner views) |
-| 2 | LoginPage.tsx | `/src/app/pages/LoginPage.tsx` | Login and authentication |
-| 3 | Settings.tsx | `/src/app/pages/Settings.tsx` | System settings and configuration |
-| 4 | Reports.tsx | `/src/app/pages/Reports.tsx` | System reports and analytics |
-| 5 | UserManagement.tsx | `/src/app/pages/UserManagement.tsx` | User and role management |
-| 6 | AuditLogs.tsx | `/src/app/pages/AuditLogs.tsx` | System activity audit logs |
+## 👥 students/
 
----
+| File | Route | Purpose |
+|------|-------|---------|
+| `StudentList.tsx` | `/app/students/list` | Search and filter students |
+| `StudentProfile.tsx` | `/app/students/profile/:id` | Profile, batch enrolment, status |
+| `StudentRegistration.tsx` | `/app/students/registration`, `/student-registration` | Enrollment form (internal and public) |
+| `RegistrationApproval.tsx` | `/app/students/approval` | Approve / reject registrations |
+| `StudentProgress.tsx` | `/app/students/progress` | Course progress |
 
-## 👥 Students Module (5 files)
+## 📚 courses/
 
-| # | File Name | Path | Purpose |
-|---|-----------|------|---------|
-| 7 | StudentList.tsx | `/src/app/pages/students/StudentList.tsx` | List all students with search/filter |
-| 8 | StudentProfile.tsx | `/src/app/pages/students/StudentProfile.tsx` | Individual student profile page |
-| 9 | StudentRegistration.tsx | `/src/app/pages/students/StudentRegistration.tsx` | New student enrollment form |
-| 10 | RegistrationApproval.tsx | `/src/app/pages/students/RegistrationApproval.tsx` | Review and approve registrations |
-| 11 | StudentProgress.tsx | `/src/app/pages/students/StudentProgress.tsx` | Track student course progress |
+| File | Route | Purpose |
+|------|-------|---------|
+| `CourseCategories.tsx` | `/app/courses/categories` | Categories |
+| `Courses.tsx` | `/app/courses/list` | Course catalog |
+| `ClassBatches.tsx` | `/app/courses/batches` | Batches per course |
+| `Lessons.tsx` | `/app/courses/lessons` | Lesson content |
 
----
+## 📅 calendar/, classes/, events/
 
-## 📚 Courses Module (4 files)
+| File | Route | Purpose |
+|------|-------|---------|
+| `calendar/UnifiedCalendar.tsx` | `/app/calendar` | Classes, events, appointments and rentals in one calendar |
+| `classes/ClassScheduling.tsx` | `/app/classes/scheduling` | Scheduling with conflict detection |
+| `classes/ClassroomAllocation.tsx` | `/app/classes/allocation` | Room allocation |
+| `classes/ClassCalendar.tsx` | – (not routed) | Legacy class calendar, superseded by the unified calendar |
+| `events/EventManagement.tsx` | `/app/events` | Events, trial classes, consultations, room rentals |
+| `public/EventSignup.tsx` | `/register/:occurrenceId` | Public event sign-up |
 
-| # | File Name | Path | Purpose |
-|---|-----------|------|---------|
-| 12 | Courses.tsx | `/src/app/pages/courses/Courses.tsx` | Course catalog and management |
-| 13 | CourseCategories.tsx | `/src/app/pages/courses/CourseCategories.tsx` | Course category organization |
-| 14 | ClassBatches.tsx | `/src/app/pages/courses/ClassBatches.tsx` | Batch management per course |
-| 15 | Lessons.tsx | `/src/app/pages/courses/Lessons.tsx` | Lesson content and curriculum |
+## ✅ attendance/
 
----
+| File | Route | Purpose |
+|------|-------|---------|
+| `DailyAttendance.tsx` | `/app/attendance/daily` | Mark attendance |
+| `MakeupClasses.tsx` | `/app/attendance/makeup` | Makeup sessions |
+| `AttendanceReports.tsx` | `/app/attendance/reports` | Attendance analytics |
 
-## 📅 Classes Module (3 files)
+## 📆 appointments/
 
-| # | File Name | Path | Purpose |
-|---|-----------|------|---------|
-| 16 | ClassCalendar.tsx | `/src/app/pages/classes/ClassCalendar.tsx` | Monthly/weekly class calendar view |
-| 17 | ClassScheduling.tsx | `/src/app/pages/classes/ClassScheduling.tsx` | Schedule classes with conflict detection |
-| 18 | ClassroomAllocation.tsx | `/src/app/pages/classes/ClassroomAllocation.tsx` | Room booking and allocation |
+| File | Route | Purpose |
+|------|-------|---------|
+| `TeacherAvailability.tsx` | `/app/appointments/availability` | Teacher availability |
+| `TeacherBooking.tsx` | – (not routed) | Legacy booking page, replaced by Events |
+| `AppointmentCalendar.tsx` | – (not routed) | Legacy appointment calendar, replaced by Events |
 
----
+## 💰 payments/
 
-## ✅ Attendance Module (3 files)
+| File | Route | Purpose |
+|------|-------|---------|
+| `PaymentPlans.tsx` | `/app/payments/plans` | Payment plans |
+| `Installments.tsx` | `/app/payments/installments` | Installment schedules |
+| `Receipts.tsx` | `/app/payments/receipts` | Receipts (PDF) |
+| `OutstandingBalances.tsx` | `/app/payments/outstanding` | Unpaid balances |
 
-| # | File Name | Path | Purpose |
-|---|-----------|------|---------|
-| 19 | DailyAttendance.tsx | `/src/app/pages/attendance/DailyAttendance.tsx` | Mark daily attendance |
-| 20 | MakeupClasses.tsx | `/src/app/pages/attendance/MakeupClasses.tsx` | Schedule makeup sessions |
-| 21 | AttendanceReports.tsx | `/src/app/pages/attendance/AttendanceReports.tsx` | Attendance analytics and reports |
+Shared pieces are in `payments/components/`.
 
----
+## 🎨 portfolio/
 
-## 💰 Payments Module (4 files)
+| File | Route | Purpose |
+|------|-------|---------|
+| `StudentGallery.tsx` | `/app/portfolio/gallery` | Portfolio gallery |
+| `AssignmentSubmission.tsx` | `/app/portfolio/submissions` | Assignment uploads |
+| `TeacherFeedback.tsx` | `/app/portfolio/feedback` | Grading and feedback |
 
-| # | File Name | Path | Purpose |
-|---|-----------|------|---------|
-| 22 | PaymentPlans.tsx | `/src/app/pages/payments/PaymentPlans.tsx` | Payment plan templates |
-| 23 | Installments.tsx | `/src/app/pages/payments/Installments.tsx` | Installment schedules |
-| 24 | Receipts.tsx | `/src/app/pages/payments/Receipts.tsx` | Payment receipts and invoices |
-| 25 | OutstandingBalances.tsx | `/src/app/pages/payments/OutstandingBalances.tsx` | Track unpaid balances |
+## 🎓 certificates/
 
----
+| File | Route | Purpose |
+|------|-------|---------|
+| `CompletionCertificates.tsx` | `/app/certificates/completion` | Completion certificates |
+| `AttendanceCertificates.tsx` | `/app/certificates/attendance` | Perfect-attendance certificates |
 
-## 🎨 Portfolio Module (3 files)
+## 💬 communications/
 
-| # | File Name | Path | Purpose |
-|---|-----------|------|---------|
-| 26 | AssignmentSubmission.tsx | `/src/app/pages/portfolio/AssignmentSubmission.tsx` | Student assignment uploads |
-| 27 | TeacherFeedback.tsx | `/src/app/pages/portfolio/TeacherFeedback.tsx` | Grade and provide feedback |
-| 28 | StudentGallery.tsx | `/src/app/pages/portfolio/StudentGallery.tsx` | Student portfolio gallery |
+| File | Route | Purpose |
+|------|-------|---------|
+| `WhatsAppComms.tsx` | `/app/communications/whatsapp` | WhatsApp messaging |
+| `EmailComms.tsx` | `/app/communications/email` | Email |
+| `BroadcastMessages.tsx` | `/app/communications/broadcast` | Mass messaging |
+| `MessageTemplates.tsx` | `/app/communications/templates` | Reusable templates |
 
----
+## 🤝 crm/
 
-## 📆 Appointments Module (3 files)
+| File | Route | Purpose |
+|------|-------|---------|
+| `CRMPage.tsx` | `/app/crm` | CRM shell |
+| `components/LeadsSection.tsx` | – | Leads |
+| `components/DealsSection.tsx` | – | Deals |
+| `components/ConvertDealModal.tsx` | – | Convert a deal into a student |
+| `components/TeamSection.tsx` | – | Sales team |
+| `components/CommissionSettingSection.tsx` | – | Commission settings |
 
-| # | File Name | Path | Purpose |
-|---|-----------|------|---------|
-| 29 | TeacherBooking.tsx | `/src/app/pages/appointments/TeacherBooking.tsx` | Book teacher consultations |
-| 30 | TeacherAvailability.tsx | `/src/app/pages/appointments/TeacherAvailability.tsx` | View teacher schedules |
-| 31 | AppointmentCalendar.tsx | `/src/app/pages/appointments/AppointmentCalendar.tsx` | Appointment overview calendar |
+## 🧩 Shared code
 
----
+| Location | Contents |
+|----------|----------|
+| `components/Layout.tsx`, `ProtectedRoute.tsx` | Sidebar layout and route guard |
+| `components/dashboard/` | Admin, Owner, Teacher, Student, Parent, Finance, Sales dashboards |
+| `components/reports/` | KPI section, charts, report generator/preview/history |
+| `components/settings/` | About, notification settings, message template editor |
+| `components/notifications/` | Notification center, WhatsApp queue |
+| `components/userManagement/` | Table, filters, KPIs, modal, invitations, permission matrix, login activity |
+| `components/ui/` | Shared UI primitives, including `EmptyState` |
+| `context/` | `LanguageContext`, `ConfirmDialogContext` |
+| `services/` | Supabase data services (payments, CRM, notifications, reports, settings, user management, ...) |
+| `i18n/` | `en.ts`, `zh.ts` |
+| `utils/permissions.ts` | Role-to-route access map |
 
-## 💬 Communications Module (4 files)
+## 📝 Conventions
 
-| # | File Name | Path | Purpose |
-|---|-----------|------|---------|
-| 32 | WhatsAppComms.tsx | `/src/app/pages/communications/WhatsAppComms.tsx` | WhatsApp messaging |
-| 33 | EmailComms.tsx | `/src/app/pages/communications/EmailComms.tsx` | Email campaigns |
-| 34 | MessageTemplates.tsx | `/src/app/pages/communications/MessageTemplates.tsx` | Reusable message templates |
-| 35 | BroadcastMessages.tsx | `/src/app/pages/communications/BroadcastMessages.tsx` | Mass messaging system |
-
----
-
-## 🎓 Certificates Module (2 files)
-
-| # | File Name | Path | Purpose |
-|---|-----------|------|---------|
-| 36 | CompletionCertificates.tsx | `/src/app/pages/certificates/CompletionCertificates.tsx` | Course completion certificates |
-| 37 | AttendanceCertificates.tsx | `/src/app/pages/certificates/AttendanceCertificates.tsx` | Perfect attendance certificates |
-
----
-
-## 📋 Other Modules (2 files)
-
-| # | File Name | Path | Purpose |
-|---|-----------|------|---------|
-| 38 | SurveyFeedback.tsx | `/src/app/pages/SurveyFeedback.tsx` | Student surveys and feedback |
-| 39 | DocumentCenter.tsx | `/src/app/pages/DocumentCenter.tsx` | Document management system |
-
----
-
-## 🎨 Component Files (14 files)
-
-These are reusable UI components used across the application:
-
-| # | File Name | Path | Purpose |
-|---|-----------|------|---------|
-| 1 | Layout.tsx | `/src/app/components/Layout.tsx` | Main application layout wrapper |
-| 2 | Dashboard.tsx | `/src/app/components/Dashboard.tsx` | Dashboard component |
-| 3 | Students.tsx | `/src/app/components/Students.tsx` | Students management component |
-| 4 | Courses.tsx | `/src/app/components/Courses.tsx` | Courses component |
-| 5 | Classes.tsx | `/src/app/components/Classes.tsx` | Classes scheduling component |
-| 6 | Attendance.tsx | `/src/app/components/Attendance.tsx` | Attendance tracking component |
-| 7 | PaymentTracking.tsx | `/src/app/components/PaymentTracking.tsx` | Payment tracking component |
-| 8 | Portfolio.tsx | `/src/app/components/Portfolio.tsx` | Portfolio component |
-| 9 | Appointments.tsx | `/src/app/components/Appointments.tsx` | Appointments component |
-| 10 | Communications.tsx | `/src/app/components/Communications.tsx` | Communications component |
-| 11 | Certificates.tsx | `/src/app/components/Certificates.tsx` | Certificates component |
-| 12 | Reports.tsx | `/src/app/components/Reports.tsx` | Reports component |
-| 13 | Settings.tsx | `/src/app/components/Settings.tsx` | Settings component |
-| 14 | LoginPage.tsx | `/src/app/components/LoginPage.tsx` | Login page component |
+- Pages and components: PascalCase `.tsx`; module folders are lowercase.
+- Every user-facing string goes through `t()`; add keys to both `en.ts` and `zh.ts` (the build fails on drift).
+- Add RLS policies with any new table.
 
 ---
 
-## 📊 Summary Statistics
-
-| Category | Count |
-|----------|-------|
-| **Total Page Files** | 39 |
-| **Total Component Files** | 14 |
-| **Dashboard & Core** | 6 pages |
-| **Students Module** | 5 pages |
-| **Courses Module** | 4 pages |
-| **Classes Module** | 3 pages |
-| **Attendance Module** | 3 pages |
-| **Payments Module** | 4 pages |
-| **Portfolio Module** | 3 pages |
-| **Appointments Module** | 3 pages |
-| **Communications Module** | 4 pages |
-| **Certificates Module** | 2 pages |
-| **Other Modules** | 2 pages |
-
----
-
-## 🎯 Key Features Across All Pages
-
-### Common Features
-- ✅ Responsive design (mobile, tablet, desktop)
-- ✅ Malaysian localization (RM currency, Malaysian names)
-- ✅ Consistent JEP Academy branding (#284342, #e9da95)
-- ✅ Search and filter functionality
-- ✅ Role-based access control
-- ✅ Real-time status updates
-- ✅ Export capabilities
-- ✅ Dummy data for UI testing
-
-### Data Management
-- ✅ CRUD operations (Create, Read, Update, Delete)
-- ✅ Form validation
-- ✅ Data tables with sorting
-- ✅ Statistics and analytics cards
-- ✅ Modal dialogs for actions
-- ✅ Status badges and color coding
-
-### User Experience
-- ✅ Intuitive navigation
-- ✅ Toast notifications
-- ✅ Loading states
-- ✅ Error handling
-- ✅ Confirmation dialogs
-- ✅ Bulk actions
-
----
-
-## 👨‍🏫 Teachers in System
-
-1. **Juju Lim**
-2. **Esther**
-3. **Wong Yi Feng**
-4. **Pauline Tang**
-
----
-
-## 🎨 Technology Stack
-
-- **Framework**: React 18 with TypeScript
-- **Routing**: React Router v7
-- **Styling**: Tailwind CSS v4
-- **Icons**: Lucide React
-- **Build Tool**: Vite
-- **State Management**: React Hooks (useState, useEffect)
-
----
-
-## 📝 File Naming Conventions
-
-- **Pages**: PascalCase (e.g., `StudentList.tsx`)
-- **Components**: PascalCase (e.g., `Layout.tsx`)
-- **Folders**: lowercase (e.g., `students/`, `courses/`)
-- **All files**: `.tsx` extension (TypeScript + JSX)
-
----
-
-## 🔗 Route Pattern
-
-```
-/app/{module}/{action}
-
-Examples:
-- /app/students/list
-- /app/classes/calendar
-- /app/payments/receipts
-- /app/appointments/booking
-```
-
----
-
-*Export Date: June 2, 2026*
-*Total Files: 53 (39 pages + 14 components)*
+*Last Updated: October 2026*

@@ -2,7 +2,7 @@
 
 ## Overview
 
-A complete, production-ready Academy Management & Administration System built for JEP Image Makeup Academy. This is NOT a generic school management system - it's specifically designed for beauty academy operations.
+An Academy Management & Administration System built for JEP Image Makeup Academy. It is designed for beauty academy operations rather than being a generic school system.
 
 ## Branding
 
@@ -10,295 +10,150 @@ A complete, production-ready Academy Management & Administration System built fo
 - **Primary Color**: #284342 (Deep Green)
 - **Accent Color**: #e9da95 (Gold)
 - **Background**: #f8f8f6 (Off-white)
-- **Style**: Premium, Elegant, Professional, Luxury Education
+- **Style**: Premium, Elegant, Professional
 
 ## System Architecture
 
-- **Framework**: React 18 + TypeScript
-- **Routing**: React Router v7 (Data Router Pattern)
-- **Styling**: Tailwind CSS v4
+- **Framework**: React 18 + TypeScript, built with Vite (not Next.js, despite the project's origin)
+- **Routing**: React Router v7 (data router, `src/app/routes.tsx`)
+- **Backend**: Supabase — Postgres, Auth, Row Level Security, SQL migrations in `supabase/migrations/`
+- **Styling**: Tailwind CSS v4, Radix UI, MUI
 - **Icons**: Lucide React
+- **Charts / exports**: Recharts, jsPDF, xlsx
+- **i18n**: English and Mandarin, ~2,000 keys, enforced by `npm run check:i18n` during `npm run build`
+- **Hosting**: Vercel (SPA rewrite)
+
+Data access goes through the Supabase client (`src/app/lib/supabase.ts`) and per-domain services in `src/app/services/`. Access control is layered: `ProtectedRoute` + `utils/permissions.ts` in the UI, RLS policies in the database.
 
 ## User Roles
 
-The system supports 6 distinct user roles with role-based access control:
+Ten roles (see `src/app/utils/permissions.ts` for exact route access and `SITEMAP.md` for the table):
 
-1. **Super Admin** - Full system access
-2. **Admin** - Academy administration
-3. **Teacher** - Class and student management
-4. **Student** - Course and portfolio access
-5. **Finance Staff** - Payment management
-6. **Academy Owner** - Business analytics and reports
+1. **Super Admin** – everything, including Settings
+2. **Owner** – analytics, payments, reports, users, audit, CRM
+3. **Admin** – academy administration
+4. **Teacher** – classes, attendance, events, portfolio feedback, certificates
+5. **Assistant Teacher** – daily attendance, events, portfolio
+6. **Finance** – payments, reports, documents
+7. **Internal Sales** – CRM, student list, outstanding balances, reports
+8. **External Sales** – CRM, student list, outstanding balances
+9. **Student** – own calendar, events, assignments, certificates, payments
+10. **Parent / Guardian** – child's certificates and outstanding payments
 
 ## Module Structure
 
 ### 1. Dashboard
-- **Admin Dashboard**: Active Students, Classes, Outstanding Fees, Attendance Rate, Pending Approvals
-- **Owner Dashboard**: Monthly Revenue, Enrollment Trends, Teacher Performance, Student Satisfaction
-- **Today's Classes**: Real-time class schedule
-- **Quick Actions**: Common operations accessible from dashboard
+Role-specific dashboards for Admin, Owner, Teacher, Student, Parent, Finance and Sales, with stats and quick actions linking into the relevant module.
 
 ### 2. Student Management
-- **Student List**: Comprehensive student database with search and filters
-- **Student Registration**: Complete registration form with PDPA consent
-- **Registration Approval**: Workflow for approving/rejecting applications
-- **Student Profile**: Individual student details with attendance, payments, portfolio
-- **Student Progress**: Track course completion and achievements
+- **Student List** with search and filters, and an empty state with a CTA
+- **Registration** (internal and public `/student-registration`, with PDPA consent) and **Approval** workflow
+- **Student Profile**: details, class-batch enrolment (editable), attendance, payments, portfolio, status including *completed*
+- **Student Progress**
 
 ### 3. Course Management
-- **Course Categories**: Organize courses by category
-- **Courses**: Complete course catalog
-- **Class Batches**: Batch management for each course
-- **Lessons**: Lesson planning and curriculum
+- **Course Categories**, **Courses** (with delete and a link into Class Batches), **Class Batches**, **Lessons**
+- Catalog and discounts are based on the real JEP fee guide
 
-### 4. Class Management
-- **Calendar**: Monthly/Weekly/Daily class schedule views
-- **Scheduling**: Create and manage class schedules
-- **Classroom Allocation**: Room booking and conflict detection
-- **Conflict Detection**: Prevent double-booking of teachers and rooms
+### 4. Calendar & Classes
+- **Unified Calendar**: classes, events, appointments and room rentals in one view, with sync-conflict handling (admins can dismiss conflicts)
+- **Reschedule Requests**
+- **Class Scheduling** with teacher/room conflict detection, **Classroom Allocation**, **Teacher Availability**
 
-### 5. Attendance System
-- **Daily Attendance**: Mark student attendance (Present/Absent/Late/Leave)
-- **Makeup Classes**: Schedule makeup classes for absent students
-- **Attendance Reports**: Generate attendance analytics
-- **Workflow**: Absent → Notification → Makeup Class Assignment → Progress Update
+### 5. Events
+- **Event Management**: events, trial classes and 1-on-1 consultations, with availability locks for involved staff (replaces the old appointment-booking pages)
+- **Public sign-up** at `/register/:occurrenceId`
+- **Room rentals**
 
-### 6. Appointments
-- **Teacher Consultation Booking**: Students book 1-on-1 sessions
-- **Teacher Availability**: Teachers set available time slots
-- **Appointment Calendar**: View all scheduled appointments
-- **Status Tracking**: Pending, Confirmed, Completed, Cancelled, Rescheduled
+### 6. Attendance
+Daily attendance (Present/Absent/Late/Leave), makeup classes, attendance reports. Workflow: Absent → notification → makeup class → progress update.
 
-### 7. Payment System
-- **Currency**: Malaysian Ringgit (RM)
-- **Payment Plans**: Full payment and installment options
-- **Installments**: Track payment schedules
-- **Receipts**: Generate and download payment receipts
-- **Outstanding Balances**: Monitor overdue payments
-- **Student Payment Profile**: Complete payment history per student
+### 7. Payments
+Payment plans (full / installment), installments, receipts (PDF), outstanding balances. Currency is Malaysian Ringgit (RM). Parents and students see their own records through RLS policies on `payment_plans` and `installments`.
 
-### 8. Portfolio Management
-- **Student Gallery**: Upload before/after photos and projects
-- **Assignment Submission**: Submit practical work
-- **Teacher Feedback**: Review, score, comment, approve/request revision
-- **Views**: Timeline View, Gallery View, Featured Work
+### 8. Portfolio
+Student gallery, assignment submission, teacher feedback (score, comment, approve / request revision).
 
 ### 9. Certificates
-- **Completion Certificates**: Issued upon course completion
-- **Full Attendance Certificates**: For perfect attendance
-- **Features**: Preview, Download PDF, Certificate History
-- **Design**: Luxury beauty academy aesthetic
+Completion and perfect-attendance certificates with preview and PDF download.
 
-### 10. Communications Center
-- **WhatsApp Integration**: Send WhatsApp messages
-- **Email System**: Email communications
-- **Broadcast Messages**: Mass messaging
-- **Templates**: Pre-built message templates
-  - Class Reminder
-  - Payment Reminder
-  - Appointment Reminder
-  - Course Update
-  - Certificate Ready
-  - Attendance Warning
+### 10. Communications & Notifications
+- **Notification Center**: filters, manual reminder review, WhatsApp queue
+- **WhatsApp**, **Email**, **Broadcast**, **Message Templates** (class, payment and appointment reminders, etc.)
+- Notification settings and template editing live under Settings
 
-### 11. Survey & Feedback
-- **Teacher Evaluation**: Students rate teachers (admin-only access)
-- **Course Evaluation**: Course satisfaction surveys
-- **Privacy**: Teachers cannot see ratings
-- **Reports**: Admin-only feedback analytics
+### 11. CRM
+Leads, deals (convertible into students), sales team and commission settings, used by sales roles, Owner and Admin.
 
-### 12. Reports
-- Enrollment Reports
-- Attendance Reports
-- Payment Reports
-- Outstanding Balances
-- Teacher Performance
-- Portfolio Completion
-- Appointment Statistics
-- Student Satisfaction
-- **Export**: PDF and Excel formats
+### 12. Survey & Feedback
+Teacher and course evaluation, with results restricted to administrators.
 
-### 13. Document Center
-- Google Drive-like folder structure
-- Store student documents
-- Registration forms
-- Receipts
-- Assignments
-- Certificates
+### 13. Reports
+Enrollment, attendance, payment, outstanding balances, teacher performance, portfolio and satisfaction reports, with PDF/Excel export.
 
-### 14. User Management
-- Create and manage user accounts
-- Assign roles and permissions
-- User activity tracking
+### 14. Document Center
+Folder-style storage for student documents, forms, receipts and certificates.
 
-### 15. Audit Logs
-- Track all system actions
-- User accountability
-- Action history
-- Module-level tracking
+### 15. User Management
+Users, invitations, pending approvals, permission matrix, role permission cards, and a login-activity feed backed by `audit_logs`. All ten roles are translated in the UI.
 
-### 16. Settings
-- Academy Information
-- User Roles & Permissions
-- Notification Settings
-- WhatsApp Templates
-- Email Templates
-- System Preferences
+### 16. Audit Logs
+System action history by user and module.
+
+### 17. Settings (Super Admin)
+About system, notification settings, message template editor.
 
 ## Key Features
 
-### Role-Based Navigation
-- Sidebar navigation automatically filters based on user role
-- Role-specific dashboards
-- Permission-based feature access
+- **Bilingual UI** (English / 中文) with a language switcher
+- **Role-based navigation** and dashboards
+- **Shared UX components**: `ConfirmDialogContext` for confirmations (no native `confirm()`), `EmptyState` with actionable CTAs
+- **Responsive design** with a collapsible sidebar on mobile
+- **Malaysian context**: RM currency, local phone formats
 
-### Responsive Design
-- Mobile-friendly interface
-- Collapsible sidebar on mobile
-- Touch-optimized controls
+## Routing
 
-### Real Data Approach
-- No lorem ipsum placeholder text
-- Realistic student names and course data
-- Authentic workflow examples
-- Malaysian context (names, phone formats, IC numbers)
+See [SITEMAP.md](./SITEMAP.md) for the complete route list.
 
-### Professional UI
-- Premium color scheme
-- Elegant typography
-- Consistent spacing
-- Smooth transitions
-- Hover states and interactions
+## File Structure
 
-## Technical Implementation
-
-### Routing Structure
-```
-/                          → Login Page
-/app/dashboard             → Dashboard (role-based)
-/app/students/*            → Student Management
-/app/courses/*             → Course Management
-/app/classes/*             → Class Management
-/app/attendance/*          → Attendance System
-/app/appointments/*        → Appointment System
-/app/payments/*            → Payment System
-/app/portfolio/*           → Portfolio Management
-/app/certificates/*        → Certificates
-/app/communications/*      → Communications
-/app/survey                → Survey & Feedback
-/app/reports               → Reports
-/app/documents             → Document Center
-/app/users                 → User Management
-/app/audit                 → Audit Logs
-/app/settings              → Settings
-```
-
-### File Structure
 ```
 src/
+├── main.tsx
 ├── app/
-│   ├── App.tsx                      # Main app component
-│   ├── routes.tsx                   # Router configuration
-│   ├── components/
-│   │   └── Layout.tsx               # Sidebar layout
-│   └── pages/
-│       ├── LoginPage.tsx
-│       ├── Dashboard.tsx
-│       ├── students/
-│       │   ├── StudentList.tsx
-│       │   ├── StudentRegistration.tsx
-│       │   ├── RegistrationApproval.tsx
-│       │   ├── StudentProfile.tsx
-│       │   └── StudentProgress.tsx
-│       ├── courses/
-│       ├── classes/
-│       ├── attendance/
-│       ├── appointments/
-│       ├── payments/
-│       ├── portfolio/
-│       ├── certificates/
-│       ├── communications/
-│       └── [other modules]
+│   ├── App.tsx, routes.tsx
+│   ├── pages/            # students, courses, classes, attendance, appointments,
+│   │                     # calendar, events, payments, portfolio, certificates,
+│   │                     # communications, crm, public, + top-level pages
+│   ├── components/       # Layout, ProtectedRoute, dashboard/, payments/, reports/,
+│   │                     # settings/, notifications/, userManagement/, ui/
+│   ├── context/          # LanguageContext, ConfirmDialogContext
+│   ├── services/         # Supabase data services
+│   ├── i18n/             # en.ts, zh.ts
+│   ├── lib/ hooks/ types/ utils/
 └── styles/
-    └── theme.css                    # Brand colors and design tokens
+supabase/migrations/      # schema + RLS
+scripts/check-i18n-parity.mjs
 ```
 
-## Current Status
+## Database Migrations
 
-✅ **Fully Functional Pages:**
-- ✅ Login & Authentication with role selection
-- ✅ Role-Based Layout & Navigation  
-- ✅ Dashboard (Admin & Owner views with real data)
-- ✅ Student List (search, filters, pagination)
-- ✅ Student Registration (complete form)
-- ✅ Student Profile (comprehensive details)
-- ✅ Registration Approval (workflow with approve/reject)
-- ✅ Class Calendar (interactive monthly calendar)
-- ✅ Daily Attendance (mark Present/Absent/Late/Leave)
-- ✅ Payment Plans (installments, outstanding tracking)
-- ✅ Student Gallery (portfolio review system)
-- ✅ Completion Certificates (certificate management)
-- ✅ Broadcast Messages (WhatsApp/Email campaigns)
-- ✅ Reports (8 report types with export)
-- ✅ Audit Logs (complete activity tracking)
-- ✅ Settings (academy info, roles, notifications, templates)
-- ✅ Course Categories (category management)
+Applied in filename order: calendar-centric foundation, RLS policies, appointment calendar event type, academy_id backfill/dedupe, calendar events sync, sync-conflict admin dismiss, lesson participants and modules, auto academy_id trigger, event sign-up and room rentals.
 
-📋 **Base Pages (Ready for Enhancement):**
-- All remaining module pages have functional structure
-- Consistent branding and styling throughout
-- Real data (no lorem ipsum placeholders)
+New tables need RLS policies; missing policies show up as silently empty data for the affected role.
 
-## How to Use
+## Development Notes
 
-1. **Login**: Select a user role and sign in
-2. **Navigation**: Use the sidebar to access modules
-3. **Dashboard**: View key metrics and quick actions
-4. **Students**: Manage registrations, approvals, and profiles
-5. **Classes**: Schedule and track classes
-6. **Attendance**: Mark attendance and manage makeup classes
-7. **Payments**: Track fees and generate receipts
-8. **Portfolio**: Review student work
-9. **Certificates**: Issue completion certificates
-10. **Communications**: Send notifications and reminders
-
-## Next Steps for Enhancement
-
-1. **Database Integration**: Connect to backend API
-2. **Advanced Calendar**: Enhance class calendar with drag-drop
-3. **Payment Gateway**: Integrate online payment processing
-4. **WhatsApp API**: Connect WhatsApp Business API
-5. **PDF Generation**: Implement certificate and receipt PDFs
-6. **File Upload**: Complete document upload functionality
-7. **Analytics**: Enhanced charts and data visualization
-8. **Notifications**: Real-time notification system
-9. **Search**: Global search across modules
-10. **Export Functions**: Complete report export to PDF/Excel
+- `npm run dev` starts Vite (auto-picks another port if 5173 is busy).
+- `npm run build` runs the i18n parity check, then `vite build`. Add every new translation key to both `en.ts` and `zh.ts`.
+- Environment: `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 
 ## Design Principles
 
-- **Premium & Professional**: Luxury education brand aesthetic
-- **User-Centric**: Intuitive workflows for each role
-- **Data-Driven**: Real analytics and insights
-- **Secure**: Role-based access control
-- **Scalable**: Architecture supports growth
-- **Mobile-Ready**: Responsive across all devices
-
-## Color Palette
-
-```css
-Primary: #284342      /* Deep Green */
-Accent: #e9da95       /* Gold */
-Background: #f8f8f6   /* Off-white */
-Success: #2d8659      /* Green */
-Warning: #d4183d      /* Red */
-Muted: #6b6b6b        /* Gray */
-Border: rgba(40, 67, 66, 0.1)  /* Subtle borders */
-```
+Premium and professional, role-centric workflows, secure by default (UI checks plus RLS), bilingual, responsive.
 
 ---
 
-**Built for**: JEP Image Makeup Academy  
-**Version**: 1.0.0  
-**Technology**: React + TypeScript + Tailwind CSS  
-**Status**: Production-Ready Base System
+**Built for**: JEP Image Makeup Academy
+**Technology**: React + TypeScript + Tailwind CSS + Supabase
+**Last Updated**: October 2026
