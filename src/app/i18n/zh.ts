@@ -4,6 +4,11 @@ const zh: Record<string, string> = {
   // ==================== Shell / Layout ====================
   'app.name': 'JEP 学院',
   'app.tagline': '管理系统',
+  'glass.search': '搜索',
+  'glass.searchTitle': '搜索页面',
+  'glass.searchPlaceholder': '输入页面名称搜索…',
+  'glass.searchHint': '输入页面名称，然后按回车键',
+  'glass.noPage': '找不到页面。',
   'app.signOut': '登出',
 
   'section.general': '总览',
