@@ -6,6 +6,11 @@ const en = {
   // ==================== Shell / Layout ====================
   'app.name': 'JEP Academy',
   'app.tagline': 'Management System',
+  'glass.search': 'Search',
+  'glass.searchTitle': 'Search pages',
+  'glass.searchPlaceholder': 'Search pages…',
+  'glass.searchHint': 'Type a page name, then press Enter',
+  'glass.noPage': 'No page found.',
   'app.signOut': 'Sign Out',
 
   'section.general': 'General',

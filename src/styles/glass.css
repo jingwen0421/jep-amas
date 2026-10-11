@@ -1,0 +1,150 @@
+/* ================= Liquid glass =================
+   Frosted, see-through surfaces with a thin white edge and large rounded corners.
+   Colours are unchanged: only JEP's existing deep green #284342, gold #e9da95 and
+   off-white #f8f8f6 are used, as soft tints. Behaviour lives in
+   components/glass/useGlass.tsx. Everything is scoped to the app shell (.jep-app),
+   so the login page and other public pages are not affected. */
+:root:has(.jep-app) {
+  --glass-fill: rgba(255, 255, 255, 0.58);
+  --glass-fill-strong: rgba(255, 255, 255, 0.78);
+  --glass-edge: rgba(255, 255, 255, 0.8);
+  --glass-shadow: 0 10px 34px rgba(40, 67, 66, 0.09), 0 1px 0 rgba(255, 255, 255, 0.9) inset;
+  --glass-blur: blur(18px) saturate(1.5);
+}
+
+/* Soft blurred colour behind the glass (the same gold and green, at low strength). */
+.jep-app {
+  background:
+    radial-gradient(900px 600px at 8% -8%, rgba(233, 218, 149, 0.55), transparent 60%),
+    radial-gradient(800px 560px at 100% 6%, rgba(40, 67, 66, 0.10), transparent 62%),
+    radial-gradient(900px 700px at 70% 105%, rgba(233, 218, 149, 0.40), transparent 60%),
+    #f8f8f6;
+  background-attachment: fixed;
+}
+
+/* Cards and panels */
+.jep-app main [data-slot="card"],
+.jep-app main [class*="bg-white"][class*="rounded-xl"],
+.jep-app main [class*="bg-white"][class*="rounded-2xl"] {
+  position: relative;
+  border-radius: 20px;
+  border: 1px solid var(--glass-edge);
+  box-shadow: var(--glass-shadow);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  /* soft light under the mouse (off until the pointer is over the card) */
+  background:
+    radial-gradient(circle 240px at var(--mx, -999px) var(--my, -999px), rgba(255, 255, 255, 0.75), transparent 70%),
+    var(--glass-fill);
+}
+.jep-app main .glass-tilt {
+  transform: perspective(900px) rotateX(var(--tx, 0deg)) rotateY(var(--ty, 0deg));
+  transition: transform 0.45s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.35s;
+  will-change: transform;
+}
+.jep-app main .glass-live { box-shadow: 0 16px 44px rgba(40, 67, 66, 0.15), 0 1px 0 rgba(255, 255, 255, 0.95) inset; }
+/* the edge near the pointer gets brighter */
+.jep-app main .glass-live::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  pointer-events: none;
+  background: radial-gradient(circle 160px at var(--mx, -999px) var(--my, -999px), #ffffff, rgba(233, 218, 149, 0.9) 45%, transparent 75%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+/* Windows that sit on top of the page keep a calm, steady look */
+.jep-app main .fixed [class*="bg-white"][class*="rounded-xl"] { transform: none !important; }
+
+/* Top bar: floating frosted strip */
+.jep-app .jep-topbar {
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  background: rgba(255, 255, 255, 0.55) !important;
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  border-bottom: 1px solid var(--glass-edge) !important;
+  box-shadow: 0 6px 24px rgba(40, 67, 66, 0.06);
+}
+.jep-app .jep-topbar > div button { background-color: rgba(255, 255, 255, 0.65); }
+
+/* Sidebar: same green, with a light glass sheen and a bright inner edge */
+.jep-app aside {
+  background:
+    linear-gradient(180deg, rgba(233, 218, 149, 0.10), rgba(233, 218, 149, 0) 38%),
+    #284342 !important;
+  border-right: 1px solid rgba(233, 218, 149, 0.22);
+  box-shadow: 10px 0 34px rgba(25, 45, 44, 0.22), inset -1px 0 0 rgba(233, 218, 149, 0.10);
+}
+.jep-app aside nav { position: relative; }
+.jep-app aside nav a,
+.jep-app aside nav button { position: relative; z-index: 1; }
+
+/* Glass capsule behind the active menu item (slides like a water drop) */
+.glass-liquid { position: absolute; left: 0; top: 0; z-index: 0; pointer-events: none; }
+.glass-liquid.ready {
+  transition:
+    transform 0.62s cubic-bezier(0.34, 1.56, 0.64, 1),
+    width 0.62s cubic-bezier(0.34, 1.56, 0.64, 1),
+    height 0.62s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.glass-liquid > i {
+  display: block;
+  height: 100%;
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(233, 218, 149, 0.30), rgba(233, 218, 149, 0.12));
+  border: 1px solid rgba(233, 218, 149, 0.42);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 8px 20px rgba(0, 0, 0, 0.22);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+}
+.glass-liquid.moving > i { animation: glass-drop 0.62s cubic-bezier(0.3, 1.4, 0.5, 1); }
+@keyframes glass-drop {
+  0% { transform: scale(1, 1); }
+  30% { transform: scale(0.94, 1.14); }
+  65% { transform: scale(1.03, 0.95); }
+  100% { transform: scale(1, 1); }
+}
+
+/* Pop-ups (rendered outside the shell, so scoped on the root): blurred background, glass panel */
+:root:has(.jep-app) [data-slot="dialog-overlay"],
+:root:has(.jep-app) .fixed.inset-0[class*="bg-black"] {
+  background: rgba(26, 26, 26, 0.28);
+  -webkit-backdrop-filter: blur(10px) saturate(1.2);
+  backdrop-filter: blur(10px) saturate(1.2);
+}
+:root:has(.jep-app) [data-slot="dialog-content"],
+:root:has(.jep-app) .fixed.inset-0[class*="bg-black"] > [class*="bg-white"][class*="rounded-xl"] {
+  background: var(--glass-fill-strong);
+  border: 1px solid var(--glass-edge);
+  border-radius: 22px;
+  box-shadow: 0 24px 70px rgba(26, 26, 26, 0.25), 0 1px 0 rgba(255, 255, 255, 0.95) inset;
+  -webkit-backdrop-filter: blur(26px) saturate(1.6);
+  backdrop-filter: blur(26px) saturate(1.6);
+}
+
+/* Search button in the top bar and the highlighted match in the palette */
+.jep-app .glass-search kbd {
+  font: inherit;
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 6px;
+  border: 1px solid rgba(40, 67, 66, 0.2);
+  background: rgba(255, 255, 255, 0.7);
+  color: #6b6b6b;
+}
+.glass-hl { background: rgba(233, 218, 149, 0.8); color: inherit; border-radius: 4px; padding: 0 1px; }
+
+@media (prefers-reduced-motion: reduce) {
+  .jep-app main .glass-tilt { transition: none; transform: none; }
+  .glass-liquid.ready { transition: none; }
+  .glass-liquid.moving > i { animation: none; }
+}
+/* If the browser cannot blur, keep the panels readable. */
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  :root:has(.jep-app) { --glass-fill: rgba(255, 255, 255, 0.92); --glass-fill-strong: rgba(255, 255, 255, 0.97); }
+}

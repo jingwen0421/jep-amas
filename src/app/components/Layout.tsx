@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router';
 import { canAccessPath } from '../utils/permissions';
 import {
@@ -26,11 +26,14 @@ import {
   Menu,
   X,
   Globe,
+  Search,
 } from 'lucide-react';
 
 import { useLanguage } from '../context/LanguageContext';
 import { supabase } from '../lib/supabase';
 import { getCurrentUser } from '../utils/session';
+import { useGlassPointer, useLiquidHighlight } from './glass/useGlass';
+import { CommandPalette, PaletteItem } from './glass/CommandPalette';
 
 interface NavItem {
   id: string;
@@ -56,6 +59,10 @@ export default function Layout() {
   const [showLanguageMenu, setShowLanguageMenu] = useState(false);
   const [userRole, setUserRole] = useState('student');
   const [notificationCount, setNotificationCount] = useState(0);
+  const [paletteOpen, setPaletteOpen] = useState(false);
+  const navRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLElement>(null);
+  useGlassPointer(mainRef);
 
   useEffect(() => {
     const role = localStorage.getItem('userRole') || 'student';
@@ -352,8 +359,32 @@ export default function Layout() {
     }))
     .filter((section) => section.items.length > 0);
 
+  const activeNavPath = location.pathname;
+  const liquid = useLiquidHighlight(navRef, activeNavPath, [
+    expandedItems.join(','),
+    isMobileMenuOpen,
+    filteredNavigationSections.length,
+    notificationCount,
+  ]);
+
+  const paletteItems: PaletteItem[] = filteredNavigationSections.flatMap((section) =>
+    section.items.flatMap((item) =>
+      item.children
+        ? item.children.map((child) => ({
+            to: child.path!,
+            label: child.label,
+            section: section.title,
+            parent: item.label,
+            icon: item.icon,
+          }))
+        : item.path
+        ? [{ to: item.path, label: item.label, section: section.title, icon: item.icon }]
+        : []
+    )
+  );
+
   return (
-    <div className="min-h-screen bg-[#f8f8f6] flex">
+    <div className="jep-app min-h-screen bg-[#f8f8f6] flex">
       <aside
         className={`fixed lg:static inset-y-0 left-0 z-50 w-72 bg-[#284342] transform transition-transform duration-300 ${
           isMobileMenuOpen
@@ -379,7 +410,20 @@ export default function Layout() {
           </div>
         </div>
 
-        <nav className="flex-1 overflow-y-auto p-4 space-y-5">
+        <nav ref={navRef} className="relative flex-1 overflow-y-auto p-4 space-y-5">
+          {liquid.box && (
+            <span
+              aria-hidden
+              className={`glass-liquid ${liquid.ready ? 'ready' : ''} ${liquid.moving ? 'moving' : ''}`}
+              style={{
+                transform: `translate(${liquid.box.left}px, ${liquid.box.top}px)`,
+                width: liquid.box.width,
+                height: liquid.box.height,
+              }}
+            >
+              <i />
+            </span>
+          )}
           {filteredNavigationSections.map((section) => (
             <div key={section.id}>
               <p className="px-3 mb-2 text-[11px] uppercase tracking-widest text-[#e9da95]/45">
@@ -414,9 +458,10 @@ export default function Layout() {
                                 key={child.id}
                                 to={child.path!}
                                 onClick={() => setIsMobileMenuOpen(false)}
+                                data-nav-active={isActive(child.path!) ? 'true' : undefined}
                                 className={`block px-3 py-2 rounded-lg text-sm transition-colors ${
                                   isActive(child.path!)
-                                    ? 'bg-[rgba(233,218,149,0.15)] text-[#e9da95]'
+                                    ? 'text-[#e9da95]'
                                     : 'text-[#e9da95]/65 hover:bg-[rgba(233,218,149,0.1)] hover:text-[#e9da95]'
                                 }`}
                               >
@@ -430,9 +475,10 @@ export default function Layout() {
                       <Link
                         to={item.path!}
                         onClick={() => setIsMobileMenuOpen(false)}
+                        data-nav-active={isActive(item.path!) ? 'true' : undefined}
                         className={`flex items-center gap-3 px-3 py-2 rounded-lg transition-colors ${
                           isActive(item.path!)
-                            ? 'bg-[rgba(233,218,149,0.15)] text-[#e9da95]'
+                            ? 'text-[#e9da95]'
                             : 'text-[#e9da95]/70 hover:bg-[rgba(233,218,149,0.1)] hover:text-[#e9da95]'
                         }`}
                       >
@@ -489,9 +535,19 @@ export default function Layout() {
         />
       )}
 
-      <main className="flex-1 overflow-auto">
-        <div className="bg-white border-b border-[rgba(40,67,66,0.1)] px-6 lg:px-8 py-4">
-          <div className="flex items-center justify-end">
+      <main ref={mainRef} className="flex-1 overflow-auto">
+        <div className="jep-topbar bg-white border-b border-[rgba(40,67,66,0.1)] pl-16 pr-4 sm:px-6 lg:px-8 py-3 sm:py-4">
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              onClick={() => setPaletteOpen(true)}
+              aria-label={t('glass.searchTitle') + ' (Ctrl+K)'}
+              title={t('glass.searchTitle') + ' (Ctrl+K)'}
+              className="glass-search flex items-center gap-2 px-4 py-2 rounded-lg border border-[rgba(40,67,66,0.2)] hover:bg-white transition-colors"
+            >
+              <Search size={18} className="text-[#284342]" />
+              <span className="hidden sm:inline text-sm text-[#284342]">{t('glass.search')}</span>
+              <kbd className="hidden md:inline">Ctrl K</kbd>
+            </button>
             <div className="relative">
               <button
                 onClick={() => setShowLanguageMenu(!showLanguageMenu)}
@@ -550,6 +606,8 @@ export default function Layout() {
           <Outlet />
         </div>
       </main>
+
+      <CommandPalette open={paletteOpen} onOpenChange={setPaletteOpen} items={paletteItems} />
     </div>
   );
 }
